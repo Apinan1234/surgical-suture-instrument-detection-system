@@ -3,3 +3,5 @@ imagehash
 Pillow
 numpy
 tqdm
+ultralytics
+PyYAML
