@@ -3,24 +3,25 @@ Web version of app.py — Phase 1 (Extract pipeline only).
 FastAPI + in-memory state + threading.Thread jobs + HTTP polling, no DB, no framework frontend.
 """
 
-import hmac
+import io
 import json
 import os
-import secrets
 import shutil
 import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timedelta
+import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
 import cv2
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 WEBAPP_DIR = Path(__file__).resolve().parent
 TOOL_DIR = WEBAPP_DIR.parent
@@ -28,10 +29,6 @@ sys.path.insert(0, str(TOOL_DIR))
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
 
 load_dotenv(WEBAPP_DIR / ".env")
-
-APP_PASSWORD = os.environ.get("APP_PASSWORD")
-if not APP_PASSWORD:
-    raise RuntimeError("APP_PASSWORD environment variable is required (see webapp/.env.example)")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", WEBAPP_DIR / "data")).resolve()
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "8192"))
@@ -49,9 +46,6 @@ STATE_TMP_PATH = WEBAPP_DIR / "state.json.tmp"
 
 ALLOWED_VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".wmv"}
 
-SESSION_TTL = timedelta(hours=10)
-RATE_LIMIT_WINDOW_SEC = 5 * 60
-RATE_LIMIT_MAX_FAILURES = 5
 SNAPSHOT_INTERVAL_SEC = 15 * 60
 SNAPSHOT_KEEP = 10
 
@@ -109,77 +103,11 @@ def health():
     return {"status": "ok"}
 
 
-# ────────────────────────────── S-1 Auth ──────────────────────────────
-
-_sessions: dict[str, datetime] = {}
-_login_failures: dict[str, list[float]] = {}
-
-
-class LoginBody(BaseModel):
-    password: str
-
-
-def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
-
-
-@app.post("/api/login")
-def login(body: LoginBody, request: Request, response: Response):
-    ip = _client_ip(request)
-    now = time.time()
-    recent_failures = [t for t in _login_failures.get(ip, []) if now - t < RATE_LIMIT_WINDOW_SEC]
-
-    if len(recent_failures) >= RATE_LIMIT_MAX_FAILURES:
-        raise HTTPException(status_code=401, detail="Too many failed attempts, try again later")
-
-    if not hmac.compare_digest(body.password, APP_PASSWORD):
-        recent_failures.append(now)
-        _login_failures[ip] = recent_failures
-        raise HTTPException(status_code=401, detail="Invalid password")
-
-    _login_failures.pop(ip, None)
-    token = secrets.token_urlsafe(32)
-    _sessions[token] = datetime.now() + SESSION_TTL
-    response.set_cookie(
-        key="session",
-        value=token,
-        httponly=True,
-        secure=False,  # flip to True once served behind real HTTPS
-        samesite="strict",
-        max_age=int(SESSION_TTL.total_seconds()),
-    )
-    return {"authenticated": True}
-
-
-@app.post("/api/logout")
-def logout(request: Request, response: Response):
-    token = request.cookies.get("session")
-    if token:
-        _sessions.pop(token, None)
-    response.delete_cookie("session")
-    return {"authenticated": False}
-
-
-def require_auth(request: Request) -> str:
-    token = request.cookies.get("session")
-    if not token or token not in _sessions:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    if _sessions[token] < datetime.now():
-        _sessions.pop(token, None)
-        raise HTTPException(status_code=401, detail="Session expired")
-    return token
-
-
-@app.get("/api/me")
-def me(token: str = Depends(require_auth)):
-    return {"authenticated": True}
-
-
 # ────────────────────────────── S-2 Videos ──────────────────────────────
 
 
 @app.post("/api/videos")
-async def upload_videos(files: list[UploadFile] = File(...), token: str = Depends(require_auth)):
+async def upload_videos(files: list[UploadFile] = File(...)):
     uploaded = []
     for f in files:
         ext = Path(f.filename).suffix.lower()
@@ -214,12 +142,12 @@ async def upload_videos(files: list[UploadFile] = File(...), token: str = Depend
 
 
 @app.get("/api/videos")
-def list_videos(token: str = Depends(require_auth)):
+def list_videos():
     return {"videos": list(_state["videos"].values())}
 
 
 @app.delete("/api/videos/{video_id}")
-def delete_video(video_id: str, token: str = Depends(require_auth)):
+def delete_video(video_id: str):
     record = _state["videos"].get(video_id)
     if not record:
         raise HTTPException(status_code=404, detail="Video not found")
@@ -247,6 +175,15 @@ class ExtractBody(BaseModel):
     prefix: str = "frame"
     max_attempts_per_slot: int = Field(default=5, ge=1)
     separate_per_video: bool = True
+    start_sec: float = Field(default=0.0, ge=0)
+    end_sec: float | None = Field(default=None, gt=0)
+    resize_max_px: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def _check_time_range(self):
+        if self.end_sec is not None and self.end_sec <= self.start_sec:
+            raise ValueError("end_sec must be greater than start_sec")
+        return self
 
 
 _job_stop_flags: dict[str, bool] = {}
@@ -278,7 +215,9 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                 fps = cap.get(cv2.CAP_PROP_FPS) or 30
                 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                 cap.release()
-                duration = total_frames / fps if fps else 0
+                full_duration = total_frames / fps if fps else 0
+                end_bound = min(body.end_sec, full_duration) if body.end_sec is not None else full_duration
+                duration = max(0.0, end_bound - body.start_sec)
                 interval = max(0.1, duration / max(1, body.target_frames))
                 job["log"].append(f"[info] {record['filename']}: {duration:.1f}s -> {interval:.2f}s/frame")
             elif is_all:
@@ -296,6 +235,9 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                 if len(job["log"]) > 500:
                     del job["log"][: len(job["log"]) - 500]
 
+            user_prefix = (body.prefix or "").strip()
+            file_prefix = f"{user_prefix}_frame" if user_prefix else "frame"
+
             stats = extract_frames(
                 video_path=video_path,
                 output_folder=str(out_dir),
@@ -305,7 +247,10 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                 blur_threshold=body.blur_threshold,
                 filter_blur=False if is_all else body.filter_blur,
                 max_attempts_per_slot=999_999 if is_all else body.max_attempts_per_slot,
-                prefix=body.prefix,
+                prefix=file_prefix,
+                start_sec=body.start_sec,
+                end_sec=body.end_sec,
+                resize_max_px=body.resize_max_px,
                 progress_callback=prog,
                 log_callback=log_cb,
             )
@@ -336,7 +281,7 @@ def _run_extract_job(job_id: str, body: ExtractBody):
 
 
 @app.post("/api/extract")
-def start_extract(body: ExtractBody, token: str = Depends(require_auth)):
+def start_extract(body: ExtractBody):
     for video_id in body.video_ids:
         if video_id not in _state["videos"]:
             raise HTTPException(status_code=404, detail=f"Unknown video id: {video_id}")
@@ -356,7 +301,7 @@ def start_extract(body: ExtractBody, token: str = Depends(require_auth)):
 
 
 @app.get("/api/extract/{job_id}")
-def extract_status(job_id: str, token: str = Depends(require_auth)):
+def extract_status(job_id: str):
     job = _state["extract_jobs"].get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -364,7 +309,7 @@ def extract_status(job_id: str, token: str = Depends(require_auth)):
 
 
 @app.get("/api/extract/{job_id}/frames")
-def extract_frames_list(job_id: str, token: str = Depends(require_auth)):
+def extract_frames_list(job_id: str):
     job = _state["extract_jobs"].get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -373,11 +318,42 @@ def extract_frames_list(job_id: str, token: str = Depends(require_auth)):
 
 
 @app.post("/api/extract/{job_id}/stop")
-def stop_extract(job_id: str, token: str = Depends(require_auth)):
+def stop_extract(job_id: str):
     if job_id not in _state["extract_jobs"]:
         raise HTTPException(status_code=404, detail="Job not found")
     _job_stop_flags[job_id] = True
     return {"stopping": True}
+
+
+@app.get("/api/extract/{job_id}/zip")
+def download_zip(job_id: str):
+    job = _state["extract_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job_dir = FRAMES_DIR / job_id
+    frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+    if not frames:
+        raise HTTPException(status_code=404, detail="No frames to download for this job")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for frame in frames:
+            path = Path(frame["path"])
+            if not path.exists():
+                continue
+            try:
+                arcname = str(path.relative_to(job_dir))
+            except ValueError:
+                arcname = path.name
+            zf.write(path, arcname=arcname)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="frames_{job_id}.zip"'},
+    )
 
 
 # ────────────────────────────── Static files (must be mounted last) ──────────────────────────────

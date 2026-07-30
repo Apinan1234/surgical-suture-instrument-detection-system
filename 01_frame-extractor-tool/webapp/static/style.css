@@ -265,12 +265,6 @@ label {
   color: #58a6ff;
 }
 
-.error-text {
-  color: var(--highlight);
-  font-size: 13px;
-  margin-top: 8px;
-}
-
 .video-list {
   list-style: none;
   padding: 0;
@@ -305,6 +299,43 @@ label {
 .checkbox-row label {
   margin: 0;
   color: var(--text);
+}
+
+.section-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin: 20px 0 8px;
+  padding-top: 12px;
+  font-weight: 600;
+}
+
+.field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.field-row > div {
+  flex: 1;
+}
+
+.btn-download {
+  background: transparent;
+  color: var(--success);
+  border: 1px solid var(--success);
+  padding: 10px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.input:disabled,
+select.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .hidden {

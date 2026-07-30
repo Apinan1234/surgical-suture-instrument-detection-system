@@ -37,6 +37,17 @@ def is_blurry(frame_bgr: np.ndarray, threshold: float = 50.0) -> bool:
     return cv2.Laplacian(gray, cv2.CV_64F).var() < threshold
 
 
+def resize_to_max_side(frame_bgr: np.ndarray, max_px: int) -> np.ndarray:
+    """ย่อภาพให้ด้านยาวสุด <= max_px (คงสัดส่วนเดิม, ไม่ขยายถ้าภาพเล็กกว่าอยู่แล้ว)"""
+    h, w = frame_bgr.shape[:2]
+    longest = max(h, w)
+    if longest <= max_px:
+        return frame_bgr
+    scale = max_px / longest
+    new_size = (max(1, round(w * scale)), max(1, round(h * scale)))
+    return cv2.resize(frame_bgr, new_size, interpolation=cv2.INTER_AREA)
+
+
 def extract_frames(
     video_path: str,
     output_folder: str,
@@ -47,6 +58,9 @@ def extract_frames(
     filter_blur: bool = True,
     max_attempts_per_slot: int = 5,    # ลิมิตการลองต่อ 1 slot (ป้องกัน scan นาน)
     prefix: str = "frame",
+    start_sec: float = 0.0,
+    end_sec: float | None = None,
+    resize_max_px: int | None = None,
     progress_callback=None,
     log_callback=None,
 ) -> dict:
@@ -63,6 +77,9 @@ def extract_frames(
     blur_threshold      : ค่า Laplacian variance ต่ำสุด (ต่ำกว่านี้ = เบลอ)
     filter_blur         : True = กรองภาพเบลอออก
     prefix              : prefix ชื่อไฟล์ภาพ
+    start_sec           : เริ่มตัดจากวินาทีที่เท่าไหร่ (0 = ตั้งแต่ต้นวิดีโอ)
+    end_sec             : ตัดถึงวินาทีที่เท่าไหร่ (None = จนจบวิดีโอ)
+    resize_max_px       : ย่อภาพที่บันทึกให้ด้านยาวสุด <= ค่านี้ (None = ขนาดต้นฉบับ)
     progress_callback   : fn(current, total) สำหรับ update progress bar
     log_callback        : fn(str) สำหรับ print log
 
@@ -84,14 +101,41 @@ def extract_frames(
         raise ValueError(f"ไม่สามารถเปิดวิดีโอได้: {video_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    total_frames_full = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration_sec_full = total_frames_full / fps if fps > 0 else 0
+
+    start_frame = max(0, int(round(start_sec * fps))) if fps > 0 else 0
+    end_frame = total_frames_full
+    if end_sec is not None and fps > 0:
+        end_frame = min(total_frames_full, int(round(end_sec * fps)))
+    total_frames = max(0, end_frame - start_frame)
     duration_sec = total_frames / fps if fps > 0 else 0
     frame_step = max(1, int(fps * interval_sec))
 
     log(f"📹 วิดีโอ: {os.path.basename(video_path)}")
-    log(f"   FPS: {fps:.1f} | เฟรมทั้งหมด: {total_frames} | ความยาว: {duration_sec:.1f} วิ")
+    log(f"   FPS: {fps:.1f} | เฟรมทั้งหมด: {total_frames_full} | ความยาว: {duration_sec_full:.1f} วิ")
+    if start_sec > 0 or end_sec is not None:
+        log(f"   ตัดช่วง: {start_sec:.1f}s – {(f'{end_sec:.1f}s' if end_sec is not None else 'จบวิดีโอ')}")
     log(f"   ตัดทุก {interval_sec:.2f} วิ | วิธี: {compare_method} | threshold: {similarity_threshold}")
     log("─" * 55)
+
+    if total_frames <= 0:
+        log(f"⚠️  start_sec ({start_sec:.1f}s) อยู่เกินความยาววิดีโอ ({duration_sec_full:.1f}s) — ข้ามวิดีโอนี้")
+        cap.release()
+        stats = {
+            "video": os.path.basename(video_path),
+            "compare_method": compare_method,
+            "total_frames_checked": 0,
+            "saved": 0,
+            "skipped_similar": 0,
+            "skipped_blurry": 0,
+            "output_folder": output_folder,
+            "similarity_log": [],
+        }
+        return stats
+
+    if start_frame > 0:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
     # ── Comparison structures ──────────────────────────────
     saved_repr = []   # stores hash / frame / fg_mask per method
@@ -180,6 +224,8 @@ def extract_frames(
     slot_attempts = 0   # จำนวนครั้งที่ลองใน slot ปัจจุบัน
 
     while True:
+        if frame_idx >= total_frames:
+            break
         ret, frame = cap.read()
         if not ret:
             break
@@ -229,7 +275,8 @@ def extract_frames(
         else:
             filename  = f"{prefix}_{stats['saved']:05d}.jpg"
             save_path = os.path.join(output_folder, filename)
-            cv2.imwrite(save_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            save_frame = resize_to_max_side(frame, resize_max_px) if resize_max_px else frame
+            cv2.imwrite(save_path, save_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
             save_repr(frame, fg)
             stats["saved"] += 1
             slot_filled = True

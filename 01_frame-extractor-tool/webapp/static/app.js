@@ -1,64 +1,9 @@
-// ────────────────────────────── F-2: shared fetch helper + auth + theme ──────────────────────────────
+// ────────────────────────────── F-2: shared fetch helper + theme ──────────────────────────────
 
 async function apiFetch(path, opts) {
   opts = opts || {};
-  opts.credentials = "include";
-  const res = await fetch(path, opts);
-  if (res.status === 401) {
-    showLoggedOut();
-  }
-  return res;
+  return fetch(path, opts);
 }
-
-function showLoggedOut() {
-  document.getElementById("login-section").classList.remove("hidden");
-  document.getElementById("extract-section").classList.add("hidden");
-  document.getElementById("logout-btn").classList.add("hidden");
-}
-
-function showLoggedIn() {
-  document.getElementById("login-section").classList.add("hidden");
-  document.getElementById("extract-section").classList.remove("hidden");
-  document.getElementById("logout-btn").classList.remove("hidden");
-}
-
-async function checkAuth() {
-  const res = await apiFetch("/api/me");
-  if (res.ok) {
-    showLoggedIn();
-    refreshVideoList();
-  } else {
-    showLoggedOut();
-  }
-}
-
-document.getElementById("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const password = document.getElementById("password").value;
-  const errorEl = document.getElementById("login-error");
-  errorEl.classList.add("hidden");
-
-  const res = await fetch("/api/login", {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ password }),
-  });
-
-  if (res.ok) {
-    showLoggedIn();
-    refreshVideoList();
-  } else {
-    const body = await res.json().catch(() => ({}));
-    errorEl.textContent = body.detail || "Login failed";
-    errorEl.classList.remove("hidden");
-  }
-});
-
-document.getElementById("logout-btn").addEventListener("click", async () => {
-  await apiFetch("/api/logout", { method: "POST" });
-  showLoggedOut();
-});
 
 // ── Theme ──
 
@@ -151,25 +96,33 @@ async function refreshVideoList() {
   });
 }
 
-// Mode field toggling
+// Mode field toggling — "All Frames" mode ignores compare/blur/max-attempts server-side,
+// so grey those out client-side too (matches app.py's ExtractionTab behavior).
+function updateModeDependentFields() {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  document.getElementById("target-field").classList.toggle("hidden", mode !== "target");
+  document.getElementById("interval-field").classList.toggle("hidden", mode !== "interval");
+
+  const isAll = mode === "all";
+  ["compare-method", "similarity-threshold", "filter-blur", "blur-threshold", "max-attempts"].forEach(
+    (id) => {
+      document.getElementById(id).disabled = isAll;
+    }
+  );
+}
+
 document.querySelectorAll('input[name="mode"]').forEach((radio) => {
-  radio.addEventListener("change", () => {
-    const mode = document.querySelector('input[name="mode"]:checked').value;
-    document.getElementById("target-field").classList.toggle("hidden", mode !== "target");
-    document.getElementById("interval-field").classList.toggle("hidden", mode !== "interval");
-  });
+  radio.addEventListener("change", updateModeDependentFields);
 });
+updateModeDependentFields();
 
 let currentExtractJobId = null;
 let pollTimer = null;
 
 document.getElementById("extract-start-btn").addEventListener("click", async () => {
-  if (!uploadedVideos.length) {
-    alert("Upload at least one video first");
-    return;
-  }
-
   const mode = document.querySelector('input[name="mode"]:checked').value;
+  const endSecValue = document.getElementById("end-sec").value;
+  const resizeValue = document.getElementById("resize-max-px").value;
   const body = {
     video_ids: uploadedVideos.map((v) => v.id),
     mode: mode,
@@ -182,6 +135,9 @@ document.getElementById("extract-start-btn").addEventListener("click", async () 
     prefix: document.getElementById("prefix").value,
     max_attempts_per_slot: parseInt(document.getElementById("max-attempts").value, 10),
     separate_per_video: document.getElementById("separate-per-video").checked,
+    start_sec: parseFloat(document.getElementById("start-sec").value) || 0,
+    end_sec: endSecValue ? parseFloat(endSecValue) : null,
+    resize_max_px: resizeValue ? parseInt(resizeValue, 10) : null,
   };
 
   const res = await apiFetch("/api/extract", {
@@ -202,7 +158,13 @@ document.getElementById("extract-start-btn").addEventListener("click", async () 
   document.getElementById("extract-stop-btn").classList.remove("hidden");
   document.getElementById("extract-progress-wrap").classList.remove("hidden");
   document.getElementById("extract-log").innerHTML = "";
+  document.getElementById("download-zip-btn").classList.add("hidden");
   startPolling();
+});
+
+document.getElementById("download-zip-btn").addEventListener("click", () => {
+  if (!currentExtractJobId) return;
+  window.location.href = `/api/extract/${currentExtractJobId}/zip`;
 });
 
 document.getElementById("extract-stop-btn").addEventListener("click", async () => {
@@ -245,10 +207,11 @@ function startPolling() {
       document.getElementById("extract-stop-btn").classList.add("hidden");
       document.getElementById("extract-progress-label").textContent =
         job.status + " — " + job.saved_total + " frames saved";
+      document.getElementById("download-zip-btn").classList.toggle("hidden", job.saved_total === 0);
     }
   }, 1000);
 }
 
 // ────────────────────────────── Init ──────────────────────────────
 
-checkAuth();
+refreshVideoList();
