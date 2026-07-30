@@ -42,10 +42,10 @@ export function FeatureGridSection() {
           className="text-center max-w-2xl mx-auto mb-8 sm:mb-12"
         >
           <h2 className="text-2xl sm:text-4xl font-medium tracking-tight text-white mb-3">
-            Core Technical Architecture
+            What's Next: Toward Real-Time Deployment
           </h2>
           <p className="text-xs sm:text-sm text-white/70 font-normal">
-            Modular visual intelligence modules engineered for high-frequency surgical environment analysis.
+            Modules planned for Phase 2 — building toward real-time, in-theater surgical support.
           </p>
         </motion.div>
 

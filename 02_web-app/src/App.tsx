@@ -41,7 +41,7 @@ export default function App() {
 
         {/* Footer copyright note */}
         <footer className="w-full text-center text-xs text-white/40 pt-2 font-['DM_Sans']">
-          © AI Surgical Instrument Detection System. Built for real-time surgical support & veterinary training.
+          © AI Surgical Instrument Detection System. Built for veterinary training & surgical procedure analysis.
         </footer>
       </div>
 

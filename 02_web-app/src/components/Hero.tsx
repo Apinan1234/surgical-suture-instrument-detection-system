@@ -27,7 +27,7 @@ export function Hero({ onCtaClick }: HeroProps) {
         transition={{ duration: 0.8, ease: "easeOut", delay: 0.2 }}
         className="mt-3 text-sm sm:text-base text-white/90 font-normal mx-auto leading-relaxed font-['DM_Sans']"
       >
-        An AI-powered vision system that detects surgical instruments and wound areas in real time — built to support veterinary training, procedure analysis, and the future of surgical decision-support.
+        An AI-powered vision system that detects surgical instruments and wound areas in procedure video — built to support veterinary training, procedure analysis, and the future of real-time surgical decision-support.
       </motion.p>
 
       {/* CTA Button */}
