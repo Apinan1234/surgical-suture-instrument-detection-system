@@ -61,6 +61,8 @@ def extract_frames(
     start_sec: float = 0.0,
     end_sec: float | None = None,
     resize_max_px: int | None = None,
+    start_index: int = 0,
+    log_name: str = "extraction_log.json",
     progress_callback=None,
     log_callback=None,
 ) -> dict:
@@ -80,6 +82,10 @@ def extract_frames(
     start_sec           : เริ่มตัดจากวินาทีที่เท่าไหร่ (0 = ตั้งแต่ต้นวิดีโอ)
     end_sec             : ตัดถึงวินาทีที่เท่าไหร่ (None = จนจบวิดีโอ)
     resize_max_px       : ย่อภาพที่บันทึกให้ด้านยาวสุด <= ค่านี้ (None = ขนาดต้นฉบับ)
+    start_index         : เลขลำดับเริ่มต้นของชื่อไฟล์ (0 = เริ่มที่ _00000)
+                          ใช้ตอนสกัดหลายวิดีโอลงโฟลเดอร์เดียวกัน เพื่อไม่ให้เลขซ้ำแล้วเขียนทับกัน
+    log_name            : ชื่อไฟล์ log ที่เขียนลง output_folder
+                          (เปลี่ยนได้เมื่อหลายวิดีโอใช้โฟลเดอร์ร่วมกัน จะได้ไม่ทับกัน)
     progress_callback   : fn(current, total) สำหรับ update progress bar
     log_callback        : fn(str) สำหรับ print log
 
@@ -195,6 +201,10 @@ def extract_frames(
             return float(min(scores))
 
     def save_repr(frame_bgr: np.ndarray, fg_mask: np.ndarray):
+        if compare_method == "none":
+            # diff_score() คืน 999.0 ทันทีในโหมดนี้ ไม่เคยอ่าน saved_repr เลย
+            # ถ้าเก็บต่อไปจะกินหน่วยความจำทุกเฟรมโดยไม่ได้ใช้ (โหมด "ทุกเฟรม" กระทบหนักสุด)
+            return
         if compare_method == "phash":
             saved_repr.append(compute_phash(frame_bgr))
         elif compare_method == "frame_diff":
@@ -273,7 +283,7 @@ def extract_frames(
             stats["skipped_similar"] += 1
             log(f"  [skip]   เฟรม {frame_idx:5d} (slot {slot}) → คล้าย (score={score:.1f}), ลอง frame ถัดไป")
         else:
-            filename  = f"{prefix}_{stats['saved']:05d}.jpg"
+            filename  = f"{prefix}_{start_index + stats['saved']:05d}.jpg"
             save_path = os.path.join(output_folder, filename)
             save_frame = resize_to_max_side(frame, resize_max_px) if resize_max_px else frame
             cv2.imwrite(save_path, save_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
@@ -286,7 +296,7 @@ def extract_frames(
 
     cap.release()
 
-    log_path = os.path.join(output_folder, "extraction_log.json")
+    log_path = os.path.join(output_folder, log_name)
     with open(log_path, "w", encoding="utf-8") as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
 

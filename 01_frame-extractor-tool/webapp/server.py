@@ -238,6 +238,8 @@ def _run_extract_job(job_id: str, body: ExtractBody):
             user_prefix = (body.prefix or "").strip()
             file_prefix = f"{user_prefix}_frame" if user_prefix else "frame"
 
+            # เมื่อทุกวิดีโอลงโฟลเดอร์เดียวกัน ต้องนับเลขต่อจากวิดีโอก่อนหน้า
+            # (ไม่งั้นวิดีโอถัดไปจะเริ่มที่ _00000 แล้วเขียนทับภาพของวิดีโอแรก)
             stats = extract_frames(
                 video_path=video_path,
                 output_folder=str(out_dir),
@@ -251,6 +253,12 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                 start_sec=body.start_sec,
                 end_sec=body.end_sec,
                 resize_max_px=body.resize_max_px,
+                start_index=0 if body.separate_per_video else saved_total,
+                log_name=(
+                    "extraction_log.json"
+                    if body.separate_per_video
+                    else f"extraction_log_{video_stem}.json"
+                ),
                 progress_callback=prog,
                 log_callback=log_cb,
             )
