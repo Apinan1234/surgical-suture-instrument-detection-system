@@ -1,0 +1,36 @@
+Serverless Hosted API
+Your workflow is ready to use and available via a hosted API endpoint. Easily integrate your workflow into your application by using the code below.
+
+
+Images
+
+Video
+Code Language
+Python
+Never coded before? Select "HTTP / cURL" for the simplest example, or try our no-code testing tool first.
+
+After running the installation command for your chosen language:
+
+pip install -U inference-sdk
+
+# 1. Import the library
+from inference_sdk import InferenceHTTPClient
+
+# 2. Connect to your workflow
+client = InferenceHTTPClient(
+    api_url="https://serverless.roboflow.com",
+    api_key="**********"
+)
+
+# 3. Run your workflow on an image
+result = client.run_workflow(
+    workspace_name="fhasai-khuanpan",
+    workflow_id="ssid-v5-logic",
+    images={
+        "image": "YOUR_IMAGE.jpg" # Path to your image file
+    },
+    use_cache=True # Speeds up repeated requests
+)
+
+# 4. Get your results
+print(result)

@@ -1,0 +1,4 @@
+01_frame-extractor-tool/.venv/
+**/__pycache__/
+*.pyc
+03_dataset/

@@ -1,0 +1,6 @@
+- [x] Add Framer Motion to `Hero.tsx`
+- [x] Add Framer Motion to `Cards.tsx` (staggered animation for cards)
+- [x] Add Framer Motion to `TrustedBrands.tsx`
+- [x] Add Framer Motion to `StudioSection.tsx`
+- [x] Add Framer Motion to `TestimonialSection.tsx`
+- [x] Add Framer Motion to `FeatureGridSection.tsx`

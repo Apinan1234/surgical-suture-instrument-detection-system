@@ -1,0 +1,6 @@
+{
+  "name": "AI Surgical Instrument Detection System",
+  "description": "An AI-powered vision system that detects surgical instruments and wound areas in real time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,89 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Scroll Demo</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #000; overflow-x: hidden; }
+  .spacer { position: relative; height: 6000px; }
+  #c { position: sticky; top: 0; display: block; width: 100vw; height: 100vh; background: #000; }
+</style>
+</head>
+<body>
+<div class="spacer">
+  <canvas id="c"></canvas>
+</div>
+<script>
+(function () {
+  var FRAME_COUNT = 300;
+  var FRAME_DIR = "../ezgif-14d5a3887baf1d86-jpg/";
+
+  var canvas = document.getElementById("c");
+  var ctx = canvas.getContext("2d");
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  function resize() {
+    canvas.width = Math.round(window.innerWidth * dpr);
+    canvas.height = Math.round(window.innerHeight * dpr);
+  }
+  resize();
+  window.addEventListener("resize", resize);
+
+  var images = new Array(FRAME_COUNT);
+  var loaded = new Array(FRAME_COUNT).fill(false);
+  for (var i = 0; i < FRAME_COUNT; i++) {
+    (function (idx) {
+      var img = new Image();
+      var n = String(idx + 1).padStart(3, "0");
+      img.src = FRAME_DIR + "ezgif-frame-" + n + ".jpg";
+      img.onload = function () { loaded[idx] = true; };
+      images[idx] = img;
+    })(i);
+  }
+
+  function maxScroll() {
+    return document.querySelector(".spacer").offsetHeight - window.innerHeight;
+  }
+
+  var targetProgress = 0;
+  var displayProgress = 0;
+
+  function onScroll() {
+    var m = maxScroll();
+    targetProgress = m > 0 ? Math.min(1, Math.max(0, window.scrollY / m)) : 0;
+  }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  function nearestLoadedIndex(idx) {
+    if (loaded[idx]) return idx;
+    for (var d = 1; d < FRAME_COUNT; d++) {
+      if (idx - d >= 0 && loaded[idx - d]) return idx - d;
+      if (idx + d < FRAME_COUNT && loaded[idx + d]) return idx + d;
+    }
+    return -1;
+  }
+
+  function drawCover(img) {
+    var cw = canvas.width, ch = canvas.height;
+    var iw = img.naturalWidth, ih = img.naturalHeight;
+    var scale = Math.max(cw / iw, ch / ih);
+    var sw = cw / scale, sh = ch / scale;
+    var sx = (iw - sw) / 2, sy = (ih - sh) / 2;
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
+  }
+
+  function tick() {
+    displayProgress += (targetProgress - displayProgress) * 0.15;
+    var idx = Math.min(FRAME_COUNT - 1, Math.floor(displayProgress * FRAME_COUNT));
+    var drawIdx = nearestLoadedIndex(idx);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (drawIdx !== -1) drawCover(images[drawIdx]);
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

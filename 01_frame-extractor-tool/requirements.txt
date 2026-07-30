@@ -1,0 +1,8 @@
+opencv-python
+imagehash
+Pillow
+numpy
+tqdm
+ultralytics
+PyYAML
+inference-sdk
