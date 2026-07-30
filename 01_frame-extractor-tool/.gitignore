@@ -1,0 +1,6 @@
+webapp/.env
+webapp/state.json
+webapp/state.json.bak
+webapp/data/
+webapp/.venv/
+__pycache__/
