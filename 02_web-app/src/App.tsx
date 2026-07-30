@@ -2,9 +2,6 @@ import { useState, FormEvent } from 'react';
 import { Header } from './components/Header';
 import { Hero } from './components/Hero';
 import { Cards } from './components/Cards';
-import { TrustedBrands } from './components/TrustedBrands';
-import { StudioSection } from './components/StudioSection';
-import { TestimonialSection } from './components/TestimonialSection';
 import { FeatureGridSection } from './components/FeatureGridSection';
 import { ScrollAnimation } from './components/ScrollAnimation';
 import { X, CheckCircle, ArrowRight, Eye } from 'lucide-react';
@@ -48,16 +45,7 @@ export default function App() {
         </footer>
       </div>
 
-      {/* Second Section - Trusted Brands */}
-      <TrustedBrands />
-
-      {/* Third Section - Kinetic Studio Agency Overview */}
-      <StudioSection />
-
-      {/* Fourth Section - Client Case Study & Testimonial */}
-      <TestimonialSection />
-
-      {/* Fifth Section - 4 Cards Layout with Empty Center Space */}
+      {/* Second Section - 4 Cards Layout with Empty Center Space */}
       <FeatureGridSection />
 
       {/* Research Modal Dialogue */}
