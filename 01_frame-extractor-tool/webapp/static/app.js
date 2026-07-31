@@ -273,6 +273,23 @@ async function refreshClasses() {
   classColors = data.class_colors || {};
 }
 
+function updateBackendFields() {
+  const backend = document.querySelector('input[name="detect-backend"]:checked').value;
+  document.getElementById("local-fields").classList.toggle("hidden", backend !== "local");
+  document.getElementById("roboflow-fields").classList.toggle("hidden", backend !== "roboflow");
+}
+
+document.querySelectorAll('input[name="detect-backend"]').forEach((el) => {
+  el.addEventListener("change", updateBackendFields);
+});
+updateBackendFields();
+
+function confirmRoboflowCall(frameCount) {
+  return window.confirm(
+    `This will send ${frameCount} frame(s) to the Roboflow Cloud API and may consume API credits. Continue?`
+  );
+}
+
 document.getElementById("detect-conf").addEventListener("input", (e) => {
   document.getElementById("detect-conf-label").textContent = e.target.value;
 });
@@ -281,14 +298,28 @@ document.getElementById("detect-iou").addEventListener("input", (e) => {
 });
 
 document.getElementById("detect-start-btn").addEventListener("click", async () => {
+  const backend = document.querySelector('input[name="detect-backend"]:checked').value;
+
   const body = {
     frame_ids: lastExtractedFrameIds,
-    backend: document.querySelector('input[name="detect-backend"]:checked').value,
+    backend,
     model_path: document.getElementById("model-path").value,
     conf: parseFloat(document.getElementById("detect-conf").value),
     iou: parseFloat(document.getElementById("detect-iou").value),
     device: document.querySelector('input[name="device"]:checked').value,
   };
+
+  if (backend === "roboflow") {
+    const apiKey = document.getElementById("rf-api-key").value.trim();
+    if (!apiKey) {
+      alert("Please enter a Roboflow API Key first");
+      return;
+    }
+    if (!confirmRoboflowCall(lastExtractedFrameIds.length)) return;
+    body.api_key = apiKey;
+    body.workspace_name = document.getElementById("rf-workspace").value.trim();
+    body.workflow_id = document.getElementById("rf-workflow-id").value.trim();
+  }
 
   const res = await apiFetch("/api/detect", {
     method: "POST",

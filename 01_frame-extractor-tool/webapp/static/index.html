@@ -160,13 +160,26 @@
         <label for="backend-local" style="margin:0;">Local (.pt)</label>
       </div>
       <div class="checkbox-row">
-        <input type="radio" name="detect-backend" value="roboflow" id="backend-roboflow" disabled title="Coming soon" />
-        <label for="backend-roboflow" style="margin:0; color:var(--muted);">Roboflow Cloud API (coming soon)</label>
+        <input type="radio" name="detect-backend" value="roboflow" id="backend-roboflow" />
+        <label for="backend-roboflow" style="margin:0;">Roboflow Cloud API</label>
       </div>
 
-      <label for="model-path">Model</label>
-      <input class="input" type="text" id="model-path" list="model-datalist" value="yolo11n.pt" />
-      <datalist id="model-datalist"></datalist>
+      <div id="local-fields">
+        <label for="model-path">Model</label>
+        <input class="input" type="text" id="model-path" list="model-datalist" value="yolo11n.pt" />
+        <datalist id="model-datalist"></datalist>
+      </div>
+
+      <div id="roboflow-fields" class="hidden">
+        <label for="rf-api-key">Roboflow API Key</label>
+        <input class="input" type="password" id="rf-api-key" placeholder="rf_..." autocomplete="off" />
+
+        <label for="rf-workspace">Workspace</label>
+        <input class="input" type="text" id="rf-workspace" value="fhasai-khuanpan" />
+
+        <label for="rf-workflow-id">Workflow ID</label>
+        <input class="input" type="text" id="rf-workflow-id" value="ssid-v5-logic" />
+      </div>
 
       <label>Device</label>
       <div class="checkbox-row">
