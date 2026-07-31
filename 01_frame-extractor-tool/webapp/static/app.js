@@ -63,6 +63,7 @@ function switchTab(name) {
     section.classList.toggle("hidden", section.id !== `${name}-section`);
   });
   document.querySelector("main").classList.toggle("wide", name === "annotate");
+  if (name === "export") refreshExportPreview();
 }
 
 document.querySelectorAll(".tab").forEach((btn) => {
@@ -397,6 +398,7 @@ async function loadDetectFrames(frameIds) {
     showDetectPreview(0);
   }
   initAnnotateFrames(data.frames);
+  refreshExportPreview();
 }
 
 function showDetectPreview(idx) {
@@ -649,6 +651,137 @@ document.getElementById("annotate-mark-reviewed-btn").addEventListener("click", 
   frame.reviewed = true;
   updateAnnotateReviewStatus();
   renderAnnotateFilmstrip();
+});
+
+// ────────────────────────────── S-6: Export section ──────────────────────────────
+
+let currentExportJobId = null;
+let exportPollTimer = null;
+let exportPoolTotal = 0;
+
+async function refreshExportPreview() {
+  if (!currentDetectJobId) {
+    exportPoolTotal = 0;
+    document.getElementById("export-frames-info").textContent = "No detected frames yet — run Detect first.";
+    document.getElementById("export-start-btn").disabled = true;
+    return;
+  }
+  const reviewedOnly = document.getElementById("export-reviewed-only").checked;
+  const res = await apiFetch(`/api/export/preview?detect_job_id=${currentDetectJobId}&reviewed_only=${reviewedOnly}`);
+  if (!res.ok) return;
+  const stats = await res.json();
+  exportPoolTotal = stats.total;
+  document.getElementById("export-frames-info").textContent = `${stats.total} frame(s) available from the last Detect run.`;
+  document.getElementById("export-stat-total").textContent = stats.total;
+  document.getElementById("export-stat-classes").textContent = stats.class_count;
+  document.getElementById("export-stat-unreviewed").textContent = stats.unreviewed;
+  document.getElementById("export-start-btn").disabled = stats.total === 0;
+  updateExportMaxSizeLabel();
+}
+
+document.getElementById("export-reviewed-only").addEventListener("change", refreshExportPreview);
+
+function updateExportSplitLabel() {
+  const trEl = document.getElementById("export-train-pct");
+  const vaEl = document.getElementById("export-val-pct");
+  const tr = parseInt(trEl.value, 10);
+  let va = parseInt(vaEl.value, 10);
+  if (tr + va > 100) {
+    va = 100 - tr;
+    vaEl.value = va;
+  }
+  const te = 100 - tr - va;
+  document.getElementById("export-train-pct-label").textContent = tr;
+  document.getElementById("export-val-pct-label").textContent = va;
+  document.getElementById("export-split-summary").textContent = `${tr}% Train / ${va}% Val / ${te}% Test`;
+  updateExportMaxSizeLabel();
+}
+
+function updateExportMaxSizeLabel() {
+  const total = exportPoolTotal;
+  const tr = parseInt(document.getElementById("export-train-pct").value, 10) / 100;
+  const va = parseInt(document.getElementById("export-val-pct").value, 10) / 100;
+  const trainCount = Math.floor(total * tr);
+  const valCount = Math.floor(total * va);
+  const testCount = total - trainCount - valCount;
+  const mult = parseInt(document.getElementById("export-aug-multiplier").value, 10);
+  const finalSize = trainCount * mult + valCount + testCount;
+  document.getElementById("export-max-size-label").textContent = `Maximum Version Size: ${finalSize} images (${mult}x)`;
+}
+
+["export-train-pct", "export-val-pct"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", updateExportSplitLabel);
+});
+document.getElementById("export-aug-multiplier").addEventListener("input", (e) => {
+  document.getElementById("export-aug-multiplier-label").textContent = e.target.value;
+  updateExportMaxSizeLabel();
+});
+
+document.getElementById("export-start-btn").addEventListener("click", async () => {
+  if (!currentDetectJobId) return;
+  const tr = parseInt(document.getElementById("export-train-pct").value, 10) / 100;
+  const va = parseInt(document.getElementById("export-val-pct").value, 10) / 100;
+  const te = Math.max(0, 1 - tr - va);
+
+  const body = {
+    detect_job_id: currentDetectJobId,
+    version_name: document.getElementById("export-version-name").value || "v1",
+    reviewed_only: document.getElementById("export-reviewed-only").checked,
+    splits: { train: tr, val: va, test: te },
+    preprocess: { resize: document.getElementById("export-resize").checked, resize_size: 640 },
+    augment: {
+      multiplier: parseInt(document.getElementById("export-aug-multiplier").value, 10),
+      flip: document.getElementById("export-aug-flip").checked,
+      rotate: document.getElementById("export-aug-rotate").checked,
+      blur: document.getElementById("export-aug-blur").checked,
+      brightness: document.getElementById("export-aug-brightness").checked,
+      crop: document.getElementById("export-aug-crop").checked,
+    },
+  };
+
+  const res = await apiFetch("/api/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    alert(errBody.detail || "Failed to start export");
+    return;
+  }
+  const data = await res.json();
+  currentExportJobId = data.job_id;
+  document.getElementById("export-start-btn").disabled = true;
+  document.getElementById("export-progress-wrap").classList.remove("hidden");
+  document.getElementById("export-download-btn").classList.add("hidden");
+  startExportPolling();
+});
+
+function startExportPolling() {
+  exportPollTimer = setInterval(async () => {
+    const res = await apiFetch(`/api/export/${currentExportJobId}`);
+    if (!res.ok) return;
+    const job = await res.json();
+    document.getElementById("export-progress-fill").style.width = job.progress + "%";
+    document.getElementById("export-progress-label").textContent = job.status + " — " + job.progress + "%";
+
+    if (job.status === "done" || job.status === "error") {
+      clearInterval(exportPollTimer);
+      document.getElementById("export-start-btn").disabled = false;
+      if (job.status === "done") {
+        const total = job.summary ? job.summary.total_exported : "?";
+        document.getElementById("export-progress-label").textContent = `done — ${total} images exported`;
+        document.getElementById("export-download-btn").classList.remove("hidden");
+      } else {
+        alert(job.error || "Export failed");
+      }
+    }
+  }, 1000);
+}
+
+document.getElementById("export-download-btn").addEventListener("click", () => {
+  if (!currentExportJobId) return;
+  window.location.href = `/api/export/${currentExportJobId}/download`;
 });
 
 // ────────────────────────────── Init ──────────────────────────────

@@ -19,7 +19,7 @@ from typing import Literal
 import cv2
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
@@ -28,6 +28,7 @@ TOOL_DIR = WEBAPP_DIR.parent
 sys.path.insert(0, str(TOOL_DIR))
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
 from detector import Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES, CLASS_COLORS_HEX  # noqa: E402
+from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
 
 load_dotenv(WEBAPP_DIR / ".env")
 
@@ -38,7 +39,8 @@ MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
 BACKUPS_DIR = DATA_DIR / "backups"
-for d in (VIDEOS_DIR, FRAMES_DIR, BACKUPS_DIR):
+EXPORTS_DIR = DATA_DIR / "exports"
+for d in (VIDEOS_DIR, FRAMES_DIR, BACKUPS_DIR, EXPORTS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 STATE_PATH = WEBAPP_DIR / "state.json"
@@ -53,7 +55,7 @@ SNAPSHOT_KEEP = 10
 # ────────────────────────────── State (S-0) ──────────────────────────────
 
 _state_lock = threading.Lock()
-_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}}
+_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "export_jobs": {}}
 _last_snapshot_time = 0.0
 
 
@@ -62,7 +64,7 @@ def load_state():
     if STATE_PATH.exists():
         with open(STATE_PATH, "r", encoding="utf-8") as f:
             _state = json.load(f)
-    for key in ("videos", "extract_jobs", "frames", "detect_jobs"):
+    for key in ("videos", "extract_jobs", "frames", "detect_jobs", "export_jobs"):
         _state.setdefault(key, {})
 
 
@@ -621,6 +623,146 @@ def list_models():
 @app.get("/api/classes")
 def list_classes():
     return {"class_names": CLASS_NAMES, "class_colors": CLASS_COLORS_HEX}
+
+
+# ────────────────────────────── S-6 Export ──────────────────────────────
+
+
+class SplitsIn(BaseModel):
+    train: float = Field(default=0.7, gt=0.0, lt=1.0)
+    val: float = Field(default=0.2, ge=0.0, lt=1.0)
+    test: float = Field(default=0.1, ge=0.0, lt=1.0)
+
+    @model_validator(mode="after")
+    def _check_sum(self):
+        total = self.train + self.val + self.test
+        if abs(total - 1.0) > 0.01:
+            raise ValueError(f"splits must sum to ~1.0 (got {total:.3f})")
+        return self
+
+
+class PreprocessIn(BaseModel):
+    resize: bool = True
+    resize_size: int = Field(default=640, gt=0)
+
+
+class AugmentIn(BaseModel):
+    multiplier: int = Field(default=1, ge=1, le=10)  # web default: 1 (no albumentations installed)
+    flip: bool = True
+    rotate: bool = True
+    blur: bool = True
+    brightness: bool = True
+    crop: bool = True
+
+
+class ExportBody(BaseModel):
+    detect_job_id: str
+    version_name: str = Field(default="v1", max_length=64)
+    reviewed_only: bool = False
+    splits: SplitsIn = Field(default_factory=SplitsIn)
+    preprocess: PreprocessIn = Field(default_factory=PreprocessIn)
+    augment: AugmentIn = Field(default_factory=AugmentIn)
+
+
+def _export_pool(detect_job_id: str, reviewed_only: bool) -> list[dict]:
+    job = _state["detect_jobs"].get(detect_job_id)
+    if job is None:
+        raise ValueError(f"Unknown detect_job_id: {detect_job_id}")
+    frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+    if reviewed_only:
+        frames = [f for f in frames if f.get("reviewed")]
+    return [{**f, "image_path": f["path"], "has_detection": bool(f.get("detections"))} for f in frames]
+
+
+@app.get("/api/export/preview")
+def export_preview(detect_job_id: str, reviewed_only: bool = False):
+    try:
+        pool = _export_pool(detect_job_id, reviewed_only)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    stats = count_stats(pool)
+    unreviewed = sum(1 for item in pool if not item.get("reviewed"))
+    return {**stats, "unreviewed": unreviewed, "class_count": len(CLASS_NAMES)}
+
+
+def _run_export_job(job_id: str, body: ExportBody):
+    job = _state["export_jobs"][job_id]
+    try:
+        pool = _export_pool(body.detect_job_id, body.reviewed_only)
+
+        def prog(done, total):
+            job["progress"] = round(done / total * 100, 1) if total else 100
+
+        out_dir = EXPORTS_DIR / job_id
+        zip_path = export_dataset_pipeline(
+            results=pool,
+            output_dir=str(out_dir),
+            class_names=CLASS_NAMES,
+            splits={"train": body.splits.train, "val": body.splits.val, "test": body.splits.test},
+            include_empty=True,
+            as_zip=True,
+            preprocess_config={"resize": body.preprocess.resize, "resize_size": body.preprocess.resize_size},
+            augment_config=body.augment.model_dump(),
+            progress_callback=prog,
+        )
+        job["zip_path"] = zip_path
+        summary_path = out_dir / "export_summary.json"
+        if summary_path.exists():
+            job["summary"] = json.loads(summary_path.read_text(encoding="utf-8"))
+        job["status"] = "done"
+        job["progress"] = 100
+    except Exception as e:
+        job["status"] = "error"
+        job["error"] = str(e)
+    save_state()
+
+
+@app.post("/api/export")
+def start_export(body: ExportBody):
+    try:
+        pool = _export_pool(body.detect_job_id, body.reviewed_only)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    if not pool:
+        raise HTTPException(status_code=400, detail="No frames available to export for this selection")
+
+    job_id = uuid.uuid4().hex
+    _state["export_jobs"][job_id] = {
+        "id": job_id,
+        "status": "running",
+        "progress": 0,
+        "detect_job_id": body.detect_job_id,
+        "version_name": body.version_name,
+        "reviewed_only": body.reviewed_only,
+        "pool_size": len(pool),
+        "zip_path": None,
+        "summary": None,
+        "error": None,
+    }
+    threading.Thread(target=_run_export_job, args=(job_id, body), daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/export/{job_id}")
+def export_status(job_id: str):
+    job = _state["export_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.get("/api/export/{job_id}/download")
+def download_export(job_id: str):
+    job = _state["export_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] != "done" or not job.get("zip_path"):
+        raise HTTPException(status_code=400, detail="Export not finished yet")
+    zip_path = Path(job["zip_path"])
+    if not zip_path.exists():
+        raise HTTPException(status_code=404, detail="Export file missing on disk")
+    safe_version = "".join(c for c in (job.get("version_name") or "v1") if c.isalnum() or c in "-_") or "v1"
+    return FileResponse(zip_path, media_type="application/zip", filename=f"dataset_{safe_version}.zip")
 
 
 # ────────────────────────────── Static files (must be mounted last) ──────────────────────────────

@@ -21,7 +21,7 @@
     <button class="tab active" data-tab="extract">Extract</button>
     <button class="tab" data-tab="detect">Detect</button>
     <button class="tab" data-tab="annotate">Annotate</button>
-    <button class="tab" data-tab="export" disabled title="Coming soon">Export</button>
+    <button class="tab" data-tab="export">Export</button>
   </div>
   <div style="display:flex; align-items:center; gap:8px;">
     <button id="theme-btn" class="icon-btn" title="Appearance">
@@ -260,6 +260,92 @@
         <select class="input" id="annotate-class-select"></select>
         <button id="annotate-save-btn" class="btn-primary" style="margin-top:20px; width:100%;">Save Changes</button>
         <button id="annotate-clear-btn" class="btn-stop" style="margin-top:8px; width:100%;">Clear All Boxes</button>
+      </div>
+    </div>
+
+  </section>
+
+  <section id="export-section" class="hidden">
+
+    <div class="card">
+      <h2 style="margin-top:0;">Version Info &amp; Dataset Status</h2>
+      <div id="export-frames-info" style="font-size:13px; color:var(--muted);">No detected frames yet — run Detect first.</div>
+
+      <label for="export-version-name">Version Name</label>
+      <input class="input" type="text" id="export-version-name" value="v1" />
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="export-reviewed-only" />
+        <label for="export-reviewed-only" style="margin:0;">Only export reviewed frames</label>
+      </div>
+
+      <div style="margin-top:12px;">
+        <span class="chip">📸 Total: <span id="export-stat-total">—</span></span>
+        <span class="chip">🏷️ Classes: <span id="export-stat-classes">—</span></span>
+        <span class="chip chip-warn">⚠️ Unreviewed: <span id="export-stat-unreviewed">—</span></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Train / Val / Test Split</h2>
+      <div class="field-row">
+        <div>
+          <label for="export-train-pct">Train %: <span id="export-train-pct-label">70</span></label>
+          <input type="range" id="export-train-pct" min="50" max="90" step="1" value="70" />
+        </div>
+        <div>
+          <label for="export-val-pct">Val %: <span id="export-val-pct-label">20</span></label>
+          <input type="range" id="export-val-pct" min="0" max="40" step="1" value="20" />
+        </div>
+      </div>
+      <div id="export-split-summary" style="font-size:13px; color:var(--success); margin-top:8px;">70% Train / 20% Val / 10% Test</div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Preprocessing</h2>
+      <div class="checkbox-row">
+        <input type="checkbox" id="export-resize" checked />
+        <label for="export-resize" style="margin:0;">Resize (Fit within 640x640)</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Augmentation</h2>
+      <div class="checkbox-row">
+        <input type="checkbox" id="export-aug-flip" checked />
+        <label for="export-aug-flip" style="margin:0;">Flip (Horizontal/Vertical)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="export-aug-rotate" checked />
+        <label for="export-aug-rotate" style="margin:0;">Rotation (Between -15° and +15°)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="export-aug-brightness" checked />
+        <label for="export-aug-brightness" style="margin:0;">Brightness &amp; Contrast</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="export-aug-blur" checked />
+        <label for="export-aug-blur" style="margin:0;">Blur / Noise</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="export-aug-crop" checked />
+        <label for="export-aug-crop" style="margin:0;">Random Crop</label>
+      </div>
+      <label for="export-aug-multiplier">Augmentation Multiplier: <span id="export-aug-multiplier-label">1</span></label>
+      <input type="range" id="export-aug-multiplier" min="1" max="10" step="1" value="1" />
+      <div style="font-size:12px; color:var(--muted); margin-top:4px;">Multiplier above 1x requires the <code>albumentations</code> package (not installed by default).</div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Create Version</h2>
+      <div id="export-max-size-label" style="font-size:16px; font-weight:600; color:var(--highlight); margin-bottom:12px;">Maximum Version Size: — images</div>
+
+      <button id="export-start-btn" class="btn-primary" disabled>🚀 Create Version</button>
+
+      <div id="export-progress-wrap" class="hidden">
+        <div class="progress-bar"><div id="export-progress-fill" class="progress-bar-fill"></div></div>
+        <div id="export-progress-label" style="font-size:13px; color:var(--muted);"></div>
+        <button id="export-download-btn" class="btn-download hidden" style="margin-top:12px;">Download dataset as ZIP</button>
       </div>
     </div>
 
