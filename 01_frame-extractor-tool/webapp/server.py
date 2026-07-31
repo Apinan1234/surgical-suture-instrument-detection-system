@@ -27,6 +27,7 @@ WEBAPP_DIR = Path(__file__).resolve().parent
 TOOL_DIR = WEBAPP_DIR.parent
 sys.path.insert(0, str(TOOL_DIR))
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
+from detector import Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES, CLASS_COLORS_HEX  # noqa: E402
 
 load_dotenv(WEBAPP_DIR / ".env")
 
@@ -52,7 +53,7 @@ SNAPSHOT_KEEP = 10
 # ────────────────────────────── State (S-0) ──────────────────────────────
 
 _state_lock = threading.Lock()
-_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}}
+_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}}
 _last_snapshot_time = 0.0
 
 
@@ -61,7 +62,7 @@ def load_state():
     if STATE_PATH.exists():
         with open(STATE_PATH, "r", encoding="utf-8") as f:
             _state = json.load(f)
-    for key in ("videos", "extract_jobs", "frames"):
+    for key in ("videos", "extract_jobs", "frames", "detect_jobs"):
         _state.setdefault(key, {})
 
 
@@ -362,6 +363,203 @@ def download_zip(job_id: str):
         media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="frames_{job_id}.zip"'},
     )
+
+
+# ────────────────────────────── S-4 Detection ──────────────────────────────
+
+
+class DetectBody(BaseModel):
+    frame_ids: list[str]
+    backend: Literal["local", "roboflow"] = "local"
+    model_path: str = "yolo11n.pt"
+    conf: float = Field(default=0.25, ge=0.01, le=0.99)
+    iou: float = Field(default=0.45, ge=0.01, le=0.99)
+    device: Literal["cpu", "cuda", "mps"] = "cpu"
+    # TODO(Annotate): add skip_reviewed: bool = True here + filter logic once frames can be reviewed=true
+    api_key: str | None = None
+    workspace_name: str = "fhasai-khuanpan"
+    workflow_id: str = "ssid-v5-logic"
+
+    @model_validator(mode="after")
+    def _check_backend(self):
+        if self.backend == "roboflow" and not (self.api_key or "").strip():
+            raise ValueError("api_key is required when backend=roboflow")
+        return self
+
+
+PRETRAINED_MODEL_PREFIXES = ("yolo", "rtdetr")
+
+
+def _resolve_model_path(model_path: str) -> str:
+    p = Path(model_path)
+    if p.is_absolute() and p.exists():
+        return str(p)
+    candidate = TOOL_DIR / p
+    return str(candidate) if candidate.exists() else model_path
+
+
+def _validate_detect_backend(body: DetectBody):
+    if body.backend == "roboflow":
+        if not (body.api_key or "").strip():
+            raise ValueError("api_key is required when backend=roboflow")
+        return
+    resolved = _resolve_model_path(body.model_path.strip())
+    is_known_pretrained = body.model_path.startswith(PRETRAINED_MODEL_PREFIXES) and body.model_path.endswith(".pt")
+    if not Path(resolved).exists() and not is_known_pretrained:
+        raise ValueError(f"Model not found: {body.model_path}")
+
+
+def build_detector(body: DetectBody):
+    """Expensive (loads weights / imports ultralytics or inference_sdk) — call only from a worker thread."""
+    if body.backend == "roboflow":
+        return RoboflowDetector(
+            api_key=body.api_key.strip(),
+            workspace_name=body.workspace_name.strip(),
+            workflow_id=body.workflow_id.strip(),
+            conf=body.conf,
+        )
+    return YOLOv11Detector(
+        model_path=_resolve_model_path(body.model_path.strip()),
+        conf=body.conf,
+        iou=body.iou,
+        device=body.device,
+    )
+
+
+def _run_detect_job(job_id: str, body: DetectBody):
+    job = _state["detect_jobs"][job_id]
+    detected_total = 0
+
+    try:
+        det = build_detector(body)
+    except Exception as e:
+        job["log"].append(f"[error] failed to load detector: {e}")
+        job["status"] = "stopped"
+        _job_stop_flags.pop(job_id, None)
+        save_state()
+        return
+
+    total = len(body.frame_ids)
+    for idx, frame_id in enumerate(body.frame_ids):
+        if _job_stop_flags.get(job_id):
+            break
+
+        record = _state["frames"].get(frame_id)
+        if not record:
+            job["log"].append(f"[error] unknown frame id {frame_id}")
+            continue
+
+        try:
+            img = cv2.imread(record["path"])
+            if img is None:
+                job["log"].append(f"[error] cannot read {record['path']}")
+                continue
+            dets = det.predict(img)
+            # กล่องที่เก็บที่นี่ทั้งหมดมาจากโมเดล — ถ้า Annotate ต้องแยก manual/model
+            # ในอนาคต ให้ wrap เป็น {**d, "source": ...} ตอน PUT /api/frames/{id}/detections แทน
+            record["detections"] = [d.to_dict() for d in dets]
+            if dets:
+                detected_total += 1
+            job["log"].append(f"[{'detected' if dets else 'empty'}] {Path(record['path']).name}: {len(dets)} obj")
+        except Exception as e:
+            job["log"].append(f"[error] {record['path']}: {e}")
+
+        job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
+        if len(job["log"]) > 500:
+            del job["log"][: len(job["log"]) - 500]
+
+    job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
+    if job["status"] == "done":
+        job["progress"] = 100
+    job["frame_ids"] = body.frame_ids
+    job["detected_total"] = detected_total
+    _job_stop_flags.pop(job_id, None)
+    save_state()
+
+
+@app.post("/api/detect")
+def start_detect(body: DetectBody):
+    for frame_id in body.frame_ids:
+        if frame_id not in _state["frames"]:
+            raise HTTPException(status_code=404, detail=f"Unknown frame id: {frame_id}")
+
+    try:
+        _validate_detect_backend(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    job_id = uuid.uuid4().hex
+    _state["detect_jobs"][job_id] = {
+        "id": job_id,
+        "status": "running",
+        "progress": 0,
+        "log": [],
+        "frame_ids": [],
+        "detected_total": 0,
+        "backend": body.backend,
+        "model_path": body.model_path if body.backend == "local" else None,
+        "conf": body.conf,
+        "iou": body.iou,
+        "device": body.device,
+    }
+    _job_stop_flags[job_id] = False
+    threading.Thread(target=_run_detect_job, args=(job_id, body), daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/detect/{job_id}")
+def detect_status(job_id: str):
+    job = _state["detect_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.get("/api/detect/{job_id}/frames")
+def detect_frames_list(job_id: str):
+    job = _state["detect_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+    return {"frames": frames}
+
+
+@app.post("/api/detect/{job_id}/stop")
+def stop_detect(job_id: str):
+    if job_id not in _state["detect_jobs"]:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _job_stop_flags[job_id] = True
+    return {"stopping": True}
+
+
+@app.get("/api/frames/{frame_id}/preview.jpg")
+def frame_preview(frame_id: str):
+    record = _state["frames"].get(frame_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Frame not found")
+
+    img = cv2.imread(record["path"])
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image missing on disk")
+
+    dets = [Detection(**d) for d in record.get("detections", [])]
+    boxed = BaseDetector().draw_boxes(img, dets) if dets else img
+
+    ok, buf = cv2.imencode(".jpg", boxed)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode image")
+
+    return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
+
+
+@app.get("/api/models")
+def list_models():
+    return {"models": sorted(p.name for p in TOOL_DIR.glob("*.pt"))}
+
+
+@app.get("/api/classes")
+def list_classes():
+    return {"class_names": CLASS_NAMES, "class_colors": CLASS_COLORS_HEX}
 
 
 # ────────────────────────────── Static files (must be mounted last) ──────────────────────────────

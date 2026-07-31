@@ -217,6 +217,16 @@ label {
   margin-right: 6px;
 }
 
+.chip-warn {
+  background: rgba(233, 69, 96, 0.15);
+  color: var(--highlight);
+}
+
+input[type="range"] {
+  width: 100%;
+  accent-color: var(--highlight);
+}
+
 .progress-bar {
   width: 100%;
   height: 8px;

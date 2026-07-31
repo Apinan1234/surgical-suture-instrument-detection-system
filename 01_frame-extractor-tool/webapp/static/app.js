@@ -53,6 +53,24 @@ if (window.matchMedia) {
 
 updateThemePopoverSelection(localStorage.getItem("theme_preference") || "system");
 
+// ────────────────────────────── Tab switching ──────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === name);
+  });
+  document.querySelectorAll("main > section").forEach((section) => {
+    section.classList.toggle("hidden", section.id !== `${name}-section`);
+  });
+}
+
+document.querySelectorAll(".tab").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (btn.disabled) return;
+    switchTab(btn.dataset.tab);
+  });
+});
+
 // ────────────────────────────── F-3: Extract section ──────────────────────────────
 
 let uploadedVideos = [];
@@ -173,8 +191,8 @@ document.getElementById("extract-stop-btn").addEventListener("click", async () =
 });
 
 function classifyLogLine(line) {
-  if (line.includes("[saved]") || line.includes("เสร็จ")) return "log-ok";
-  if (line.includes("[skip]")) return "log-skip";
+  if (line.includes("[saved]") || line.includes("[detected]") || line.includes("เสร็จ")) return "log-ok";
+  if (line.includes("[skip]") || line.includes("[empty]")) return "log-skip";
   if (line.includes("[blur]")) return "log-blur";
   if (line.includes("[error]")) return "log-skip";
   return "log-info";
@@ -208,10 +226,189 @@ function startPolling() {
       document.getElementById("extract-progress-label").textContent =
         job.status + " — " + job.saved_total + " frames saved";
       document.getElementById("download-zip-btn").classList.toggle("hidden", job.saved_total === 0);
+      lastExtractedFrameIds = job.frame_ids || [];
+      updateDetectFramesInfo();
     }
   }, 1000);
+}
+
+// ────────────────────────────── F-4: Detect section ──────────────────────────────
+
+let lastExtractedFrameIds = [];
+let classColors = {};
+let currentDetectJobId = null;
+let detectPollTimer = null;
+let detectFrames = [];
+let detectPreviewIdx = 0;
+
+function updateDetectFramesInfo() {
+  const info = document.getElementById("detect-frames-info");
+  const startBtn = document.getElementById("detect-start-btn");
+  if (lastExtractedFrameIds.length) {
+    info.textContent = `${lastExtractedFrameIds.length} frames ready from the last Extract run.`;
+    startBtn.disabled = false;
+  } else {
+    info.textContent = "No frames yet — run Extract first.";
+    startBtn.disabled = true;
+  }
+}
+
+async function refreshModelOptions() {
+  const res = await apiFetch("/api/models");
+  if (!res.ok) return;
+  const data = await res.json();
+  const list = document.getElementById("model-datalist");
+  list.innerHTML = "";
+  data.models.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    list.appendChild(opt);
+  });
+}
+
+async function refreshClasses() {
+  const res = await apiFetch("/api/classes");
+  if (!res.ok) return;
+  const data = await res.json();
+  classColors = data.class_colors || {};
+}
+
+document.getElementById("detect-conf").addEventListener("input", (e) => {
+  document.getElementById("detect-conf-label").textContent = e.target.value;
+});
+document.getElementById("detect-iou").addEventListener("input", (e) => {
+  document.getElementById("detect-iou-label").textContent = e.target.value;
+});
+
+document.getElementById("detect-start-btn").addEventListener("click", async () => {
+  const body = {
+    frame_ids: lastExtractedFrameIds,
+    backend: document.querySelector('input[name="detect-backend"]:checked').value,
+    model_path: document.getElementById("model-path").value,
+    conf: parseFloat(document.getElementById("detect-conf").value),
+    iou: parseFloat(document.getElementById("detect-iou").value),
+    device: document.querySelector('input[name="device"]:checked').value,
+  };
+
+  const res = await apiFetch("/api/detect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    alert(errBody.detail || "Failed to start detection");
+    return;
+  }
+
+  const data = await res.json();
+  currentDetectJobId = data.job_id;
+  document.getElementById("detect-start-btn").disabled = true;
+  document.getElementById("detect-stop-btn").classList.remove("hidden");
+  document.getElementById("detect-progress-wrap").classList.remove("hidden");
+  document.getElementById("detect-log").innerHTML = "";
+  document.getElementById("detect-preview-wrap").classList.add("hidden");
+  startDetectPolling();
+});
+
+document.getElementById("detect-stop-btn").addEventListener("click", async () => {
+  if (!currentDetectJobId) return;
+  await apiFetch(`/api/detect/${currentDetectJobId}/stop`, { method: "POST" });
+});
+
+function startDetectPolling() {
+  let lastLogLength = 0;
+  detectPollTimer = setInterval(async () => {
+    const res = await apiFetch(`/api/detect/${currentDetectJobId}`);
+    if (!res.ok) return;
+    const job = await res.json();
+
+    document.getElementById("detect-progress-fill").style.width = job.progress + "%";
+    document.getElementById("detect-progress-label").textContent =
+      job.status + " — " + job.progress + "%";
+
+    const logEl = document.getElementById("detect-log");
+    for (let i = lastLogLength; i < job.log.length; i++) {
+      const div = document.createElement("div");
+      div.className = "log-line " + classifyLogLine(job.log[i]);
+      div.textContent = job.log[i];
+      logEl.appendChild(div);
+    }
+    lastLogLength = job.log.length;
+    logEl.scrollTop = logEl.scrollHeight;
+
+    if (job.status === "done" || job.status === "stopped") {
+      clearInterval(detectPollTimer);
+      document.getElementById("detect-start-btn").disabled = false;
+      document.getElementById("detect-stop-btn").classList.add("hidden");
+      document.getElementById("detect-progress-label").textContent =
+        job.status + " — " + job.detected_total + "/" + job.frame_ids.length + " frames with objects";
+      await loadDetectFrames(job.frame_ids);
+    }
+  }, 1000);
+}
+
+async function loadDetectFrames(frameIds) {
+  if (!frameIds || !frameIds.length || !currentDetectJobId) return;
+  const res = await apiFetch(`/api/detect/${currentDetectJobId}/frames`);
+  if (!res.ok) return;
+  const data = await res.json();
+  detectFrames = data.frames;
+  detectPreviewIdx = 0;
+  if (detectFrames.length) {
+    document.getElementById("detect-preview-wrap").classList.remove("hidden");
+    showDetectPreview(0);
+  }
+}
+
+function showDetectPreview(idx) {
+  if (!detectFrames.length) return;
+  detectPreviewIdx = Math.max(0, Math.min(idx, detectFrames.length - 1));
+  const frame = detectFrames[detectPreviewIdx];
+  document.getElementById("detect-preview-img").src = `/api/frames/${frame.id}/preview.jpg?t=${Date.now()}`;
+  document.getElementById("detect-nav-label").textContent =
+    `Frame ${detectPreviewIdx + 1} / ${detectFrames.length}`;
+  renderDetectionChips(frame.detections || []);
+}
+
+document.getElementById("detect-prev-btn").addEventListener("click", () => showDetectPreview(detectPreviewIdx - 1));
+document.getElementById("detect-next-btn").addEventListener("click", () => showDetectPreview(detectPreviewIdx + 1));
+
+function renderDetectionChips(detections) {
+  const container = document.getElementById("detect-chips");
+  container.innerHTML = "";
+
+  if (!detections.length) {
+    const span = document.createElement("span");
+    span.style.color = "var(--muted)";
+    span.textContent = "— no objects detected —";
+    container.appendChild(span);
+    return;
+  }
+
+  let hasLowConf = false;
+  detections.forEach((d) => {
+    const chip = document.createElement("span");
+    const isLow = d.confidence < 0.5;
+    if (isLow) hasLowConf = true;
+    chip.className = "chip" + (isLow ? " chip-warn" : "");
+    const color = classColors[d.class_name] || "#AAAAAA";
+    chip.innerHTML = `<span style="color:${color};">●</span> ${d.class_name} ${d.confidence.toFixed(2)}`;
+    container.appendChild(chip);
+  });
+
+  if (hasLowConf) {
+    const warn = document.createElement("span");
+    warn.style.color = "var(--highlight)";
+    warn.textContent = "⚠️ Low Confidence";
+    container.appendChild(warn);
+  }
 }
 
 // ────────────────────────────── Init ──────────────────────────────
 
 refreshVideoList();
+refreshModelOptions();
+refreshClasses();
+updateDetectFramesInfo();

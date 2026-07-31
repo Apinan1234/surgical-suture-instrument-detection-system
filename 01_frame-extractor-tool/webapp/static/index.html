@@ -19,7 +19,7 @@
 <div class="topnav">
   <div class="tabs">
     <button class="tab active" data-tab="extract">Extract</button>
-    <button class="tab" data-tab="detect" disabled title="Coming soon">Detect</button>
+    <button class="tab" data-tab="detect">Detect</button>
     <button class="tab" data-tab="annotate" disabled title="Coming soon">Annotate</button>
     <button class="tab" data-tab="export" disabled title="Coming soon">Export</button>
   </div>
@@ -145,6 +145,80 @@
         <div id="extract-progress-label" style="font-size:13px; color:var(--muted);"></div>
         <div id="extract-log" class="log-panel"></div>
         <button id="download-zip-btn" class="btn-download hidden" style="margin-top:12px;">Download frames as ZIP</button>
+      </div>
+    </div>
+
+  </section>
+
+  <section id="detect-section" class="hidden">
+
+    <div class="card">
+      <h2 style="margin-top:0;">Model</h2>
+
+      <div class="checkbox-row">
+        <input type="radio" name="detect-backend" value="local" id="backend-local" checked />
+        <label for="backend-local" style="margin:0;">Local (.pt)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="radio" name="detect-backend" value="roboflow" id="backend-roboflow" disabled title="Coming soon" />
+        <label for="backend-roboflow" style="margin:0; color:var(--muted);">Roboflow Cloud API (coming soon)</label>
+      </div>
+
+      <label for="model-path">Model</label>
+      <input class="input" type="text" id="model-path" list="model-datalist" value="yolo11n.pt" />
+      <datalist id="model-datalist"></datalist>
+
+      <label>Device</label>
+      <div class="checkbox-row">
+        <input type="radio" name="device" value="cpu" id="device-cpu" checked />
+        <label for="device-cpu" style="margin:0;">CPU</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="radio" name="device" value="cuda" id="device-cuda" />
+        <label for="device-cuda" style="margin:0;">CUDA</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="radio" name="device" value="mps" id="device-mps" />
+        <label for="device-mps" style="margin:0;">MPS</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Inference Settings</h2>
+
+      <label for="detect-conf">Confidence threshold: <span id="detect-conf-label">0.25</span></label>
+      <input type="range" id="detect-conf" min="0.01" max="0.99" step="0.01" value="0.25" />
+
+      <label for="detect-iou">IoU threshold: <span id="detect-iou-label">0.45</span></label>
+      <input type="range" id="detect-iou" min="0.01" max="0.99" step="0.01" value="0.45" />
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Frames to Detect</h2>
+      <div id="detect-frames-info" style="font-size:13px; color:var(--muted);">No frames yet — run Extract first.</div>
+
+      <div style="margin-top:20px;">
+        <button id="detect-start-btn" class="btn-primary" disabled>Start Detection</button>
+        <button id="detect-stop-btn" class="btn-stop hidden">Stop</button>
+      </div>
+
+      <div id="detect-progress-wrap" class="hidden">
+        <div class="progress-bar"><div id="detect-progress-fill" class="progress-bar-fill"></div></div>
+        <div id="detect-progress-label" style="font-size:13px; color:var(--muted);"></div>
+        <div id="detect-log" class="log-panel"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Preview</h2>
+      <div id="detect-preview-wrap" class="hidden">
+        <img id="detect-preview-img" style="max-width:100%; border-radius:8px;" />
+        <div style="margin-top:8px;">
+          <button id="detect-prev-btn" class="btn-download">◄ Prev</button>
+          <span id="detect-nav-label" style="margin:0 8px; font-size:13px; color:var(--muted);"></span>
+          <button id="detect-next-btn" class="btn-download">Next ►</button>
+        </div>
+        <div id="detect-chips" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:6px;"></div>
       </div>
     </div>
 
