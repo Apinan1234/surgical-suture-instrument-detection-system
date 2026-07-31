@@ -62,6 +62,7 @@ function switchTab(name) {
   document.querySelectorAll("main > section").forEach((section) => {
     section.classList.toggle("hidden", section.id !== `${name}-section`);
   });
+  document.querySelector("main").classList.toggle("wide", name === "annotate");
 }
 
 document.querySelectorAll(".tab").forEach((btn) => {
@@ -266,11 +267,15 @@ async function refreshModelOptions() {
   });
 }
 
+let classNames = [];
+
 async function refreshClasses() {
   const res = await apiFetch("/api/classes");
   if (!res.ok) return;
   const data = await res.json();
   classColors = data.class_colors || {};
+  classNames = data.class_names || [];
+  populateAnnotateClassSelect();
 }
 
 function updateBackendFields() {
@@ -391,6 +396,7 @@ async function loadDetectFrames(frameIds) {
     document.getElementById("detect-preview-wrap").classList.remove("hidden");
     showDetectPreview(0);
   }
+  initAnnotateFrames(data.frames);
 }
 
 function showDetectPreview(idx) {
@@ -436,6 +442,214 @@ function renderDetectionChips(detections) {
     container.appendChild(warn);
   }
 }
+
+// ────────────────────────────── S-5: Annotate section ──────────────────────────────
+
+let annotateFrames = [];
+let annotateIdx = -1;
+let annotateImg = null;
+let annotateBoxes = [];
+let annotateDragStart = null;
+
+const annotateCanvas = document.getElementById("annotate-canvas");
+const annotateCtx = annotateCanvas.getContext("2d");
+
+function populateAnnotateClassSelect() {
+  const select = document.getElementById("annotate-class-select");
+  select.innerHTML = "";
+  classNames.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  });
+}
+
+function initAnnotateFrames(frames) {
+  annotateFrames = frames || [];
+  document.getElementById("annotate-frames-info").classList.toggle("hidden", annotateFrames.length > 0);
+  document.getElementById("annotate-toolbar").classList.toggle("hidden", annotateFrames.length === 0);
+  document.getElementById("annotate-workspace").classList.toggle("hidden", annotateFrames.length === 0);
+  if (annotateFrames.length) {
+    selectAnnotateFrame(0);
+  } else {
+    annotateIdx = -1;
+    renderAnnotateFilmstrip();
+  }
+}
+
+function frameBasename(path) {
+  return path.split(/[\\/]/).pop();
+}
+
+function renderAnnotateFilmstrip() {
+  const list = document.getElementById("annotate-filmstrip-list");
+  list.innerHTML = "";
+  annotateFrames.forEach((frame, idx) => {
+    const li = document.createElement("li");
+    const status = frame.reviewed ? "✅" : "🔴";
+    li.textContent = `${status} ${frameBasename(frame.path)}`;
+    li.className = idx === annotateIdx ? "selected" : "";
+    li.addEventListener("click", () => selectAnnotateFrame(idx));
+    list.appendChild(li);
+  });
+}
+
+function updateAnnotateReviewStatus() {
+  const frame = annotateFrames[annotateIdx];
+  document.getElementById("annotate-review-status").textContent = frame.reviewed
+    ? "✅ Reviewed"
+    : "🔴 Needs Review";
+}
+
+function selectAnnotateFrame(idx) {
+  annotateIdx = idx;
+  const frame = annotateFrames[idx];
+  annotateBoxes = (frame.detections || []).map((d) => ({ ...d }));
+  renderAnnotateFilmstrip();
+  updateAnnotateReviewStatus();
+  loadAnnotateImage(frame);
+}
+
+function loadAnnotateImage(frame) {
+  const idxAtLoad = annotateIdx;
+  const img = new Image();
+  img.onload = () => {
+    if (annotateIdx !== idxAtLoad) return; // user navigated away before this finished loading
+    annotateImg = img;
+    annotateCanvas.width = img.naturalWidth;
+    annotateCanvas.height = img.naturalHeight;
+    drawAnnotateCanvas();
+  };
+  img.src = `/api/frames/${frame.id}/image.jpg?t=${Date.now()}`;
+}
+
+function drawAnnotateCanvas() {
+  if (!annotateImg) return;
+  annotateCtx.drawImage(annotateImg, 0, 0, annotateCanvas.width, annotateCanvas.height);
+  annotateBoxes.forEach(drawAnnotateBox);
+}
+
+function drawAnnotateBox(d) {
+  const w = annotateCanvas.width;
+  const h = annotateCanvas.height;
+  const x1 = (d.x_center - d.width / 2) * w;
+  const y1 = (d.y_center - d.height / 2) * h;
+  const bw = d.width * w;
+  const bh = d.height * h;
+  const color = classColors[d.class_name] || "#AAAAAA";
+  annotateCtx.strokeStyle = color;
+  annotateCtx.lineWidth = 2;
+  annotateCtx.strokeRect(x1, y1, bw, bh);
+  annotateCtx.fillStyle = color;
+  annotateCtx.font = "13px sans-serif";
+  annotateCtx.fillText(d.class_name, x1, y1 - 4 > 10 ? y1 - 4 : y1 + 12);
+}
+
+function canvasPointFromEvent(e) {
+  const rect = annotateCanvas.getBoundingClientRect();
+  const scaleX = annotateCanvas.width / rect.width;
+  const scaleY = annotateCanvas.height / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY,
+  };
+}
+
+annotateCanvas.addEventListener("mousedown", (e) => {
+  if (annotateIdx < 0) return;
+  annotateDragStart = canvasPointFromEvent(e);
+});
+
+annotateCanvas.addEventListener("mousemove", (e) => {
+  if (!annotateDragStart) return;
+  const p = canvasPointFromEvent(e);
+  drawAnnotateCanvas();
+  const color = classColors[document.getElementById("annotate-class-select").value] || "#AAAAAA";
+  annotateCtx.strokeStyle = color;
+  annotateCtx.lineWidth = 2;
+  annotateCtx.strokeRect(
+    Math.min(annotateDragStart.x, p.x),
+    Math.min(annotateDragStart.y, p.y),
+    Math.abs(p.x - annotateDragStart.x),
+    Math.abs(p.y - annotateDragStart.y)
+  );
+});
+
+annotateCanvas.addEventListener("mouseup", (e) => {
+  if (!annotateDragStart) return;
+  const start = annotateDragStart;
+  const end = canvasPointFromEvent(e);
+  annotateDragStart = null;
+
+  // discard accidental-click boxes under 5px in either dimension (matches app.py's AnnotationTab)
+  if (Math.abs(end.x - start.x) < 5 || Math.abs(end.y - start.y) < 5) {
+    drawAnnotateCanvas();
+    return;
+  }
+
+  const w = annotateCanvas.width;
+  const h = annotateCanvas.height;
+  const x1 = Math.min(start.x, end.x);
+  const x2 = Math.max(start.x, end.x);
+  const y1 = Math.min(start.y, end.y);
+  const y2 = Math.max(start.y, end.y);
+  const className = document.getElementById("annotate-class-select").value;
+
+  annotateBoxes.push({
+    class_id: classNames.indexOf(className),
+    class_name: className,
+    confidence: 1.0,
+    x_center: (x1 + x2) / 2 / w,
+    y_center: (y1 + y2) / 2 / h,
+    width: (x2 - x1) / w,
+    height: (y2 - y1) / h,
+  });
+  drawAnnotateCanvas();
+});
+
+document.getElementById("annotate-clear-btn").addEventListener("click", () => {
+  if (annotateIdx < 0) return;
+  annotateBoxes = [];
+  drawAnnotateCanvas();
+});
+
+document.getElementById("annotate-save-btn").addEventListener("click", async () => {
+  if (annotateIdx < 0) return;
+  const frame = annotateFrames[annotateIdx];
+
+  const res = await apiFetch(`/api/frames/${frame.id}/detections`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ detections: annotateBoxes }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    alert(errBody.detail || "Failed to save annotations");
+    return;
+  }
+  const saved = await res.json();
+  frame.detections = saved.detections;
+
+  // mirror app.py's _save_changes(), which always calls _mark_reviewed() too
+  const reviewRes = await apiFetch(`/api/frames/${frame.id}/review`, { method: "POST" });
+  if (reviewRes.ok) {
+    frame.reviewed = true;
+    updateAnnotateReviewStatus();
+    renderAnnotateFilmstrip();
+  }
+  alert("Saved");
+});
+
+document.getElementById("annotate-mark-reviewed-btn").addEventListener("click", async () => {
+  if (annotateIdx < 0) return;
+  const frame = annotateFrames[annotateIdx];
+  const res = await apiFetch(`/api/frames/${frame.id}/review`, { method: "POST" });
+  if (!res.ok) return;
+  frame.reviewed = true;
+  updateAnnotateReviewStatus();
+  renderAnnotateFilmstrip();
+});
 
 // ────────────────────────────── Init ──────────────────────────────
 

@@ -275,6 +275,7 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                         "video_id": video_id,
                         "job_id": job_id,
                         "path": str(img_path),
+                        "reviewed": False,
                     }
                     frame_ids.append(frame_id)
         except Exception as e:
@@ -546,6 +547,66 @@ def frame_preview(frame_id: str):
     boxed = BaseDetector().draw_boxes(img, dets) if dets else img
 
     ok, buf = cv2.imencode(".jpg", boxed)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode image")
+
+    return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
+
+
+# ────────────────────────────── S-5 Annotation ──────────────────────────────
+
+
+class DetectionIn(BaseModel):
+    class_id: int
+    class_name: str
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    x_center: float = Field(ge=0.0, le=1.0)
+    y_center: float = Field(ge=0.0, le=1.0)
+    width: float = Field(gt=0.0, le=1.0)
+    height: float = Field(gt=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _check_class(self):
+        if self.class_name not in CLASS_NAMES:
+            raise ValueError(f"Unknown class_name: {self.class_name}")
+        return self
+
+
+class FrameDetectionsBody(BaseModel):
+    detections: list[DetectionIn]
+
+
+@app.put("/api/frames/{frame_id}/detections")
+def replace_frame_detections(frame_id: str, body: FrameDetectionsBody):
+    record = _state["frames"].get(frame_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    record["detections"] = [Detection(**d.model_dump()).to_dict() for d in body.detections]
+    save_state()
+    return {"frame_id": frame_id, "detections": record["detections"]}
+
+
+@app.post("/api/frames/{frame_id}/review")
+def mark_frame_reviewed(frame_id: str):
+    record = _state["frames"].get(frame_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Frame not found")
+    record["reviewed"] = True
+    save_state()
+    return {"frame_id": frame_id, "reviewed": True}
+
+
+@app.get("/api/frames/{frame_id}/image.jpg")
+def frame_image(frame_id: str):
+    record = _state["frames"].get(frame_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Frame not found")
+
+    img = cv2.imread(record["path"])
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image missing on disk")
+
+    ok, buf = cv2.imencode(".jpg", img)
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to encode image")
 

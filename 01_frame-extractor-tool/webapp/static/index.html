@@ -20,7 +20,7 @@
   <div class="tabs">
     <button class="tab active" data-tab="extract">Extract</button>
     <button class="tab" data-tab="detect">Detect</button>
-    <button class="tab" data-tab="annotate" disabled title="Coming soon">Annotate</button>
+    <button class="tab" data-tab="annotate">Annotate</button>
     <button class="tab" data-tab="export" disabled title="Coming soon">Export</button>
   </div>
   <div style="display:flex; align-items:center; gap:8px;">
@@ -232,6 +232,34 @@
           <button id="detect-next-btn" class="btn-download">Next ►</button>
         </div>
         <div id="detect-chips" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:6px;"></div>
+      </div>
+    </div>
+
+  </section>
+
+  <section id="annotate-section" class="hidden">
+
+    <div class="card">
+      <h2 style="margin-top:0;">Annotate</h2>
+      <div id="annotate-frames-info" style="font-size:13px; color:var(--muted);">No frames yet — run Detect first.</div>
+      <div id="annotate-toolbar" class="hidden" style="display:flex; align-items:center; gap:12px; margin-top:12px;">
+        <span id="annotate-review-status" class="chip">🔴 Needs Review</span>
+        <button id="annotate-mark-reviewed-btn" class="btn-download">✅ Mark as Reviewed</button>
+      </div>
+    </div>
+
+    <div id="annotate-workspace" class="card hidden annotate-layout">
+      <div class="annotate-filmstrip">
+        <ul id="annotate-filmstrip-list" class="filmstrip-list"></ul>
+      </div>
+      <div class="annotate-canvas-wrap">
+        <canvas id="annotate-canvas"></canvas>
+      </div>
+      <div class="annotate-props">
+        <label for="annotate-class-select">New Class</label>
+        <select class="input" id="annotate-class-select"></select>
+        <button id="annotate-save-btn" class="btn-primary" style="margin-top:20px; width:100%;">Save Changes</button>
+        <button id="annotate-clear-btn" class="btn-stop" style="margin-top:8px; width:100%;">Clear All Boxes</button>
       </div>
     </div>
 
