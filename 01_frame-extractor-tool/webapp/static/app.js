@@ -104,7 +104,9 @@ async function refreshVideoList() {
   uploadedVideos.forEach((v) => {
     const li = document.createElement("li");
     const sizeMb = (v.size_bytes / (1024 * 1024)).toFixed(1);
-    li.innerHTML = `<span>${v.filename} (${sizeMb} MB)</span>`;
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = `${v.filename} (${sizeMb} MB)`;
+    li.appendChild(nameSpan);
     const delBtn = document.createElement("button");
     delBtn.textContent = "Remove";
     delBtn.addEventListener("click", async () => {
@@ -433,7 +435,11 @@ function renderDetectionChips(detections) {
     if (isLow) hasLowConf = true;
     chip.className = "chip" + (isLow ? " chip-warn" : "");
     const color = classColors[d.class_name] || "#AAAAAA";
-    chip.innerHTML = `<span style="color:${color};">●</span> ${d.class_name} ${d.confidence.toFixed(2)}`;
+    const dot = document.createElement("span");
+    dot.style.color = color;
+    dot.textContent = "●";
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode(` ${d.class_name} ${d.confidence.toFixed(2)}`));
     container.appendChild(chip);
   });
 

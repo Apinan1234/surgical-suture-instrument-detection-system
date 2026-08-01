@@ -283,7 +283,7 @@ def extract_frames(
             stats["skipped_similar"] += 1
             log(f"  [skip]   เฟรม {frame_idx:5d} (slot {slot}) → คล้าย (score={score:.1f}), ลอง frame ถัดไป")
         else:
-            filename  = f"{prefix}_{start_index + stats['saved']:05d}.jpg"
+            filename  = f"{os.path.basename(prefix)}_{start_index + stats['saved']:05d}.jpg"
             save_path = os.path.join(output_folder, filename)
             save_frame = resize_to_max_side(frame, resize_max_px) if resize_max_px else frame
             cv2.imwrite(save_path, save_frame, [cv2.IMWRITE_JPEG_QUALITY, 95])

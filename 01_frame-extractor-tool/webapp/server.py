@@ -393,12 +393,26 @@ class DetectBody(BaseModel):
 PRETRAINED_MODEL_PREFIXES = ("yolo", "rtdetr")
 
 
-def _resolve_model_path(model_path: str) -> str:
-    p = Path(model_path)
-    if p.is_absolute() and p.exists():
-        return str(p)
-    candidate = TOOL_DIR / p
-    return str(candidate) if candidate.exists() else model_path
+def _resolve_model_path(model_path: str) -> str | None:
+    """Resolves model_path to an existing file strictly inside TOOL_DIR, or None."""
+    p = Path(model_path.strip())
+    candidate = p if p.is_absolute() else TOOL_DIR / p
+    try:
+        resolved = candidate.resolve()
+        resolved.relative_to(TOOL_DIR.resolve())
+    except ValueError:
+        return None  # outside TOOL_DIR
+    return str(resolved) if resolved.exists() else None
+
+
+def _is_known_pretrained(model_path: str) -> bool:
+    # Bare filename only (no path separators) — otherwise a crafted name like
+    # "yolo/../../evil.pt" could pass the prefix/suffix check while still traversing.
+    return (
+        os.path.basename(model_path) == model_path
+        and model_path.startswith(PRETRAINED_MODEL_PREFIXES)
+        and model_path.endswith(".pt")
+    )
 
 
 def _validate_detect_backend(body: DetectBody):
@@ -406,9 +420,8 @@ def _validate_detect_backend(body: DetectBody):
         if not (body.api_key or "").strip():
             raise ValueError("api_key is required when backend=roboflow")
         return
-    resolved = _resolve_model_path(body.model_path.strip())
-    is_known_pretrained = body.model_path.startswith(PRETRAINED_MODEL_PREFIXES) and body.model_path.endswith(".pt")
-    if not Path(resolved).exists() and not is_known_pretrained:
+    raw = body.model_path.strip()
+    if _resolve_model_path(raw) is None and not _is_known_pretrained(raw):
         raise ValueError(f"Model not found: {body.model_path}")
 
 
@@ -421,8 +434,9 @@ def build_detector(body: DetectBody):
             workflow_id=body.workflow_id.strip(),
             conf=body.conf,
         )
+    raw_model_path = body.model_path.strip()
     return YOLOv11Detector(
-        model_path=_resolve_model_path(body.model_path.strip()),
+        model_path=_resolve_model_path(raw_model_path) or raw_model_path,
         conf=body.conf,
         iou=body.iou,
         device=body.device,
