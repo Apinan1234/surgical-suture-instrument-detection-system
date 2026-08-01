@@ -451,16 +451,834 @@ function renderDetectionChips(detections) {
   }
 }
 
-// ────────────────────────────── S-5: Annotate section ──────────────────────────────
+// ────────────────────────────── S-5 / F-7: Annotate canvas engine ──────────────────────────────
+// Modules: Api, UndoManager, AnnotateState, Canvas, DrawBoxTool, SelectTool, Tools, Keyboard,
+// then DOM wiring at the bottom. See _archive/WORK_PLAN.md "✏️ Annotation Workflow & Tool Design".
 
-let annotateFrames = [];
-let annotateIdx = -1;
-let annotateImg = null;
-let annotateBoxes = [];
-let annotateDragStart = null;
+// ── shared helpers ──
 
-const annotateCanvas = document.getElementById("annotate-canvas");
-const annotateCtx = annotateCanvas.getContext("2d");
+let _idCounter = 0;
+function makeId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+  return `box-${Date.now()}-${_idCounter++}`;
+}
+
+function cloneBoxes(arr) {
+  if (typeof structuredClone === "function") return structuredClone(arr);
+  return JSON.parse(JSON.stringify(arr));
+}
+
+function clamp01(v) {
+  return Math.min(1, Math.max(0, v));
+}
+
+function clampPos(v) {
+  return Math.min(1, Math.max(0.001, v)); // backend requires width/height > 0
+}
+
+const HANDLE_PX = 8; // fixed screen-px handle size, regardless of zoom
+const CURSOR_BY_HANDLE = {
+  nw: "nwse-resize", se: "nwse-resize", ne: "nesw-resize", sw: "nesw-resize",
+  n: "ns-resize", s: "ns-resize", e: "ew-resize", w: "ew-resize",
+};
+
+function boxRectImg(b, imgW, imgH) {
+  const x1 = (b.x_center - b.width / 2) * imgW;
+  const y1 = (b.y_center - b.height / 2) * imgH;
+  const x2 = (b.x_center + b.width / 2) * imgW;
+  const y2 = (b.y_center + b.height / 2) * imgH;
+  return { x1, y1, x2, y2 };
+}
+
+function handlePositions(rect) {
+  const { x1, y1, x2, y2 } = rect;
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  return {
+    nw: { x: x1, y: y1 }, n: { x: mx, y: y1 }, ne: { x: x2, y: y1 },
+    w: { x: x1, y: my }, e: { x: x2, y: my },
+    sw: { x: x1, y: y2 }, s: { x: mx, y: y2 }, se: { x: x2, y: y2 },
+  };
+}
+
+function rectToNormalized(x1, y1, x2, y2, imgW, imgH) {
+  const nx1 = Math.min(x1, x2), nx2 = Math.max(x1, x2);
+  const ny1 = Math.min(y1, y2), ny2 = Math.max(y1, y2);
+  return {
+    x_center: clamp01((nx1 + nx2) / 2 / imgW),
+    y_center: clamp01((ny1 + ny2) / 2 / imgH),
+    width: clampPos((nx2 - nx1) / imgW),
+    height: clampPos((ny2 - ny1) / imgH),
+  };
+}
+
+function hitTestHandles(imgPt, box, imgW, imgH, tolImg) {
+  const handles = handlePositions(boxRectImg(box, imgW, imgH));
+  for (const name in handles) {
+    const h = handles[name];
+    if (Math.abs(imgPt.x - h.x) <= tolImg && Math.abs(imgPt.y - h.y) <= tolImg) return name;
+  }
+  return null;
+}
+
+function hitTestBoxBody(imgPt, box, imgW, imgH) {
+  const rect = boxRectImg(box, imgW, imgH);
+  return imgPt.x >= rect.x1 && imgPt.x <= rect.x2 && imgPt.y >= rect.y1 && imgPt.y <= rect.y2;
+}
+
+// ── Api: one wrapper per endpoint used by Annotate ──
+
+const Api = {
+  putDetections(frameId, detections) {
+    return apiFetch(`/api/frames/${frameId}/detections`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ detections }),
+    });
+  },
+  postReview(frameId, reviewed) {
+    return apiFetch(`/api/frames/${frameId}/review`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewed: reviewed !== false }),
+    });
+  },
+  postAssist(frameId, body) {
+    return apiFetch(`/api/frames/${frameId}/assist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  },
+  imageUrl(frameId) {
+    return `/api/frames/${frameId}/image.jpg?t=${Date.now()}`;
+  },
+  thumbnailUrl(frameId, max) {
+    // stable, NOT cache-busted — letting the browser HTTP-cache thumbnails is the point of S-9
+    return `/api/frames/${frameId}/thumbnail.jpg?max=${max || 160}`;
+  },
+};
+
+// ── UndoManager: capped whole-array snapshot stack ──
+
+const UndoManager = (() => {
+  const CAP = 50;
+  let past = [];
+  let future = [];
+
+  function reset() {
+    past = [];
+    future = [];
+  }
+
+  function recordSnapshot(boxesArray) {
+    past.push(cloneBoxes(boxesArray));
+    if (past.length > CAP) past.shift();
+    future = [];
+  }
+
+  function undo(currentBoxes) {
+    if (!past.length) return null;
+    const prev = past.pop();
+    future.push(cloneBoxes(currentBoxes));
+    return prev;
+  }
+
+  function redo(currentBoxes) {
+    if (!future.length) return null;
+    const next = future.pop();
+    past.push(cloneBoxes(currentBoxes));
+    return next;
+  }
+
+  return { reset, recordSnapshot, undo, redo };
+})();
+
+// ── AnnotateState: frames/boxes/selection/active-tool + pub/sub ──
+
+const AnnotateState = (() => {
+  let frames = [];
+  let frameIdx = -1;
+  let boxes = [];
+  let selectedId = null;
+  let activeTool = "draw_box";
+  const listeners = [];
+
+  function emit() {
+    listeners.forEach((fn) => fn());
+  }
+
+  function subscribe(fn) {
+    listeners.push(fn);
+  }
+
+  function hydrate(detections) {
+    return (detections || []).map((d) => ({ ...d, id: makeId() }));
+  }
+
+  function init(frameList) {
+    frames = frameList || [];
+    frameIdx = -1;
+    boxes = [];
+    selectedId = null;
+    UndoManager.reset();
+    if (frames.length) {
+      selectFrame(0);
+    } else {
+      emit();
+    }
+  }
+
+  function selectFrame(idx) {
+    if (idx < 0 || idx >= frames.length) return;
+    frameIdx = idx;
+    boxes = hydrate(frames[idx].detections);
+    selectedId = null;
+    UndoManager.reset();
+    emit();
+  }
+
+  function currentFrame() {
+    return frameIdx >= 0 ? frames[frameIdx] : null;
+  }
+
+  function getBoxes() {
+    return boxes;
+  }
+
+  function setBoxes(next, opts) {
+    opts = opts || {};
+    if (opts.pushUndo !== false) UndoManager.recordSnapshot(boxes);
+    boxes = next;
+    emit();
+  }
+
+  function addBoxes(newOnes) {
+    if (!newOnes.length) return;
+    setBoxes(boxes.concat(newOnes));
+  }
+
+  function selectBox(id) {
+    selectedId = id;
+    emit();
+  }
+
+  function getSelected() {
+    return boxes.find((b) => b.id === selectedId) || null;
+  }
+
+  function reselectIfMissing() {
+    if (selectedId && !boxes.find((b) => b.id === selectedId)) {
+      selectedId = null;
+      emit();
+    }
+  }
+
+  function setActiveTool(name) {
+    if (activeTool === name || !Tools[name]) return;
+    const prev = Tools[activeTool];
+    if (prev && prev.onDeactivate) prev.onDeactivate();
+    activeTool = name;
+    selectedId = null;
+    const next = Tools[activeTool];
+    if (next && next.onActivate) next.onActivate();
+    emit();
+  }
+
+  function getPrevFrame() {
+    return frameIdx > 0 ? frames[frameIdx - 1] : null;
+  }
+
+  function findNextUnreviewedIndex(fromIdx) {
+    for (let i = fromIdx + 1; i < frames.length; i++) {
+      if (!frames[i].reviewed) return i;
+    }
+    return -1;
+  }
+
+  function markReviewedLocal(v) {
+    const f = currentFrame();
+    if (f) f.reviewed = v;
+    emit();
+  }
+
+  function setFrameDetections(idx, detections) {
+    if (frames[idx]) frames[idx].detections = detections;
+  }
+
+  return {
+    subscribe, init, selectFrame, currentFrame, getBoxes, setBoxes, addBoxes,
+    selectBox, getSelected, reselectIfMissing, setActiveTool, getActiveTool: () => activeTool,
+    getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
+    findNextUnreviewedIndex, markReviewedLocal, setFrameDetections,
+  };
+})();
+
+// ── Tool registry (filled in below by DrawBoxTool/SelectTool) ──
+
+const Tools = {};
+
+// ── Canvas: owns <canvas>, viewport/pan/zoom transform, rAF-batched redraw ──
+
+const Canvas = (() => {
+  const canvas = document.getElementById("annotate-canvas");
+  const ctx = canvas.getContext("2d");
+  let img = null;
+  let cssScale = 1; // image-px -> CSS-px
+  let panX = 0, panY = 0; // image-space coords shown at canvas-local (0,0)
+  let rafScheduled = false;
+  let spaceHeld = false;
+  let panDragStart = null;
+
+  function requestRender() {
+    if (rafScheduled) return;
+    rafScheduled = true;
+    requestAnimationFrame(() => {
+      rafScheduled = false;
+      render();
+    });
+  }
+
+  function drawBox(b) {
+    const imgW = img.naturalWidth, imgH = img.naturalHeight;
+    const x1 = (b.x_center - b.width / 2) * imgW;
+    const y1 = (b.y_center - b.height / 2) * imgH;
+    const bw = b.width * imgW;
+    const bh = b.height * imgH;
+    const color = classColors[b.class_name] || "#AAAAAA";
+    const lw = 2 / cssScale;
+    const sel = AnnotateState.getSelected();
+    const isSelected = !!sel && sel.id === b.id;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = lw;
+    ctx.setLineDash(b._pending ? [6 / cssScale, 4 / cssScale] : []);
+    ctx.strokeRect(x1, y1, bw, bh);
+    ctx.setLineDash([]);
+
+    if (isSelected) {
+      ctx.strokeStyle = "#2563eb";
+      ctx.lineWidth = lw * 1.5;
+      ctx.setLineDash([4 / cssScale, 2 / cssScale]);
+      ctx.strokeRect(x1 - lw, y1 - lw, bw + 2 * lw, bh + 2 * lw);
+      ctx.setLineDash([]);
+    }
+
+    ctx.fillStyle = color;
+    ctx.font = `${13 / cssScale}px sans-serif`;
+    const labelY = y1 - 4 / cssScale > 10 / cssScale ? y1 - 4 / cssScale : y1 + 12 / cssScale;
+    ctx.fillText(b.class_name, x1, labelY);
+
+    if (b._pending && b.confidence < 0.5) {
+      ctx.fillStyle = "#e94560"; // var(--highlight) — identical across every theme in style.css
+      const warnY = y1 + bh + 14 / cssScale < imgH ? y1 + bh + 14 / cssScale : y1 + bh - 4 / cssScale;
+      ctx.fillText(`⚠ ${b.confidence.toFixed(2)}`, x1, warnY);
+    }
+    ctx.restore();
+  }
+
+  function render() {
+    const dpr = window.devicePixelRatio || 1;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (img) {
+      const bufferScale = cssScale * dpr;
+      ctx.setTransform(bufferScale, 0, 0, bufferScale, -panX * bufferScale, -panY * bufferScale);
+      ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+      AnnotateState.getBoxes().forEach(drawBox);
+      const tool = Tools[AnnotateState.getActiveTool()];
+      if (tool && tool.render) tool.render(ctx);
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  function fitToImage() {
+    if (!img) {
+      requestRender();
+      return;
+    }
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = canvas.width / dpr;
+    const cssH = canvas.height / dpr;
+    cssScale = Math.min(cssW / img.naturalWidth, cssH / img.naturalHeight);
+    if (!isFinite(cssScale) || cssScale <= 0) cssScale = 1;
+    const dispW = img.naturalWidth * cssScale;
+    const dispH = img.naturalHeight * cssScale;
+    panX = -((cssW - dispW) / 2) / cssScale;
+    panY = -((cssH - dispH) / 2) / cssScale;
+    requestRender();
+  }
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const wrap = canvas.parentElement;
+    const cssW = wrap.clientWidth || 640;
+    const cssH = wrap.clientHeight || 640;
+    canvas.style.width = cssW + "px";
+    canvas.style.height = cssH + "px";
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    fitToImage();
+  }
+
+  function setImage(newImg) {
+    img = newImg;
+    resize();
+  }
+
+  function screenToImage(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = clientX - rect.left;
+    const cy = clientY - rect.top;
+    return { x: panX + cx / cssScale, y: panY + cy / cssScale };
+  }
+
+  function imageToScreen(imgX, imgY) {
+    return { x: (imgX - panX) * cssScale, y: (imgY - panY) * cssScale };
+  }
+
+  function panBy(dxCss, dyCss) {
+    panX -= dxCss / cssScale;
+    panY -= dyCss / cssScale;
+    requestRender();
+  }
+
+  function zoomBy(factor, clientX, clientY) {
+    if (!img) return;
+    const before = screenToImage(clientX, clientY);
+    cssScale = Math.min(20, Math.max(0.05, cssScale * factor));
+    const after = screenToImage(clientX, clientY);
+    panX += before.x - after.x;
+    panY += before.y - after.y;
+    requestRender();
+  }
+
+  function setCursor(name) {
+    canvas.style.cursor = name;
+  }
+
+  function setSpaceHeld(v) {
+    spaceHeld = v;
+    if (!panDragStart) setCursor(v ? "grab" : (AnnotateState.getActiveTool() === "draw_box" ? "crosshair" : "default"));
+  }
+
+  function dispatch(method, e) {
+    const tool = Tools[AnnotateState.getActiveTool()];
+    if (tool && tool[method]) tool[method](e);
+  }
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (spaceHeld) {
+      panDragStart = { x: e.clientX, y: e.clientY };
+      canvas.setPointerCapture(e.pointerId);
+      setCursor("grabbing");
+      return;
+    }
+    dispatch("onPointerDown", e);
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (panDragStart) {
+      panBy(e.clientX - panDragStart.x, e.clientY - panDragStart.y);
+      panDragStart = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    dispatch("onPointerMove", e);
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (panDragStart) {
+      panDragStart = null;
+      setCursor(spaceHeld ? "grab" : "default");
+      return;
+    }
+    dispatch("onPointerUp", e);
+  });
+  canvas.addEventListener("wheel", (e) => {
+    if (!img) return;
+    e.preventDefault();
+    zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY);
+  }, { passive: false });
+
+  window.addEventListener("resize", () => resize());
+
+  return {
+    setImage, resize, requestRender, screenToImage, imageToScreen, zoomBy, setSpaceHeld, setCursor,
+    getCssScale: () => cssScale,
+    getImageSize: () => (img ? { w: img.naturalWidth, h: img.naturalHeight } : { w: 0, h: 0 }),
+  };
+})();
+
+// ── DrawBoxTool: click-drag to create a new box; stays active across multiple boxes ──
+
+const DrawBoxTool = (() => {
+  let dragStart = null;
+  let dragCurrent = null;
+
+  function onPointerDown(e) {
+    if (!AnnotateState.currentFrame()) return;
+    dragStart = Canvas.screenToImage(e.clientX, e.clientY);
+    dragCurrent = dragStart;
+  }
+
+  function onPointerMove(e) {
+    if (!dragStart) return;
+    dragCurrent = Canvas.screenToImage(e.clientX, e.clientY);
+    Canvas.requestRender();
+  }
+
+  function onPointerUp(e) {
+    if (!dragStart) return;
+    const start = dragStart;
+    const end = Canvas.screenToImage(e.clientX, e.clientY);
+    dragStart = null;
+    dragCurrent = null;
+
+    const scale = Canvas.getCssScale();
+    const dxPx = Math.abs(end.x - start.x) * scale;
+    const dyPx = Math.abs(end.y - start.y) * scale;
+    if (dxPx < 5 || dyPx < 5) {
+      // accidental-click guard, ~5 screen px (mirrors the old desktop app's behavior)
+      Canvas.requestRender();
+      return;
+    }
+
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const className = document.getElementById("annotate-class-select").value;
+    const norm = rectToNormalized(start.x, start.y, end.x, end.y, imgW, imgH);
+    AnnotateState.addBoxes([{
+      id: makeId(),
+      class_id: classNames.indexOf(className),
+      class_name: className,
+      confidence: 1.0,
+      ...norm,
+    }]);
+  }
+
+  function cancel() {
+    dragStart = null;
+    dragCurrent = null;
+    Canvas.requestRender();
+  }
+
+  function render(ctx) {
+    if (!dragStart || !dragCurrent) return;
+    const className = document.getElementById("annotate-class-select").value;
+    const color = classColors[className] || "#AAAAAA";
+    const scale = Canvas.getCssScale();
+    const x1 = Math.min(dragStart.x, dragCurrent.x);
+    const y1 = Math.min(dragStart.y, dragCurrent.y);
+    const w = Math.abs(dragCurrent.x - dragStart.x);
+    const h = Math.abs(dragCurrent.y - dragStart.y);
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2 / scale;
+    ctx.strokeRect(x1, y1, w, h);
+    ctx.restore();
+  }
+
+  function onActivate() {
+    Canvas.setCursor("crosshair");
+  }
+
+  function onDeactivate() {
+    cancel();
+  }
+
+  return { onPointerDown, onPointerMove, onPointerUp, render, onActivate, onDeactivate, cancel };
+})();
+
+// ── SelectTool: click to select, drag to move, drag a handle to resize ──
+
+const SelectTool = (() => {
+  let mode = null; // null | "move" | "resize"
+  let activeHandle = null;
+  let startImgPt = null;
+  let startBox = null;
+  let preDragBoxes = null;
+  let snapshotTaken = false;
+
+  function findTopBoxAt(imgPt, imgW, imgH) {
+    const boxes = AnnotateState.getBoxes();
+    for (let i = boxes.length - 1; i >= 0; i--) {
+      if (hitTestBoxBody(imgPt, boxes[i], imgW, imgH)) return boxes[i];
+    }
+    return null;
+  }
+
+  function onPointerDown(e) {
+    if (!AnnotateState.currentFrame()) return;
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const imgPt = Canvas.screenToImage(e.clientX, e.clientY);
+    const tolImg = HANDLE_PX / Canvas.getCssScale();
+
+    const selected = AnnotateState.getSelected();
+    if (selected) {
+      const handle = hitTestHandles(imgPt, selected, imgW, imgH, tolImg);
+      if (handle) {
+        mode = "resize";
+        activeHandle = handle;
+        startImgPt = imgPt;
+        startBox = { ...selected };
+        preDragBoxes = AnnotateState.getBoxes();
+        snapshotTaken = false;
+        return;
+      }
+    }
+
+    const hit = findTopBoxAt(imgPt, imgW, imgH);
+    if (hit) {
+      AnnotateState.selectBox(hit.id);
+      mode = "move";
+      startImgPt = imgPt;
+      startBox = { ...hit };
+      preDragBoxes = AnnotateState.getBoxes();
+      snapshotTaken = false;
+    } else {
+      AnnotateState.selectBox(null);
+      mode = null;
+    }
+  }
+
+  function updateHoverCursor(e) {
+    if (!AnnotateState.currentFrame()) {
+      Canvas.setCursor("default");
+      return;
+    }
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const imgPt = Canvas.screenToImage(e.clientX, e.clientY);
+    const tolImg = HANDLE_PX / Canvas.getCssScale();
+    const selected = AnnotateState.getSelected();
+    if (selected) {
+      const handle = hitTestHandles(imgPt, selected, imgW, imgH, tolImg);
+      if (handle) {
+        Canvas.setCursor(CURSOR_BY_HANDLE[handle]);
+        return;
+      }
+    }
+    const hit = findTopBoxAt(imgPt, imgW, imgH);
+    Canvas.setCursor(hit ? "move" : "default");
+  }
+
+  function onPointerMove(e) {
+    if (!mode) {
+      updateHoverCursor(e);
+      return;
+    }
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const imgPt = Canvas.screenToImage(e.clientX, e.clientY);
+    const dx = imgPt.x - startImgPt.x;
+    const dy = imgPt.y - startImgPt.y;
+    if (dx === 0 && dy === 0) return;
+
+    if (!snapshotTaken) {
+      UndoManager.recordSnapshot(preDragBoxes);
+      snapshotTaken = true;
+    }
+
+    let { x1, y1, x2, y2 } = boxRectImg(startBox, imgW, imgH);
+    if (mode === "move") {
+      x1 += dx; x2 += dx; y1 += dy; y2 += dy;
+    } else {
+      if (activeHandle.includes("w")) x1 += dx;
+      if (activeHandle.includes("e")) x2 += dx;
+      if (activeHandle.includes("n")) y1 += dy;
+      if (activeHandle.includes("s")) y2 += dy;
+    }
+    const norm = rectToNormalized(x1, y1, x2, y2, imgW, imgH);
+    const boxes = AnnotateState.getBoxes().map((b) => (b.id === startBox.id ? { ...b, ...norm } : b));
+    AnnotateState.setBoxes(boxes, { pushUndo: false });
+  }
+
+  function onPointerUp() {
+    mode = null;
+    activeHandle = null;
+    startImgPt = null;
+    startBox = null;
+    preDragBoxes = null;
+    snapshotTaken = false;
+  }
+
+  function deleteSelected() {
+    const selected = AnnotateState.getSelected();
+    if (!selected) return;
+    AnnotateState.setBoxes(AnnotateState.getBoxes().filter((b) => b.id !== selected.id));
+    AnnotateState.selectBox(null);
+  }
+
+  function setSelectedClass(className) {
+    const selected = AnnotateState.getSelected();
+    if (!selected) return false;
+    AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) =>
+      b.id === selected.id ? { ...b, class_id: classNames.indexOf(className), class_name: className } : b
+    ));
+    return true;
+  }
+
+  function nudgeSelected(dxSign, dySign, big) {
+    const selected = AnnotateState.getSelected();
+    if (!selected) return;
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    if (!imgW || !imgH) return;
+    const stepPx = big ? 10 : 1;
+    const nx = clamp01(selected.x_center + (dxSign * stepPx) / imgW);
+    const ny = clamp01(selected.y_center + (dySign * stepPx) / imgH);
+    AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) =>
+      b.id === selected.id ? { ...b, x_center: nx, y_center: ny } : b
+    ));
+  }
+
+  function render(ctx) {
+    const selected = AnnotateState.getSelected();
+    if (!selected) return;
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const handles = handlePositions(boxRectImg(selected, imgW, imgH));
+    const dpr = window.devicePixelRatio || 1;
+    ctx.save();
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    Object.values(handles).forEach((h) => {
+      const pt = Canvas.imageToScreen(h.x, h.y);
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "#2563eb";
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(pt.x - HANDLE_PX / 2, pt.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+      ctx.strokeRect(pt.x - HANDLE_PX / 2, pt.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+    });
+    ctx.restore();
+  }
+
+  function onActivate() {
+    Canvas.setCursor("default");
+  }
+
+  function onDeactivate() {
+    mode = null;
+    activeHandle = null;
+    preDragBoxes = null;
+    snapshotTaken = false;
+  }
+
+  return {
+    onPointerDown, onPointerMove, onPointerUp, render, onActivate, onDeactivate,
+    deleteSelected, setSelectedClass, nudgeSelected,
+  };
+})();
+
+Tools.draw_box = DrawBoxTool;
+Tools.select = SelectTool;
+
+// ── Keyboard: one listener + one lookup table (also renders the "?" cheat-sheet) ──
+
+const Keyboard = (() => {
+  function isTextInput(el) {
+    return !!(el && el.closest && el.closest("input, textarea, select, [contenteditable]"));
+  }
+
+  function setClassByNumber(n) {
+    const name = classNames[n - 1];
+    if (!name) return;
+    if (!SelectTool.setSelectedClass(name)) {
+      document.getElementById("annotate-class-select").value = name;
+    }
+  }
+
+  function doUndo() {
+    const prev = UndoManager.undo(AnnotateState.getBoxes());
+    if (prev) {
+      AnnotateState.setBoxes(prev, { pushUndo: false });
+      AnnotateState.reselectIfMissing();
+    }
+  }
+
+  function doRedo() {
+    const next = UndoManager.redo(AnnotateState.getBoxes());
+    if (next) {
+      AnnotateState.setBoxes(next, { pushUndo: false });
+      AnnotateState.reselectIfMissing();
+    }
+  }
+
+  function navFrame(delta) {
+    const idx = AnnotateState.getFrameIdx() + delta;
+    if (idx >= 0 && idx < AnnotateState.getFrames().length) AnnotateState.selectFrame(idx);
+  }
+
+  function onEscape() {
+    if (AnnotateState.getActiveTool() === "draw_box") {
+      DrawBoxTool.cancel();
+    } else {
+      AnnotateState.selectBox(null);
+    }
+  }
+
+  function toggleCheatSheet() {
+    const popover = document.getElementById("annotate-cheatsheet");
+    if (!popover) return;
+    if (!popover.classList.contains("open")) {
+      popover.innerHTML = "";
+      const pre = document.createElement("pre");
+      pre.textContent = SHORTCUTS.filter((s) => s.label).map((s) => s.label).join("\n");
+      popover.appendChild(pre);
+    }
+    popover.classList.toggle("open");
+  }
+
+  const SHORTCUTS = [
+    { key: "v", label: "V — Select tool", handler: () => AnnotateState.setActiveTool("select") },
+    { key: "b", label: "B — Draw box tool", handler: () => AnnotateState.setActiveTool("draw_box") },
+    { key: "1", label: "1-5 — Set class", handler: () => setClassByNumber(1) },
+    { key: "2", handler: () => setClassByNumber(2) },
+    { key: "3", handler: () => setClassByNumber(3) },
+    { key: "4", handler: () => setClassByNumber(4) },
+    { key: "5", handler: () => setClassByNumber(5) },
+    { key: "Delete", label: "Delete — Remove selected box", handler: () => SelectTool.deleteSelected() },
+    { key: "Backspace", handler: () => SelectTool.deleteSelected() },
+    { key: "z", ctrlKey: true, shiftKey: false, label: "Ctrl+Z — Undo", handler: () => doUndo() },
+    { key: "z", ctrlKey: true, shiftKey: true, label: "Ctrl+Shift+Z — Redo", handler: () => doRedo() },
+    { key: "ArrowLeft", label: "Arrows — Nudge selected box (Shift=10px)", handler: (e) => SelectTool.nudgeSelected(-1, 0, e.shiftKey) },
+    { key: "ArrowRight", handler: (e) => SelectTool.nudgeSelected(1, 0, e.shiftKey) },
+    { key: "ArrowUp", handler: (e) => SelectTool.nudgeSelected(0, -1, e.shiftKey) },
+    { key: "ArrowDown", handler: (e) => SelectTool.nudgeSelected(0, 1, e.shiftKey) },
+    { key: "[", label: "[ / ] — Prev / Next frame", handler: () => navFrame(-1) },
+    { key: "]", handler: () => navFrame(1) },
+    { key: "a", label: "A — Run Assist", handler: () => document.getElementById("assist-run-btn").click() },
+    { key: "r", label: "R — Toggle reviewed", handler: () => toggleReviewed() },
+    { key: "Enter", label: "Enter — Save & Next", handler: () => saveAndNext() },
+    { key: "Escape", label: "Esc — Cancel draw / deselect", handler: () => onEscape() },
+    { key: "?", label: "? — Show this cheat-sheet", handler: () => toggleCheatSheet() },
+  ];
+
+  function match(e, sc) {
+    if (e.key.toLowerCase() !== sc.key.toLowerCase()) return false;
+    if (!!sc.ctrlKey !== e.ctrlKey) return false;
+    // shiftKey is only enforced when a shortcut explicitly cares (e.g. Ctrl+Z vs Ctrl+Shift+Z) —
+    // left unspecified for arrows (Shift is a nudge-size modifier, not a distinct binding) and for
+    // symbol keys like "?" whose e.key already encodes the shift state.
+    if (sc.shiftKey !== undefined && sc.shiftKey !== e.shiftKey) return false;
+    return true;
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (isTextInput(e.target)) return;
+    if (e.code === "Space") {
+      Canvas.setSpaceHeld(true);
+      e.preventDefault();
+      return;
+    }
+    for (const sc of SHORTCUTS) {
+      if (match(e, sc)) {
+        e.preventDefault();
+        sc.handler(e);
+        return;
+      }
+    }
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (e.code === "Space") Canvas.setSpaceHeld(false);
+  });
+
+  return {};
+})();
 
 function populateAnnotateClassSelect() {
   const select = document.getElementById("annotate-class-select");
@@ -474,154 +1292,283 @@ function populateAnnotateClassSelect() {
 }
 
 function initAnnotateFrames(frames) {
-  annotateFrames = frames || [];
-  document.getElementById("annotate-frames-info").classList.toggle("hidden", annotateFrames.length > 0);
-  document.getElementById("annotate-toolbar").classList.toggle("hidden", annotateFrames.length === 0);
-  document.getElementById("annotate-workspace").classList.toggle("hidden", annotateFrames.length === 0);
-  if (annotateFrames.length) {
-    selectAnnotateFrame(0);
-  } else {
-    annotateIdx = -1;
-    renderAnnotateFilmstrip();
-  }
+  const list = frames || [];
+  document.getElementById("annotate-frames-info").classList.toggle("hidden", list.length > 0);
+  document.getElementById("annotate-toolbar").classList.toggle("hidden", list.length === 0);
+  document.getElementById("annotate-workspace").classList.toggle("hidden", list.length === 0);
+  document.getElementById("annotate-statusbar").classList.toggle("hidden", list.length === 0);
+  Filmstrip.forceRebuild();
+  AnnotateState.init(list);
 }
 
 function frameBasename(path) {
   return path.split(/[\\/]/).pop();
 }
 
-function renderAnnotateFilmstrip() {
-  const list = document.getElementById("annotate-filmstrip-list");
+// ── Filmstrip: lazy-loaded thumbnails via IntersectionObserver; structural rebuild only
+// when the frame list/filter changes, cheap per-row patch otherwise (never tears down <img>s
+// on every box edit, or S-9's lazy-load benefit is defeated) ──
+
+const Filmstrip = (() => {
+  let builtForLength = -1;
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      const img = entry.target;
+      if (img.dataset.src && img.src !== img.dataset.src) img.src = img.dataset.src;
+      observer.unobserve(img);
+    });
+  }, { root: document.querySelector(".annotate-filmstrip"), rootMargin: "200px" });
+
+  function frameBadge(frame) {
+    if (frame.reviewed) return "✅";
+    return (frame.detections || []).length ? "🏷" : "🔴";
+  }
+
+  function passesFilter(frame, filter) {
+    if (filter === "unreviewed") return !frame.reviewed;
+    if (filter === "reviewed") return !!frame.reviewed;
+    return true;
+  }
+
+  function build() {
+    const list = document.getElementById("annotate-filmstrip-list");
+    list.innerHTML = "";
+    const frames = AnnotateState.getFrames();
+    frames.forEach((frame, i) => {
+      const li = document.createElement("li");
+      li.dataset.idx = i;
+
+      const img = document.createElement("img");
+      img.className = "filmstrip-thumb";
+      img.alt = "";
+      img.dataset.src = Api.thumbnailUrl(frame.id, 160);
+      observer.observe(img);
+
+      const label = document.createElement("span");
+      label.className = "filmstrip-label";
+
+      li.appendChild(img);
+      li.appendChild(label);
+      li.addEventListener("click", () => AnnotateState.selectFrame(i));
+      list.appendChild(li);
+    });
+    builtForLength = frames.length;
+  }
+
+  function patch() {
+    const list = document.getElementById("annotate-filmstrip-list");
+    const frames = AnnotateState.getFrames();
+    const idx = AnnotateState.getFrameIdx();
+    const filter = document.getElementById("annotate-filmstrip-filter").value;
+    Array.from(list.children).forEach((li, i) => {
+      const frame = frames[i];
+      if (!frame) return;
+      li.className = i === idx ? "selected" : "";
+      if (!passesFilter(frame, filter)) li.classList.add("hidden-by-filter");
+      const label = li.querySelector(".filmstrip-label");
+      label.textContent = `${frameBadge(frame)} ${frameBasename(frame.path)}`;
+    });
+  }
+
+  function render() {
+    const frames = AnnotateState.getFrames();
+    if (frames.length !== builtForLength) build();
+    patch();
+  }
+
+  function forceRebuild() {
+    builtForLength = -1;
+  }
+
+  return { render, forceRebuild };
+})();
+
+document.getElementById("annotate-filmstrip-filter").addEventListener("change", () => Filmstrip.render());
+
+// ── PropertyPanel: per-box detection list (class dropdown + confidence badge + click-to-highlight) ──
+
+function renderDetectionList() {
+  const list = document.getElementById("annotate-detection-list");
   list.innerHTML = "";
-  annotateFrames.forEach((frame, idx) => {
+  const boxes = AnnotateState.getBoxes();
+  const selected = AnnotateState.getSelected();
+
+  if (!boxes.length) {
+    const empty = document.createElement("div");
+    empty.className = "detection-list-empty";
+    empty.textContent = "No boxes on this frame yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  boxes.forEach((b) => {
     const li = document.createElement("li");
-    const status = frame.reviewed ? "✅" : "🔴";
-    li.textContent = `${status} ${frameBasename(frame.path)}`;
-    li.className = idx === annotateIdx ? "selected" : "";
-    li.addEventListener("click", () => selectAnnotateFrame(idx));
+    li.className = selected && selected.id === b.id ? "selected" : "";
+    li.addEventListener("click", (e) => {
+      if (e.target.tagName === "SELECT" || e.target.tagName === "BUTTON") return;
+      AnnotateState.setActiveTool("select");
+      AnnotateState.selectBox(b.id);
+    });
+
+    const select = document.createElement("select");
+    classNames.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      if (name === b.class_name) opt.selected = true;
+      select.appendChild(opt);
+    });
+    select.addEventListener("change", () => {
+      AnnotateState.setBoxes(AnnotateState.getBoxes().map((d) =>
+        d.id === b.id ? { ...d, class_id: classNames.indexOf(select.value), class_name: select.value } : d
+      ));
+    });
+
+    const badge = document.createElement("span");
+    badge.className = "conf-badge" + (b.confidence < 0.5 ? " low" : "");
+    badge.textContent = (b._pending ? "🏷 " : "") + b.confidence.toFixed(2);
+
+    const del = document.createElement("button");
+    del.className = "del-btn";
+    del.textContent = "✕";
+    del.title = "Delete box";
+    del.addEventListener("click", () => {
+      AnnotateState.setBoxes(AnnotateState.getBoxes().filter((d) => d.id !== b.id));
+    });
+
+    li.appendChild(select);
+    li.appendChild(badge);
+    li.appendChild(del);
     list.appendChild(li);
   });
 }
 
+function updateStatusBar() {
+  const frames = AnnotateState.getFrames();
+  const idx = AnnotateState.getFrameIdx();
+  if (idx < 0) return;
+  const boxes = AnnotateState.getBoxes();
+  const pendingCount = boxes.filter((b) => b._pending).length;
+  const reviewedCount = frames.filter((f) => f.reviewed).length;
+  document.getElementById("annotate-statusbar-frame").textContent = `Frame ${idx + 1} / ${frames.length}`;
+  document.getElementById("annotate-statusbar-boxes").textContent =
+    `${boxes.length} box(es)` + (pendingCount ? ` (${pendingCount} unconfirmed AI)` : "");
+  document.getElementById("annotate-statusbar-progress").textContent =
+    `${reviewedCount} / ${frames.length} reviewed`;
+}
+
 function updateAnnotateReviewStatus() {
-  const frame = annotateFrames[annotateIdx];
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return;
   document.getElementById("annotate-review-status").textContent = frame.reviewed
     ? "✅ Reviewed"
     : "🔴 Needs Review";
 }
 
-function selectAnnotateFrame(idx) {
-  annotateIdx = idx;
-  const frame = annotateFrames[idx];
-  annotateBoxes = (frame.detections || []).map((d) => ({ ...d }));
-  renderAnnotateFilmstrip();
-  updateAnnotateReviewStatus();
-  loadAnnotateImage(frame);
+function updateToolButtons() {
+  const tool = AnnotateState.getActiveTool();
+  document.getElementById("annotate-tool-select-btn").classList.toggle("active-tool", tool === "select");
+  document.getElementById("annotate-tool-draw-btn").classList.toggle("active-tool", tool === "draw_box");
 }
 
-function loadAnnotateImage(frame) {
-  const idxAtLoad = annotateIdx;
+function loadAnnotateImage(frame, idxAtLoad) {
   const img = new Image();
   img.onload = () => {
-    if (annotateIdx !== idxAtLoad) return; // user navigated away before this finished loading
-    annotateImg = img;
-    annotateCanvas.width = img.naturalWidth;
-    annotateCanvas.height = img.naturalHeight;
-    drawAnnotateCanvas();
+    if (AnnotateState.getFrameIdx() !== idxAtLoad) return; // user navigated away before this finished loading
+    Canvas.setImage(img);
   };
-  img.src = `/api/frames/${frame.id}/image.jpg?t=${Date.now()}`;
+  img.src = Api.imageUrl(frame.id);
 }
 
-function drawAnnotateCanvas() {
-  if (!annotateImg) return;
-  annotateCtx.drawImage(annotateImg, 0, 0, annotateCanvas.width, annotateCanvas.height);
-  annotateBoxes.forEach(drawAnnotateBox);
-}
-
-function drawAnnotateBox(d) {
-  const w = annotateCanvas.width;
-  const h = annotateCanvas.height;
-  const x1 = (d.x_center - d.width / 2) * w;
-  const y1 = (d.y_center - d.height / 2) * h;
-  const bw = d.width * w;
-  const bh = d.height * h;
-  const color = classColors[d.class_name] || "#AAAAAA";
-  annotateCtx.strokeStyle = color;
-  annotateCtx.lineWidth = 2;
-  annotateCtx.setLineDash(d._pending ? [6, 4] : []);
-  annotateCtx.strokeRect(x1, y1, bw, bh);
-  annotateCtx.setLineDash([]); // reset so nothing after this call inherits the dash
-  annotateCtx.fillStyle = color;
-  annotateCtx.font = "13px sans-serif";
-  annotateCtx.fillText(d.class_name, x1, y1 - 4 > 10 ? y1 - 4 : y1 + 12);
-
-  if (d._pending && d.confidence < 0.5) {
-    annotateCtx.fillStyle = "#e94560"; // var(--highlight) — identical across every theme in style.css
-    annotateCtx.fillText(`⚠ ${d.confidence.toFixed(2)}`, x1, y1 + bh + 14 < h ? y1 + bh + 14 : y1 + bh - 4);
+let _lastLoadedFrameIdx = -2; // sentinel distinct from the -1 "no frame selected" state
+AnnotateState.subscribe(() => {
+  const idx = AnnotateState.getFrameIdx();
+  if (idx !== _lastLoadedFrameIdx) {
+    _lastLoadedFrameIdx = idx;
+    const frame = AnnotateState.currentFrame();
+    if (frame) loadAnnotateImage(frame, idx);
   }
-}
-
-function canvasPointFromEvent(e) {
-  const rect = annotateCanvas.getBoundingClientRect();
-  const scaleX = annotateCanvas.width / rect.width;
-  const scaleY = annotateCanvas.height / rect.height;
-  return {
-    x: (e.clientX - rect.left) * scaleX,
-    y: (e.clientY - rect.top) * scaleY,
-  };
-}
-
-annotateCanvas.addEventListener("mousedown", (e) => {
-  if (annotateIdx < 0) return;
-  annotateDragStart = canvasPointFromEvent(e);
+  Canvas.requestRender();
+  Filmstrip.render();
+  renderDetectionList();
+  updateStatusBar();
+  updateAnnotateReviewStatus();
+  updateToolButtons();
 });
 
-annotateCanvas.addEventListener("mousemove", (e) => {
-  if (!annotateDragStart) return;
-  const p = canvasPointFromEvent(e);
-  drawAnnotateCanvas();
-  const color = classColors[document.getElementById("annotate-class-select").value] || "#AAAAAA";
-  annotateCtx.strokeStyle = color;
-  annotateCtx.lineWidth = 2;
-  annotateCtx.strokeRect(
-    Math.min(annotateDragStart.x, p.x),
-    Math.min(annotateDragStart.y, p.y),
-    Math.abs(p.x - annotateDragStart.x),
-    Math.abs(p.y - annotateDragStart.y)
-  );
-});
+document.querySelector('.tab[data-tab="annotate"]').addEventListener("click", () => Canvas.resize());
 
-annotateCanvas.addEventListener("mouseup", (e) => {
-  if (!annotateDragStart) return;
-  const start = annotateDragStart;
-  const end = canvasPointFromEvent(e);
-  annotateDragStart = null;
+document.getElementById("annotate-tool-select-btn").addEventListener("click", () => AnnotateState.setActiveTool("select"));
+document.getElementById("annotate-tool-draw-btn").addEventListener("click", () => AnnotateState.setActiveTool("draw_box"));
 
-  // discard accidental-click boxes under 5px in either dimension (matches app.py's AnnotationTab)
-  if (Math.abs(end.x - start.x) < 5 || Math.abs(end.y - start.y) < 5) {
-    drawAnnotateCanvas();
+document.getElementById("annotate-copy-prev-btn").addEventListener("click", () => {
+  const prev = AnnotateState.getPrevFrame();
+  if (!prev) {
+    alert("This is the first frame — no previous frame to copy from.");
     return;
   }
-
-  const w = annotateCanvas.width;
-  const h = annotateCanvas.height;
-  const x1 = Math.min(start.x, end.x);
-  const x2 = Math.max(start.x, end.x);
-  const y1 = Math.min(start.y, end.y);
-  const y2 = Math.max(start.y, end.y);
-  const className = document.getElementById("annotate-class-select").value;
-
-  annotateBoxes.push({
-    class_id: classNames.indexOf(className),
-    class_name: className,
-    confidence: 1.0,
-    x_center: (x1 + x2) / 2 / w,
-    y_center: (y1 + y2) / 2 / h,
-    width: (x2 - x1) / w,
-    height: (y2 - y1) / h,
-  });
-  drawAnnotateCanvas();
+  const copied = (prev.detections || []).map((d) => ({ ...d, id: makeId() }));
+  if (!copied.length) {
+    alert("Previous frame has no boxes to copy.");
+    return;
+  }
+  AnnotateState.addBoxes(copied);
 });
+
+document.getElementById("annotate-save-next-btn").addEventListener("click", saveAndNext);
+
+async function saveCurrentFrame() {
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return false;
+  const cleanBoxes = AnnotateState.getBoxes().map((d) => ({
+    class_id: d.class_id,
+    class_name: d.class_name,
+    confidence: d.confidence,
+    x_center: d.x_center,
+    y_center: d.y_center,
+    width: d.width,
+    height: d.height,
+  }));
+
+  const res = await Api.putDetections(frame.id, cleanBoxes);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    alert(errBody.detail || "Failed to save annotations");
+    return false;
+  }
+  const saved = await res.json();
+  AnnotateState.setFrameDetections(AnnotateState.getFrameIdx(), saved.detections);
+  // Save implicitly confirms any still-dashed boxes — a bookkeeping side-effect, not an undoable edit
+  AnnotateState.setBoxes(
+    AnnotateState.getBoxes().map((d) => { const c = { ...d }; delete c._pending; return c; }),
+    { pushUndo: false }
+  );
+
+  const reviewRes = await Api.postReview(frame.id, true);
+  if (reviewRes.ok) AnnotateState.markReviewedLocal(true);
+  return true;
+}
+
+async function toggleReviewed() {
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return;
+  const next = !frame.reviewed;
+  const res = await Api.postReview(frame.id, next);
+  if (res.ok) AnnotateState.markReviewedLocal(next);
+}
+
+async function saveAndNext() {
+  if (!AnnotateState.currentFrame()) return;
+  const ok = await saveCurrentFrame();
+  if (!ok) return;
+  const nextIdx = AnnotateState.findNextUnreviewedIndex(AnnotateState.getFrameIdx());
+  if (nextIdx === -1) {
+    alert("Saved — no more unreviewed frames.");
+  } else {
+    AnnotateState.selectFrame(nextIdx);
+  }
+}
 
 function updateAssistBackendFields() {
   const backend = document.querySelector('input[name="assist-backend"]:checked').value;
@@ -634,8 +1581,8 @@ document.querySelectorAll('input[name="assist-backend"]').forEach((el) => {
 updateAssistBackendFields();
 
 document.getElementById("assist-run-btn").addEventListener("click", async () => {
-  if (annotateIdx < 0) return;
-  const frame = annotateFrames[annotateIdx];
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return;
   const backend = document.querySelector('input[name="assist-backend"]:checked').value;
   const body = { backend, model_path: document.getElementById("assist-model-path").value };
 
@@ -654,88 +1601,50 @@ document.getElementById("assist-run-btn").addEventListener("click", async () => 
   const runBtn = document.getElementById("assist-run-btn");
   runBtn.disabled = true;
   try {
-    const res = await apiFetch(`/api/frames/${frame.id}/assist`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = await Api.postAssist(frame.id, body);
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
       alert(errBody.detail || "Assist failed");
       return;
     }
     const data = await res.json();
-    (data.detections || []).forEach((d) => annotateBoxes.push({ ...d, _pending: true }));
-    drawAnnotateCanvas();
+    const newBoxes = (data.detections || []).map((d) => ({ ...d, id: makeId(), _pending: true }));
+    if (newBoxes.length) AnnotateState.addBoxes(newBoxes);
   } finally {
     runBtn.disabled = false;
   }
 });
 
 document.getElementById("assist-accept-all-btn").addEventListener("click", () => {
-  if (annotateIdx < 0) return;
-  annotateBoxes.forEach((d) => delete d._pending);
-  drawAnnotateCanvas();
+  const boxes = AnnotateState.getBoxes();
+  if (!boxes.some((b) => b._pending)) return;
+  AnnotateState.setBoxes(boxes.map((b) => { const c = { ...b }; delete c._pending; return c; }));
 });
 
 document.getElementById("assist-reject-all-btn").addEventListener("click", () => {
-  if (annotateIdx < 0) return;
-  annotateBoxes = annotateBoxes.filter((d) => !d._pending);
-  drawAnnotateCanvas();
+  const boxes = AnnotateState.getBoxes();
+  if (!boxes.some((b) => b._pending)) return;
+  AnnotateState.setBoxes(boxes.filter((b) => !b._pending));
 });
 
 document.getElementById("annotate-clear-btn").addEventListener("click", () => {
-  if (annotateIdx < 0) return;
-  annotateBoxes = [];
-  drawAnnotateCanvas();
+  if (!AnnotateState.currentFrame() || !AnnotateState.getBoxes().length) return;
+  AnnotateState.setBoxes([]);
+  AnnotateState.selectBox(null);
 });
 
 document.getElementById("annotate-save-btn").addEventListener("click", async () => {
-  if (annotateIdx < 0) return;
-  const frame = annotateFrames[annotateIdx];
-  const cleanBoxes = annotateBoxes.map((d) => ({
-    class_id: d.class_id,
-    class_name: d.class_name,
-    confidence: d.confidence,
-    x_center: d.x_center,
-    y_center: d.y_center,
-    width: d.width,
-    height: d.height,
-  }));
-
-  const res = await apiFetch(`/api/frames/${frame.id}/detections`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ detections: cleanBoxes }),
-  });
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    alert(errBody.detail || "Failed to save annotations");
-    return;
-  }
-  const saved = await res.json();
-  frame.detections = saved.detections;
-  annotateBoxes.forEach((d) => delete d._pending); // Save implicitly confirms any still-dashed boxes
-
-  // mirror app.py's _save_changes(), which always calls _mark_reviewed() too
-  const reviewRes = await apiFetch(`/api/frames/${frame.id}/review`, { method: "POST" });
-  if (reviewRes.ok) {
-    frame.reviewed = true;
-    updateAnnotateReviewStatus();
-    renderAnnotateFilmstrip();
-  }
-  drawAnnotateCanvas(); // re-render now-solid boxes
-  alert("Saved");
+  if (!AnnotateState.currentFrame()) return;
+  const ok = await saveCurrentFrame();
+  if (ok) alert("Saved");
 });
 
 document.getElementById("annotate-mark-reviewed-btn").addEventListener("click", async () => {
-  if (annotateIdx < 0) return;
-  const frame = annotateFrames[annotateIdx];
-  const res = await apiFetch(`/api/frames/${frame.id}/review`, { method: "POST" });
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return;
+  const res = await Api.postReview(frame.id, true);
   if (!res.ok) return;
-  frame.reviewed = true;
-  updateAnnotateReviewStatus();
-  renderAnnotateFilmstrip();
+  AnnotateState.markReviewedLocal(true);
 });
 
 // ────────────────────────────── S-6: Export section ──────────────────────────────

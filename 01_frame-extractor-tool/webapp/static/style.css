@@ -376,38 +376,152 @@ main.wide {
 }
 
 .filmstrip-list li {
-  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
   border-radius: 8px;
   margin-bottom: 4px;
   font-size: 12px;
   cursor: pointer;
   background: var(--bg);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .filmstrip-list li.selected {
   background: var(--accent);
 }
 
+.filmstrip-list li.hidden-by-filter {
+  display: none;
+}
+
+.filmstrip-thumb {
+  width: 48px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: #0d1117;
+  flex-shrink: 0;
+}
+
+.filmstrip-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detection-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.detection-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.detection-list li.selected {
+  background: var(--accent);
+}
+
+.detection-list li select {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.detection-list .conf-badge {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.detection-list .conf-badge.low {
+  color: var(--highlight);
+}
+
+.detection-list .del-btn {
+  background: transparent;
+  border: none;
+  color: var(--highlight);
+  cursor: pointer;
+  font-size: 14px;
+  flex-shrink: 0;
+  padding: 0 4px;
+}
+
+.detection-list-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 0;
+}
+
+.annotate-statusbar {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+  padding: 8px 4px 0;
+}
+
 .annotate-canvas-wrap {
   flex: 1;
   min-width: 0;
-  max-height: 640px;
-  overflow: auto;
+  height: 640px;
   background: #0d1117;
   border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow: hidden;
 }
 
 #annotate-canvas {
-  max-width: 100%;
-  max-height: 640px;
   display: block;
-  cursor: crosshair;
+}
+
+.btn-download.active-tool {
+  background: var(--highlight);
+  color: #fff;
+  border-color: var(--highlight);
+}
+
+#annotate-cheatsheet {
+  display: none;
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 50;
+  font-size: 13px;
+  max-width: 360px;
+}
+
+#annotate-cheatsheet.open {
+  display: block;
+}
+
+#annotate-cheatsheet pre {
+  white-space: pre-wrap;
+  margin: 0;
+  font-family: inherit;
 }
 
 .annotate-props {

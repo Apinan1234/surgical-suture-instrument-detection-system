@@ -18,7 +18,7 @@ from typing import Literal
 
 import cv2
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
@@ -559,11 +559,16 @@ def stop_detect(job_id: str):
     return {"stopping": True}
 
 
-@app.get("/api/frames/{frame_id}/preview.jpg")
-def frame_preview(frame_id: str):
+def _get_frame_or_404(frame_id: str) -> dict:
     record = _state["frames"].get(frame_id)
     if not record:
         raise HTTPException(status_code=404, detail="Frame not found")
+    return record
+
+
+@app.get("/api/frames/{frame_id}/preview.jpg")
+def frame_preview(frame_id: str):
+    record = _get_frame_or_404(frame_id)
 
     img = cv2.imread(record["path"])
     if img is None:
@@ -602,31 +607,35 @@ class FrameDetectionsBody(BaseModel):
     detections: list[DetectionIn]
 
 
+@app.get("/api/frames/{frame_id}/detections")
+def get_frame_detections(frame_id: str):
+    record = _get_frame_or_404(frame_id)
+    return {"frame_id": frame_id, "detections": record.get("detections", [])}
+
+
 @app.put("/api/frames/{frame_id}/detections")
 def replace_frame_detections(frame_id: str, body: FrameDetectionsBody):
-    record = _state["frames"].get(frame_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Frame not found")
+    record = _get_frame_or_404(frame_id)
     record["detections"] = [Detection(**d.model_dump()).to_dict() for d in body.detections]
     save_state()
     return {"frame_id": frame_id, "detections": record["detections"]}
 
 
+class ReviewBody(BaseModel):
+    reviewed: bool = True
+
+
 @app.post("/api/frames/{frame_id}/review")
-def mark_frame_reviewed(frame_id: str):
-    record = _state["frames"].get(frame_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Frame not found")
-    record["reviewed"] = True
+def mark_frame_reviewed(frame_id: str, body: ReviewBody = ReviewBody()):
+    record = _get_frame_or_404(frame_id)
+    record["reviewed"] = body.reviewed
     save_state()
-    return {"frame_id": frame_id, "reviewed": True}
+    return {"frame_id": frame_id, "reviewed": record["reviewed"]}
 
 
 @app.get("/api/frames/{frame_id}/image.jpg")
 def frame_image(frame_id: str):
-    record = _state["frames"].get(frame_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Frame not found")
+    record = _get_frame_or_404(frame_id)
 
     img = cv2.imread(record["path"])
     if img is None:
@@ -635,6 +644,26 @@ def frame_image(frame_id: str):
     ok, buf = cv2.imencode(".jpg", img)
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to encode image")
+
+    return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
+
+
+@app.get("/api/frames/{frame_id}/thumbnail.jpg")
+def frame_thumbnail(frame_id: str, max_side: int = Query(160, alias="max")):
+    record = _get_frame_or_404(frame_id)
+
+    img = cv2.imread(record["path"])
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image missing on disk")
+
+    h, w = img.shape[:2]
+    scale = max_side / float(h if h >= w else w)
+    if scale < 1.0:
+        img = cv2.resize(img, (round(w * scale), round(h * scale)), interpolation=cv2.INTER_AREA)
+
+    ok, buf = cv2.imencode(".jpg", img)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode thumbnail")
 
     return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
 
@@ -667,9 +696,7 @@ def _get_cached_assist_detector(body: DetectorConfigBody):
 
 @app.post("/api/frames/{frame_id}/assist")
 def assist_frame(frame_id: str, body: AssistBody):
-    record = _state["frames"].get(frame_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Frame not found")
+    record = _get_frame_or_404(frame_id)
 
     try:
         _validate_detect_backend(body)
