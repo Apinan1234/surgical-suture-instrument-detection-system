@@ -548,10 +548,17 @@ function drawAnnotateBox(d) {
   const color = classColors[d.class_name] || "#AAAAAA";
   annotateCtx.strokeStyle = color;
   annotateCtx.lineWidth = 2;
+  annotateCtx.setLineDash(d._pending ? [6, 4] : []);
   annotateCtx.strokeRect(x1, y1, bw, bh);
+  annotateCtx.setLineDash([]); // reset so nothing after this call inherits the dash
   annotateCtx.fillStyle = color;
   annotateCtx.font = "13px sans-serif";
   annotateCtx.fillText(d.class_name, x1, y1 - 4 > 10 ? y1 - 4 : y1 + 12);
+
+  if (d._pending && d.confidence < 0.5) {
+    annotateCtx.fillStyle = "#e94560"; // var(--highlight) — identical across every theme in style.css
+    annotateCtx.fillText(`⚠ ${d.confidence.toFixed(2)}`, x1, y1 + bh + 14 < h ? y1 + bh + 14 : y1 + bh - 4);
+  }
 }
 
 function canvasPointFromEvent(e) {
@@ -616,6 +623,67 @@ annotateCanvas.addEventListener("mouseup", (e) => {
   drawAnnotateCanvas();
 });
 
+function updateAssistBackendFields() {
+  const backend = document.querySelector('input[name="assist-backend"]:checked').value;
+  document.getElementById("assist-local-fields").classList.toggle("hidden", backend !== "local");
+  document.getElementById("assist-roboflow-fields").classList.toggle("hidden", backend !== "roboflow");
+}
+document.querySelectorAll('input[name="assist-backend"]').forEach((el) => {
+  el.addEventListener("change", updateAssistBackendFields);
+});
+updateAssistBackendFields();
+
+document.getElementById("assist-run-btn").addEventListener("click", async () => {
+  if (annotateIdx < 0) return;
+  const frame = annotateFrames[annotateIdx];
+  const backend = document.querySelector('input[name="assist-backend"]:checked').value;
+  const body = { backend, model_path: document.getElementById("assist-model-path").value };
+
+  if (backend === "roboflow") {
+    const apiKey = document.getElementById("assist-rf-api-key").value.trim();
+    if (!apiKey) {
+      alert("Please enter a Roboflow API Key first");
+      return;
+    }
+    if (!confirmRoboflowCall(1)) return;
+    body.api_key = apiKey;
+    body.workspace_name = document.getElementById("assist-rf-workspace").value.trim();
+    body.workflow_id = document.getElementById("assist-rf-workflow-id").value.trim();
+  }
+
+  const runBtn = document.getElementById("assist-run-btn");
+  runBtn.disabled = true;
+  try {
+    const res = await apiFetch(`/api/frames/${frame.id}/assist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      alert(errBody.detail || "Assist failed");
+      return;
+    }
+    const data = await res.json();
+    (data.detections || []).forEach((d) => annotateBoxes.push({ ...d, _pending: true }));
+    drawAnnotateCanvas();
+  } finally {
+    runBtn.disabled = false;
+  }
+});
+
+document.getElementById("assist-accept-all-btn").addEventListener("click", () => {
+  if (annotateIdx < 0) return;
+  annotateBoxes.forEach((d) => delete d._pending);
+  drawAnnotateCanvas();
+});
+
+document.getElementById("assist-reject-all-btn").addEventListener("click", () => {
+  if (annotateIdx < 0) return;
+  annotateBoxes = annotateBoxes.filter((d) => !d._pending);
+  drawAnnotateCanvas();
+});
+
 document.getElementById("annotate-clear-btn").addEventListener("click", () => {
   if (annotateIdx < 0) return;
   annotateBoxes = [];
@@ -625,11 +693,20 @@ document.getElementById("annotate-clear-btn").addEventListener("click", () => {
 document.getElementById("annotate-save-btn").addEventListener("click", async () => {
   if (annotateIdx < 0) return;
   const frame = annotateFrames[annotateIdx];
+  const cleanBoxes = annotateBoxes.map((d) => ({
+    class_id: d.class_id,
+    class_name: d.class_name,
+    confidence: d.confidence,
+    x_center: d.x_center,
+    y_center: d.y_center,
+    width: d.width,
+    height: d.height,
+  }));
 
   const res = await apiFetch(`/api/frames/${frame.id}/detections`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ detections: annotateBoxes }),
+    body: JSON.stringify({ detections: cleanBoxes }),
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
@@ -638,6 +715,7 @@ document.getElementById("annotate-save-btn").addEventListener("click", async () 
   }
   const saved = await res.json();
   frame.detections = saved.detections;
+  annotateBoxes.forEach((d) => delete d._pending); // Save implicitly confirms any still-dashed boxes
 
   // mirror app.py's _save_changes(), which always calls _mark_reviewed() too
   const reviewRes = await apiFetch(`/api/frames/${frame.id}/review`, { method: "POST" });
@@ -646,6 +724,7 @@ document.getElementById("annotate-save-btn").addEventListener("click", async () 
     updateAnnotateReviewStatus();
     renderAnnotateFilmstrip();
   }
+  drawAnnotateCanvas(); // re-render now-solid boxes
   alert("Saved");
 });
 

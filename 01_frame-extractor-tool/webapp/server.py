@@ -371,14 +371,12 @@ def download_zip(job_id: str):
 # ────────────────────────────── S-4 Detection ──────────────────────────────
 
 
-class DetectBody(BaseModel):
-    frame_ids: list[str]
+class DetectorConfigBody(BaseModel):
     backend: Literal["local", "roboflow"] = "local"
     model_path: str = "yolo11n.pt"
     conf: float = Field(default=0.25, ge=0.01, le=0.99)
     iou: float = Field(default=0.45, ge=0.01, le=0.99)
     device: Literal["cpu", "cuda", "mps"] = "cpu"
-    # TODO(Annotate): add skip_reviewed: bool = True here + filter logic once frames can be reviewed=true
     api_key: str | None = None
     workspace_name: str = "fhasai-khuanpan"
     workflow_id: str = "ssid-v5-logic"
@@ -388,6 +386,11 @@ class DetectBody(BaseModel):
         if self.backend == "roboflow" and not (self.api_key or "").strip():
             raise ValueError("api_key is required when backend=roboflow")
         return self
+
+
+class DetectBody(DetectorConfigBody):
+    frame_ids: list[str]
+    skip_reviewed: bool = True
 
 
 PRETRAINED_MODEL_PREFIXES = ("yolo", "rtdetr")
@@ -415,7 +418,7 @@ def _is_known_pretrained(model_path: str) -> bool:
     )
 
 
-def _validate_detect_backend(body: DetectBody):
+def _validate_detect_backend(body: DetectorConfigBody):
     if body.backend == "roboflow":
         if not (body.api_key or "").strip():
             raise ValueError("api_key is required when backend=roboflow")
@@ -425,7 +428,7 @@ def _validate_detect_backend(body: DetectBody):
         raise ValueError(f"Model not found: {body.model_path}")
 
 
-def build_detector(body: DetectBody):
+def build_detector(body: DetectorConfigBody):
     """Expensive (loads weights / imports ultralytics or inference_sdk) — call only from a worker thread."""
     if body.backend == "roboflow":
         return RoboflowDetector(
@@ -464,6 +467,13 @@ def _run_detect_job(job_id: str, body: DetectBody):
         record = _state["frames"].get(frame_id)
         if not record:
             job["log"].append(f"[error] unknown frame id {frame_id}")
+            continue
+
+        if body.skip_reviewed and record.get("reviewed"):
+            job["log"].append(f"[skip] {Path(record['path']).name}: already reviewed (skip_reviewed=true)")
+            job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
+            if len(job["log"]) > 500:
+                del job["log"][: len(job["log"]) - 500]
             continue
 
         try:
@@ -627,6 +637,56 @@ def frame_image(frame_id: str):
         raise HTTPException(status_code=500, detail="Failed to encode image")
 
     return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
+
+
+# ────────────────────────────── S-8 Label Assist ──────────────────────────────
+
+
+class AssistBody(DetectorConfigBody):
+    pass
+
+
+_assist_cache_key: tuple | None = None
+_assist_cache_detector = None
+
+
+def _get_cached_assist_detector(body: DetectorConfigBody):
+    """Single-slot cache keyed on (backend, model params). Rebuilds only when the key tuple
+    changes — no TTL/eviction/locking, since this is a single local operator clicking Assist
+    one frame at a time, not a concurrent multi-user service."""
+    global _assist_cache_key, _assist_cache_detector
+    if body.backend == "roboflow":
+        key = ("roboflow", body.workspace_name.strip(), body.workflow_id.strip(), round(body.conf, 4))
+    else:
+        key = ("local", body.model_path.strip(), round(body.conf, 4), round(body.iou, 4), body.device)
+    if key != _assist_cache_key:
+        _assist_cache_detector = build_detector(body)
+        _assist_cache_key = key
+    return _assist_cache_detector
+
+
+@app.post("/api/frames/{frame_id}/assist")
+def assist_frame(frame_id: str, body: AssistBody):
+    record = _state["frames"].get(frame_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Frame not found")
+
+    try:
+        _validate_detect_backend(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    img = cv2.imread(record["path"])
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image missing on disk")
+
+    try:
+        det = _get_cached_assist_detector(body)
+        dets = det.predict(img)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Assist failed: {e}")
+
+    return {"detections": [d.to_dict() for d in dets]}
 
 
 @app.get("/api/models")

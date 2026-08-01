@@ -256,6 +256,37 @@
         <canvas id="annotate-canvas"></canvas>
       </div>
       <div class="annotate-props">
+        <div class="section-label" style="margin-top:0; border-top:none; padding-top:0;">Label Assist</div>
+
+        <div class="checkbox-row">
+          <input type="radio" name="assist-backend" value="local" id="assist-backend-local" checked />
+          <label for="assist-backend-local" style="margin:0;">Local (.pt)</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="radio" name="assist-backend" value="roboflow" id="assist-backend-roboflow" />
+          <label for="assist-backend-roboflow" style="margin:0;">Roboflow</label>
+        </div>
+
+        <div id="assist-local-fields">
+          <label for="assist-model-path">Model</label>
+          <input class="input" type="text" id="assist-model-path" list="model-datalist" value="yolo11n.pt" />
+        </div>
+
+        <div id="assist-roboflow-fields" class="hidden">
+          <label for="assist-rf-api-key">Roboflow API Key</label>
+          <input class="input" type="password" id="assist-rf-api-key" placeholder="rf_..." autocomplete="off" />
+          <label for="assist-rf-workspace">Workspace</label>
+          <input class="input" type="text" id="assist-rf-workspace" value="fhasai-khuanpan" />
+          <label for="assist-rf-workflow-id">Workflow ID</label>
+          <input class="input" type="text" id="assist-rf-workflow-id" value="ssid-v5-logic" />
+        </div>
+
+        <button id="assist-run-btn" class="btn-primary" style="margin-top:16px; width:100%;">Run Assist</button>
+        <div style="display:flex; gap:8px; margin-top:8px;">
+          <button id="assist-accept-all-btn" class="btn-download" style="flex:1;">Accept All</button>
+          <button id="assist-reject-all-btn" class="btn-stop" style="flex:1;">Reject All</button>
+        </div>
+
         <label for="annotate-class-select">New Class</label>
         <select class="input" id="annotate-class-select"></select>
         <button id="annotate-save-btn" class="btn-primary" style="margin-top:20px; width:100%;">Save Changes</button>
