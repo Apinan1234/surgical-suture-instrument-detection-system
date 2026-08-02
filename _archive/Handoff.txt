@@ -1,11 +1,17 @@
-Handoff document saved to:
+Handoff saved to:
+C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\50cb9678-d692-412e-b862-85de06cf1f26\scratchpad\handoff-videoframeextractor-security-hardening-2026-08-02.md
 
-C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\a61e0313-317d-405e-9924-4b0245654562\scratchpad\handoff-videoframeextractor-web-plan-2026-07-30.md
+Covers: all 5 security-hardening items implemented and verified live (with a call-out to the concurrency-decision wrinkle from _archive/WORK_PLAN.md that was resolved via AskUserQuestion), the uncommitted file list, the test-data cleanup that was done, remaining open items carried forward, and suggested skills for next time.
 
-Also saved 3 memory files (this project's first ones) covering durable context for future sessions: the minimal-tooling preference, the "don't use offered third-party credentials" pattern, and the web-rewrite project status pointing to WORK_PLAN.md as source of truth.
+✻ Cooked for 54s
 
-One open item from just before this: the scroll-demo local server is still down — let me know if you want it back up, or that can wait for the next session per the handoff doc.
 
-✻ Cooked for 3m 1s
 
-※ recap: We've been planning VideoFrameExtractor's web rewrite in WORK_PLAN.md, and just finished a side task building a scroll-animation demo page. Next: let me know if you want the demo's local server restarted so you can view it.
+
+
+
+Handoff document saved to C:\Users\USER\AppData\Local\Temp\videoframeextractor-handoff-2026-08-02.md.
+
+Summary: covers the two-frontend repo split (vanilla 01_frame-extractor-tool/webapp vs React 02_web-app), what was installed this session (Framer Motion, uipro-cli UI/UX Pro Max skill) with file locations and uncommitted-state details, the pending decision on running the 21st.dev MCP install command (needs the user's own API key), standing preferences (no third-party credentials, minimal tooling), and suggested next-session skills (security-review, run, claude-in-chrome).
+
+✻ Crunched for 54s
