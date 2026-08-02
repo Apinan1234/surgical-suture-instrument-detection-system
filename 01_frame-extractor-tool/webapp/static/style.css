@@ -524,6 +524,51 @@ main.wide {
   font-family: inherit;
 }
 
+.context-menu {
+  position: fixed;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  min-width: 180px;
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+}
+
+.context-menu.open {
+  display: flex;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  width: 100%;
+}
+
+.context-menu button:hover {
+  background: var(--accent);
+}
+
+.context-menu button.danger {
+  color: var(--highlight);
+}
+
+.context-menu hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 4px 2px;
+}
+
 .annotate-props {
   width: 240px;
   flex-shrink: 0;

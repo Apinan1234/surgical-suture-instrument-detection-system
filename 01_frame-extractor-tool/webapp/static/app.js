@@ -526,6 +526,14 @@ function hitTestBoxBody(imgPt, box, imgW, imgH) {
   return imgPt.x >= rect.x1 && imgPt.x <= rect.x2 && imgPt.y >= rect.y1 && imgPt.y <= rect.y2;
 }
 
+function findTopBoxAt(imgPt, imgW, imgH) {
+  const boxes = AnnotateState.getBoxes();
+  for (let i = boxes.length - 1; i >= 0; i--) {
+    if (hitTestBoxBody(imgPt, boxes[i], imgW, imgH)) return boxes[i];
+  }
+  return null;
+}
+
 function boxIntersectsRect(rect, box, imgW, imgH) {
   const b = boxRectImg(box, imgW, imgH);
   return b.x1 < rect.x2 && b.x2 > rect.x1 && b.y1 < rect.y2 && b.y2 > rect.y1;
@@ -942,6 +950,7 @@ const Canvas = (() => {
       setCursor("grabbing");
       return;
     }
+    if (e.button !== 0) return; // right/middle click never drives move/resize/marquee/draw
     dispatch("onPointerDown", e);
   });
   canvas.addEventListener("pointermove", (e) => {
@@ -965,6 +974,14 @@ const Canvas = (() => {
     e.preventDefault();
     zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY);
   }, { passive: false });
+  canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    if (!img) return;
+    const imgPt = screenToImage(e.clientX, e.clientY);
+    const hit = findTopBoxAt(imgPt, img.naturalWidth, img.naturalHeight);
+    if (hit) ContextMenu.openForBox(e.clientX, e.clientY, hit);
+    else ContextMenu.close();
+  });
 
   window.addEventListener("resize", () => resize());
 
@@ -1065,14 +1082,6 @@ const SelectTool = (() => {
   let snapshotTaken = false;
   let marqueeStart = null;
   let marqueeCurrent = null;
-
-  function findTopBoxAt(imgPt, imgW, imgH) {
-    const boxes = AnnotateState.getBoxes();
-    for (let i = boxes.length - 1; i >= 0; i--) {
-      if (hitTestBoxBody(imgPt, boxes[i], imgW, imgH)) return boxes[i];
-    }
-    return null;
-  }
 
   function onPointerDown(e) {
     if (!AnnotateState.currentFrame()) return;
@@ -1253,6 +1262,53 @@ const SelectTool = (() => {
 Tools.draw_box = DrawBoxTool;
 Tools.select = SelectTool;
 
+// ── ContextMenu: right-click canvas → Delete / Reassign class (flat list, no submenus) ──
+
+const ContextMenu = (() => {
+  const el = document.getElementById("annotate-context-menu");
+
+  function buildRows(ids) {
+    el.innerHTML = "";
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    delBtn.textContent = ids.length >= 2 ? `Delete Selected (${ids.length})` : "Delete";
+    delBtn.addEventListener("click", () => { AnnotateState.deleteBoxesByIds(ids); close(); });
+    el.appendChild(delBtn);
+
+    if (classNames.length) el.appendChild(document.createElement("hr"));
+    classNames.forEach((name) => {
+      const btn = document.createElement("button");
+      btn.textContent = `Reassign to: ${name}`;
+      btn.addEventListener("click", () => { AnnotateState.reassignClassByIds(ids, name); close(); });
+      el.appendChild(btn);
+    });
+  }
+
+  function positionAt(clientX, clientY) {
+    el.classList.add("open");
+    const w = el.offsetWidth, h = el.offsetHeight;
+    el.style.left = `${Math.max(8, Math.min(clientX, window.innerWidth - w - 8))}px`;
+    el.style.top = `${Math.max(8, Math.min(clientY, window.innerHeight - h - 8))}px`;
+  }
+
+  function openForBox(clientX, clientY, box) {
+    const keepMulti = AnnotateState.isSelected(box.id) && AnnotateState.getSelectedCount() >= 2;
+    if (!keepMulti) AnnotateState.selectBox(box.id);
+    buildRows(AnnotateState.getSelectedIds());
+    positionAt(clientX, clientY);
+  }
+
+  function close() { el.classList.remove("open"); }
+  function isOpen() { return el.classList.contains("open"); }
+
+  // Capture phase: closes before Canvas's own bubble-phase pointerdown can start a drag underneath it.
+  document.addEventListener("pointerdown", (e) => {
+    if (isOpen() && e.button === 0 && !el.contains(e.target)) close();
+  }, true);
+
+  return { openForBox, close, isOpen };
+})();
+
 // ── Keyboard: one listener + one lookup table (also renders the "?" cheat-sheet) ──
 
 const Keyboard = (() => {
@@ -1346,6 +1402,11 @@ const Keyboard = (() => {
   }
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && ContextMenu.isOpen()) {
+      ContextMenu.close();
+      e.preventDefault();
+      return; // don't fall through to onEscape()'s deselect/cancel-draw
+    }
     if (isTextInput(e.target)) return;
     if (e.code === "Space") {
       Canvas.setSpaceHeld(true);
@@ -1600,6 +1661,7 @@ AnnotateState.subscribe(() => {
   updateAnnotateReviewStatus();
   updateToolButtons();
   updateBulkActionsBar();
+  ContextMenu.close();
 });
 
 document.querySelector('.tab[data-tab="annotate"]').addEventListener("click", () => Canvas.resize());
