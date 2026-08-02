@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Menu, X, Eye } from 'lucide-react';
+import { Menu, X, Eye, ExternalLink } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
 }
+
+const TOOL_URL = import.meta.env.VITE_TOOL_URL || 'http://localhost:8010';
 
 export function Header({ activeTab, setActiveTab }: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -46,12 +48,15 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
 
         {/* Right Action - Right Aligned */}
         <div className="hidden md:flex items-center justify-end">
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="bg-white/10 hover:bg-white/20 border border-white/20 text-white font-medium px-4 py-1.5 rounded-full text-xs backdrop-blur-md transition-all cursor-pointer flex items-center gap-2"
+          <a
+            href={TOOL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-[#0066FF] hover:bg-[#0052cc] border border-[#0066FF] text-white font-medium px-4 py-1.5 rounded-full text-xs transition-all cursor-pointer flex items-center gap-2"
           >
-            <span>Open menu</span>
-          </button>
+            <span>Try the Tool</span>
+            <ExternalLink size={14} />
+          </a>
         </div>
 
         {/* Mobile Hamburger Toggle */}
@@ -69,6 +74,15 @@ export function Header({ activeTab, setActiveTab }: HeaderProps) {
       {/* Mobile Navigation Dropdown */}
       {mobileMenuOpen && (
         <div className="md:hidden mt-4 bg-black/95 border border-white/20 rounded-2xl p-4 backdrop-blur-xl space-y-2 shadow-2xl">
+          <a
+            href={TOOL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium bg-[#0066FF] text-white"
+          >
+            <span>Try the Tool</span>
+            <ExternalLink size={14} />
+          </a>
           {navItems.map((item) => (
             <button
               key={item}
