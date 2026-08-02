@@ -1301,10 +1301,6 @@ function initAnnotateFrames(frames) {
   AnnotateState.init(list);
 }
 
-function frameBasename(path) {
-  return path.split(/[\\/]/).pop();
-}
-
 // ── Filmstrip: lazy-loaded thumbnails via IntersectionObserver; structural rebuild only
 // when the frame list/filter changes, cheap per-row patch otherwise (never tears down <img>s
 // on every box edit, or S-9's lazy-load benefit is defeated) ──
@@ -1367,7 +1363,7 @@ const Filmstrip = (() => {
       li.className = i === idx ? "selected" : "";
       if (!passesFilter(frame, filter)) li.classList.add("hidden-by-filter");
       const label = li.querySelector(".filmstrip-label");
-      label.textContent = `${frameBadge(frame)} ${frameBasename(frame.path)}`;
+      label.textContent = `${frameBadge(frame)} ${frame.filename}`;
     });
   }
 

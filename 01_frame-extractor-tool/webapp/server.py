@@ -35,6 +35,10 @@ load_dotenv(WEBAPP_DIR / ".env")
 DATA_DIR = Path(os.environ.get("DATA_DIR", WEBAPP_DIR / "data")).resolve()
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "8192"))
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+MAX_TOTAL_UPLOAD_MB = int(os.environ.get("MAX_TOTAL_UPLOAD_MB", "51200"))
+MAX_TOTAL_UPLOAD_BYTES = MAX_TOTAL_UPLOAD_MB * 1024 * 1024
+MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "2"))
+MAX_FRAMES_ALL_MODE = int(os.environ.get("MAX_FRAMES_ALL_MODE", "20000"))
 
 VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
@@ -112,6 +116,7 @@ def health():
 @app.post("/api/videos")
 async def upload_videos(files: list[UploadFile] = File(...)):
     uploaded = []
+    current_total = sum(v.get("size_bytes", 0) for v in _state["videos"].values())
     for f in files:
         ext = Path(f.filename).suffix.lower()
         if ext not in ALLOWED_VIDEO_EXTS:
@@ -128,7 +133,12 @@ async def upload_videos(files: list[UploadFile] = File(...)):
                     out.close()
                     dest_path.unlink(missing_ok=True)
                     raise HTTPException(status_code=413, detail="File too large")
+                if current_total + size > MAX_TOTAL_UPLOAD_BYTES:
+                    out.close()
+                    dest_path.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="Total storage quota exceeded")
                 out.write(chunk)
+        current_total += size
 
         record = {
             "id": video_id,
@@ -141,12 +151,19 @@ async def upload_videos(files: list[UploadFile] = File(...)):
         uploaded.append(record)
 
     save_state()
-    return {"videos": uploaded}
+    return {"videos": [_public(r) for r in uploaded]}
+
+
+def _public(record: dict) -> dict:
+    """Strip the absolute server filesystem path before a record goes into an API response —
+    clients only ever need id-based media routes (image.jpg/thumbnail.jpg/preview.jpg) or the
+    filename, never the real on-disk location."""
+    return {k: v for k, v in record.items() if k != "path"}
 
 
 @app.get("/api/videos")
 def list_videos():
-    return {"videos": list(_state["videos"].values())}
+    return {"videos": [_public(r) for r in _state["videos"].values()]}
 
 
 @app.delete("/api/videos/{video_id}")
@@ -191,6 +208,29 @@ class ExtractBody(BaseModel):
 
 _job_stop_flags: dict[str, bool] = {}
 IMAGE_EXTS = (".jpg", ".jpeg", ".png")
+
+_running_jobs_lock = threading.Lock()
+_running_jobs = 0
+
+
+def _acquire_job_slot() -> bool:
+    """Admission control for extract_jobs/detect_jobs — caps how many run at once
+    (MAX_CONCURRENT_JOBS) so one operator can't exhaust CPU/GPU by starting many jobs back-to-back."""
+    global _running_jobs
+    with _running_jobs_lock:
+        if _running_jobs >= MAX_CONCURRENT_JOBS:
+            return False
+        _running_jobs += 1
+        return True
+
+
+def _run_job_and_release(fn, *args):
+    global _running_jobs
+    try:
+        fn(*args)
+    finally:
+        with _running_jobs_lock:
+            _running_jobs -= 1
 
 
 def _run_extract_job(job_id: str, body: ExtractBody):
@@ -264,6 +304,7 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                 ),
                 progress_callback=prog,
                 log_callback=log_cb,
+                max_frames=MAX_FRAMES_ALL_MODE if is_all else None,
             )
             saved_total += stats["saved"]
 
@@ -277,6 +318,7 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                         "video_id": video_id,
                         "job_id": job_id,
                         "path": str(img_path),
+                        "filename": img_path.name,
                         "reviewed": False,
                     }
                     frame_ids.append(frame_id)
@@ -298,6 +340,12 @@ def start_extract(body: ExtractBody):
         if video_id not in _state["videos"]:
             raise HTTPException(status_code=404, detail=f"Unknown video id: {video_id}")
 
+    if not _acquire_job_slot():
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many jobs running (max {MAX_CONCURRENT_JOBS}); wait for one to finish",
+        )
+
     job_id = uuid.uuid4().hex
     _state["extract_jobs"][job_id] = {
         "id": job_id,
@@ -308,7 +356,7 @@ def start_extract(body: ExtractBody):
         "saved_total": 0,
     }
     _job_stop_flags[job_id] = False
-    threading.Thread(target=_run_extract_job, args=(job_id, body), daemon=True).start()
+    threading.Thread(target=_run_job_and_release, args=(_run_extract_job, job_id, body), daemon=True).start()
     return {"job_id": job_id}
 
 
@@ -326,7 +374,7 @@ def extract_frames_list(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
-    return {"frames": frames}
+    return {"frames": [_public(f) for f in frames]}
 
 
 @app.post("/api/extract/{job_id}/stop")
@@ -446,12 +494,34 @@ def build_detector(body: DetectorConfigBody):
     )
 
 
+_detector_cache_lock = threading.Lock()
+_detector_cache_key: tuple | None = None
+_detector_cache_detector = None
+
+
+def _get_cached_detector(body: DetectorConfigBody):
+    """Single-slot cache keyed on (backend, model params), shared by bulk Detect jobs and Label
+    Assist so neither reloads weights from disk when consecutive calls use the same model. Rebuilds
+    only when the key tuple changes. Guarded by a lock since it's now reachable from a background
+    job thread and the /assist request handler at the same time (bounded by MAX_CONCURRENT_JOBS)."""
+    global _detector_cache_key, _detector_cache_detector
+    if body.backend == "roboflow":
+        key = ("roboflow", body.workspace_name.strip(), body.workflow_id.strip(), round(body.conf, 4))
+    else:
+        key = ("local", body.model_path.strip(), round(body.conf, 4), round(body.iou, 4), body.device)
+    with _detector_cache_lock:
+        if key != _detector_cache_key:
+            _detector_cache_detector = build_detector(body)
+            _detector_cache_key = key
+        return _detector_cache_detector
+
+
 def _run_detect_job(job_id: str, body: DetectBody):
     job = _state["detect_jobs"][job_id]
     detected_total = 0
 
     try:
-        det = build_detector(body)
+        det = _get_cached_detector(body)
     except Exception as e:
         job["log"].append(f"[error] failed to load detector: {e}")
         job["status"] = "stopped"
@@ -515,6 +585,12 @@ def start_detect(body: DetectBody):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    if not _acquire_job_slot():
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many jobs running (max {MAX_CONCURRENT_JOBS}); wait for one to finish",
+        )
+
     job_id = uuid.uuid4().hex
     _state["detect_jobs"][job_id] = {
         "id": job_id,
@@ -530,7 +606,7 @@ def start_detect(body: DetectBody):
         "device": body.device,
     }
     _job_stop_flags[job_id] = False
-    threading.Thread(target=_run_detect_job, args=(job_id, body), daemon=True).start()
+    threading.Thread(target=_run_job_and_release, args=(_run_detect_job, job_id, body), daemon=True).start()
     return {"job_id": job_id}
 
 
@@ -548,7 +624,7 @@ def detect_frames_list(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
-    return {"frames": frames}
+    return {"frames": [_public(f) for f in frames]}
 
 
 @app.post("/api/detect/{job_id}/stop")
@@ -675,25 +751,6 @@ class AssistBody(DetectorConfigBody):
     pass
 
 
-_assist_cache_key: tuple | None = None
-_assist_cache_detector = None
-
-
-def _get_cached_assist_detector(body: DetectorConfigBody):
-    """Single-slot cache keyed on (backend, model params). Rebuilds only when the key tuple
-    changes — no TTL/eviction/locking, since this is a single local operator clicking Assist
-    one frame at a time, not a concurrent multi-user service."""
-    global _assist_cache_key, _assist_cache_detector
-    if body.backend == "roboflow":
-        key = ("roboflow", body.workspace_name.strip(), body.workflow_id.strip(), round(body.conf, 4))
-    else:
-        key = ("local", body.model_path.strip(), round(body.conf, 4), round(body.iou, 4), body.device)
-    if key != _assist_cache_key:
-        _assist_cache_detector = build_detector(body)
-        _assist_cache_key = key
-    return _assist_cache_detector
-
-
 @app.post("/api/frames/{frame_id}/assist")
 def assist_frame(frame_id: str, body: AssistBody):
     record = _get_frame_or_404(frame_id)
@@ -708,7 +765,7 @@ def assist_frame(frame_id: str, body: AssistBody):
         raise HTTPException(status_code=404, detail="Frame image missing on disk")
 
     try:
-        det = _get_cached_assist_detector(body)
+        det = _get_cached_detector(body)
         dets = det.predict(img)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Assist failed: {e}")

@@ -65,6 +65,7 @@ def extract_frames(
     log_name: str = "extraction_log.json",
     progress_callback=None,
     log_callback=None,
+    max_frames: int | None = None,
 ) -> dict:
     """
     ตัดเฟรมจากวิดีโอพร้อมกรองภาพซ้ำ
@@ -88,6 +89,7 @@ def extract_frames(
                           (เปลี่ยนได้เมื่อหลายวิดีโอใช้โฟลเดอร์ร่วมกัน จะได้ไม่ทับกัน)
     progress_callback   : fn(current, total) สำหรับ update progress bar
     log_callback        : fn(str) สำหรับ print log
+    max_frames          : จำนวนภาพสูงสุดที่บันทึกได้ (None = ไม่จำกัด) — หยุดตัดทันทีที่ถึงจำนวนนี้
 
     Returns
     -------
@@ -291,6 +293,11 @@ def extract_frames(
             stats["saved"] += 1
             slot_filled = True
             log(f"  [saved]  เฟรม {frame_idx:5d} (slot {slot}) → {filename} (score={score:.1f})")
+
+            if max_frames is not None and stats["saved"] >= max_frames:
+                stats["truncated"] = True
+                log(f"⚠️  ถึงขีดจำกัด max_frames={max_frames} แล้ว หยุดตัดเฟรมก่อนถึงจุดสิ้นสุดวิดีโอ")
+                break
 
         frame_idx += 1
 
