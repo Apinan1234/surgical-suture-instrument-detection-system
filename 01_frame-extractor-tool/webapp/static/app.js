@@ -526,6 +526,25 @@ function hitTestBoxBody(imgPt, box, imgW, imgH) {
   return imgPt.x >= rect.x1 && imgPt.x <= rect.x2 && imgPt.y >= rect.y1 && imgPt.y <= rect.y2;
 }
 
+function boxIntersectsRect(rect, box, imgW, imgH) {
+  const b = boxRectImg(box, imgW, imgH);
+  return b.x1 < rect.x2 && b.x2 > rect.x1 && b.y1 < rect.y2 && b.y2 > rect.y1;
+}
+
+function drawMarquee(ctx, start, current, scale) {
+  const x1 = Math.min(start.x, current.x), y1 = Math.min(start.y, current.y);
+  const w = Math.abs(current.x - start.x), h = Math.abs(current.y - start.y);
+  ctx.save();
+  ctx.fillStyle = "rgba(37, 99, 235, 0.1)";
+  ctx.fillRect(x1, y1, w, h);
+  ctx.strokeStyle = "#2563eb";
+  ctx.lineWidth = 1 / scale;
+  ctx.setLineDash([4 / scale, 3 / scale]);
+  ctx.strokeRect(x1, y1, w, h);
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
 // ── Api: one wrapper per endpoint used by Annotate ──
 
 const Api = {
@@ -600,7 +619,7 @@ const AnnotateState = (() => {
   let frames = [];
   let frameIdx = -1;
   let boxes = [];
-  let selectedId = null;
+  let selectedIds = new Set();
   let activeTool = "draw_box";
   const listeners = [];
 
@@ -620,7 +639,7 @@ const AnnotateState = (() => {
     frames = frameList || [];
     frameIdx = -1;
     boxes = [];
-    selectedId = null;
+    selectedIds = new Set();
     UndoManager.reset();
     if (frames.length) {
       selectFrame(0);
@@ -633,7 +652,7 @@ const AnnotateState = (() => {
     if (idx < 0 || idx >= frames.length) return;
     frameIdx = idx;
     boxes = hydrate(frames[idx].detections);
-    selectedId = null;
+    selectedIds = new Set();
     UndoManager.reset();
     emit();
   }
@@ -659,19 +678,66 @@ const AnnotateState = (() => {
   }
 
   function selectBox(id) {
-    selectedId = id;
+    selectedIds = id ? new Set([id]) : new Set();
+    emit();
+  }
+
+  function selectBoxes(ids) {
+    selectedIds = new Set(ids);
     emit();
   }
 
   function getSelected() {
-    return boxes.find((b) => b.id === selectedId) || null;
+    if (selectedIds.size !== 1) return null;
+    const id = selectedIds.values().next().value;
+    return boxes.find((b) => b.id === id) || null;
+  }
+
+  function isSelected(id) {
+    return selectedIds.has(id);
+  }
+
+  function getSelectedIds() {
+    return Array.from(selectedIds);
+  }
+
+  function getSelectedCount() {
+    return selectedIds.size;
   }
 
   function reselectIfMissing() {
-    if (selectedId && !boxes.find((b) => b.id === selectedId)) {
-      selectedId = null;
-      emit();
-    }
+    let changed = false;
+    selectedIds.forEach((id) => {
+      if (!boxes.find((b) => b.id === id)) {
+        selectedIds.delete(id);
+        changed = true;
+      }
+    });
+    if (changed) emit();
+  }
+
+  function deleteBoxesByIds(ids) {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    idSet.forEach((id) => selectedIds.delete(id));
+    setBoxes(boxes.filter((b) => !idSet.has(b.id)));
+  }
+
+  function reassignClassByIds(ids, className) {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    const classId = classNames.indexOf(className);
+    setBoxes(boxes.map((b) => (idSet.has(b.id) ? { ...b, class_id: classId, class_name: className } : b)));
+  }
+
+  function deleteSelectedBoxes() {
+    deleteBoxesByIds(getSelectedIds());
+  }
+
+  function reassignSelectedBoxesClass(className) {
+    if (!selectedIds.size) return false;
+    reassignClassByIds(getSelectedIds(), className);
+    return true;
   }
 
   function setActiveTool(name) {
@@ -679,7 +745,7 @@ const AnnotateState = (() => {
     const prev = Tools[activeTool];
     if (prev && prev.onDeactivate) prev.onDeactivate();
     activeTool = name;
-    selectedId = null;
+    selectedIds = new Set();
     const next = Tools[activeTool];
     if (next && next.onActivate) next.onActivate();
     emit();
@@ -708,7 +774,9 @@ const AnnotateState = (() => {
 
   return {
     subscribe, init, selectFrame, currentFrame, getBoxes, setBoxes, addBoxes,
-    selectBox, getSelected, reselectIfMissing, setActiveTool, getActiveTool: () => activeTool,
+    selectBox, selectBoxes, getSelected, isSelected, getSelectedIds, getSelectedCount,
+    reselectIfMissing, deleteBoxesByIds, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
+    setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
     findNextUnreviewedIndex, markReviewedLocal, setFrameDetections,
   };
@@ -747,8 +815,7 @@ const Canvas = (() => {
     const bh = b.height * imgH;
     const color = classColors[b.class_name] || "#AAAAAA";
     const lw = 2 / cssScale;
-    const sel = AnnotateState.getSelected();
-    const isSelected = !!sel && sel.id === b.id;
+    const isSelected = AnnotateState.isSelected(b.id);
 
     ctx.save();
     ctx.strokeStyle = color;
@@ -990,12 +1057,14 @@ const DrawBoxTool = (() => {
 // ── SelectTool: click to select, drag to move, drag a handle to resize ──
 
 const SelectTool = (() => {
-  let mode = null; // null | "move" | "resize"
+  let mode = null; // null | "move" | "resize" | "marquee"
   let activeHandle = null;
   let startImgPt = null;
   let startBox = null;
   let preDragBoxes = null;
   let snapshotTaken = false;
+  let marqueeStart = null;
+  let marqueeCurrent = null;
 
   function findTopBoxAt(imgPt, imgW, imgH) {
     const boxes = AnnotateState.getBoxes();
@@ -1034,8 +1103,9 @@ const SelectTool = (() => {
       preDragBoxes = AnnotateState.getBoxes();
       snapshotTaken = false;
     } else {
-      AnnotateState.selectBox(null);
-      mode = null;
+      mode = "marquee";
+      marqueeStart = imgPt;
+      marqueeCurrent = imgPt;
     }
   }
 
@@ -1064,8 +1134,13 @@ const SelectTool = (() => {
       updateHoverCursor(e);
       return;
     }
-    const { w: imgW, h: imgH } = Canvas.getImageSize();
     const imgPt = Canvas.screenToImage(e.clientX, e.clientY);
+    if (mode === "marquee") {
+      marqueeCurrent = imgPt;
+      Canvas.requestRender();
+      return;
+    }
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
     const dx = imgPt.x - startImgPt.x;
     const dy = imgPt.y - startImgPt.y;
     if (dx === 0 && dy === 0) return;
@@ -1090,28 +1165,34 @@ const SelectTool = (() => {
   }
 
   function onPointerUp() {
+    if (mode === "marquee") {
+      const scale = Canvas.getCssScale();
+      const dxPx = Math.abs(marqueeCurrent.x - marqueeStart.x) * scale;
+      const dyPx = Math.abs(marqueeCurrent.y - marqueeStart.y) * scale;
+      if (dxPx < 5 || dyPx < 5) {
+        // negligible drag == the old "click empty space to deselect" behavior
+        AnnotateState.selectBox(null);
+      } else {
+        const { w: imgW, h: imgH } = Canvas.getImageSize();
+        const rect = {
+          x1: Math.min(marqueeStart.x, marqueeCurrent.x), x2: Math.max(marqueeStart.x, marqueeCurrent.x),
+          y1: Math.min(marqueeStart.y, marqueeCurrent.y), y2: Math.max(marqueeStart.y, marqueeCurrent.y),
+        };
+        const ids = AnnotateState.getBoxes()
+          .filter((b) => boxIntersectsRect(rect, b, imgW, imgH))
+          .map((b) => b.id);
+        AnnotateState.selectBoxes(ids);
+      }
+      marqueeStart = null;
+      marqueeCurrent = null;
+      Canvas.requestRender();
+    }
     mode = null;
     activeHandle = null;
     startImgPt = null;
     startBox = null;
     preDragBoxes = null;
     snapshotTaken = false;
-  }
-
-  function deleteSelected() {
-    const selected = AnnotateState.getSelected();
-    if (!selected) return;
-    AnnotateState.setBoxes(AnnotateState.getBoxes().filter((b) => b.id !== selected.id));
-    AnnotateState.selectBox(null);
-  }
-
-  function setSelectedClass(className) {
-    const selected = AnnotateState.getSelected();
-    if (!selected) return false;
-    AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) =>
-      b.id === selected.id ? { ...b, class_id: classNames.indexOf(className), class_name: className } : b
-    ));
-    return true;
   }
 
   function nudgeSelected(dxSign, dySign, big) {
@@ -1128,6 +1209,10 @@ const SelectTool = (() => {
   }
 
   function render(ctx) {
+    if (mode === "marquee" && marqueeStart && marqueeCurrent) {
+      drawMarquee(ctx, marqueeStart, marqueeCurrent, Canvas.getCssScale());
+      return;
+    }
     const selected = AnnotateState.getSelected();
     if (!selected) return;
     const { w: imgW, h: imgH } = Canvas.getImageSize();
@@ -1155,11 +1240,13 @@ const SelectTool = (() => {
     activeHandle = null;
     preDragBoxes = null;
     snapshotTaken = false;
+    marqueeStart = null;
+    marqueeCurrent = null;
   }
 
   return {
     onPointerDown, onPointerMove, onPointerUp, render, onActivate, onDeactivate,
-    deleteSelected, setSelectedClass, nudgeSelected,
+    nudgeSelected,
   };
 })();
 
@@ -1176,7 +1263,7 @@ const Keyboard = (() => {
   function setClassByNumber(n) {
     const name = classNames[n - 1];
     if (!name) return;
-    if (!SelectTool.setSelectedClass(name)) {
+    if (!AnnotateState.reassignSelectedBoxesClass(name)) {
       document.getElementById("annotate-class-select").value = name;
     }
   }
@@ -1230,8 +1317,9 @@ const Keyboard = (() => {
     { key: "3", handler: () => setClassByNumber(3) },
     { key: "4", handler: () => setClassByNumber(4) },
     { key: "5", handler: () => setClassByNumber(5) },
-    { key: "Delete", label: "Delete — Remove selected box", handler: () => SelectTool.deleteSelected() },
-    { key: "Backspace", handler: () => SelectTool.deleteSelected() },
+    { key: "Delete", label: "Delete — Remove selected box(es)", handler: () => AnnotateState.deleteSelectedBoxes() },
+    { key: "Backspace", handler: () => AnnotateState.deleteSelectedBoxes() },
+    { key: "a", ctrlKey: true, label: "Ctrl+A — Select all boxes", handler: () => AnnotateState.selectBoxes(AnnotateState.getBoxes().map((b) => b.id)) },
     { key: "z", ctrlKey: true, shiftKey: false, label: "Ctrl+Z — Undo", handler: () => doUndo() },
     { key: "z", ctrlKey: true, shiftKey: true, label: "Ctrl+Shift+Z — Redo", handler: () => doRedo() },
     { key: "ArrowLeft", label: "Arrows — Nudge selected box (Shift=10px)", handler: (e) => SelectTool.nudgeSelected(-1, 0, e.shiftKey) },
@@ -1288,6 +1376,21 @@ function populateAnnotateClassSelect() {
     opt.value = name;
     opt.textContent = name;
     select.appendChild(opt);
+  });
+
+  const bulkSelect = document.getElementById("annotate-bulk-class-select");
+  bulkSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Reassign class to…";
+  placeholder.selected = true;
+  placeholder.disabled = true;
+  bulkSelect.appendChild(placeholder);
+  classNames.forEach((name) => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    bulkSelect.appendChild(opt);
   });
 }
 
@@ -1388,7 +1491,6 @@ function renderDetectionList() {
   const list = document.getElementById("annotate-detection-list");
   list.innerHTML = "";
   const boxes = AnnotateState.getBoxes();
-  const selected = AnnotateState.getSelected();
 
   if (!boxes.length) {
     const empty = document.createElement("div");
@@ -1400,7 +1502,7 @@ function renderDetectionList() {
 
   boxes.forEach((b) => {
     const li = document.createElement("li");
-    li.className = selected && selected.id === b.id ? "selected" : "";
+    li.className = AnnotateState.isSelected(b.id) ? "selected" : "";
     li.addEventListener("click", (e) => {
       if (e.target.tagName === "SELECT" || e.target.tagName === "BUTTON") return;
       AnnotateState.setActiveTool("select");
@@ -1416,9 +1518,7 @@ function renderDetectionList() {
       select.appendChild(opt);
     });
     select.addEventListener("change", () => {
-      AnnotateState.setBoxes(AnnotateState.getBoxes().map((d) =>
-        d.id === b.id ? { ...d, class_id: classNames.indexOf(select.value), class_name: select.value } : d
-      ));
+      AnnotateState.reassignClassByIds([b.id], select.value);
     });
 
     const badge = document.createElement("span");
@@ -1430,7 +1530,7 @@ function renderDetectionList() {
     del.textContent = "✕";
     del.title = "Delete box";
     del.addEventListener("click", () => {
-      AnnotateState.setBoxes(AnnotateState.getBoxes().filter((d) => d.id !== b.id));
+      AnnotateState.deleteBoxesByIds([b.id]);
     });
 
     li.appendChild(select);
@@ -1468,6 +1568,14 @@ function updateToolButtons() {
   document.getElementById("annotate-tool-draw-btn").classList.toggle("active-tool", tool === "draw_box");
 }
 
+function updateBulkActionsBar() {
+  const n = AnnotateState.getSelectedCount();
+  document.getElementById("annotate-bulk-actions").classList.toggle("hidden", n < 2);
+  if (n >= 2) {
+    document.getElementById("annotate-bulk-delete-btn").textContent = `Delete Selected (${n})`;
+  }
+}
+
 function loadAnnotateImage(frame, idxAtLoad) {
   const img = new Image();
   img.onload = () => {
@@ -1491,12 +1599,20 @@ AnnotateState.subscribe(() => {
   updateStatusBar();
   updateAnnotateReviewStatus();
   updateToolButtons();
+  updateBulkActionsBar();
 });
 
 document.querySelector('.tab[data-tab="annotate"]').addEventListener("click", () => Canvas.resize());
 
 document.getElementById("annotate-tool-select-btn").addEventListener("click", () => AnnotateState.setActiveTool("select"));
 document.getElementById("annotate-tool-draw-btn").addEventListener("click", () => AnnotateState.setActiveTool("draw_box"));
+
+document.getElementById("annotate-bulk-delete-btn").addEventListener("click", () => AnnotateState.deleteSelectedBoxes());
+document.getElementById("annotate-bulk-class-select").addEventListener("change", (e) => {
+  if (!e.target.value) return;
+  AnnotateState.reassignSelectedBoxesClass(e.target.value);
+  e.target.value = "";
+});
 
 document.getElementById("annotate-copy-prev-btn").addEventListener("click", () => {
   const prev = AnnotateState.getPrevFrame();

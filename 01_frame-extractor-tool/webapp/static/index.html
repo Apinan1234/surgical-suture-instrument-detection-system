@@ -268,6 +268,12 @@
       <div class="annotate-props">
         <div class="section-label" style="margin-top:0; border-top:none; padding-top:0;">Detections</div>
         <ul id="annotate-detection-list" class="detection-list"></ul>
+        <div id="annotate-bulk-actions" class="hidden" style="display:flex; align-items:center; gap:8px; margin:-4px 0 8px;">
+          <select class="input" id="annotate-bulk-class-select" style="flex:1; padding:4px 8px; font-size:12px;">
+            <option value="" selected disabled>Reassign class to…</option>
+          </select>
+          <button id="annotate-bulk-delete-btn" class="btn-stop" style="padding:6px 12px; font-size:12px; white-space:nowrap;">Delete Selected</button>
+        </div>
         <button id="annotate-copy-prev-btn" class="btn-download" style="width:100%;">⬅ Copy from previous frame</button>
 
         <div class="section-label">Label Assist</div>
