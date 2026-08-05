@@ -280,6 +280,14 @@
         <div class="section-label">Label Assist</div>
 
         <div class="checkbox-row">
+          <input type="checkbox" id="assist-auto-toggle" />
+          <label for="assist-auto-toggle" style="margin:0;">Auto-run on frame open</label>
+        </div>
+        <div id="assist-auto-hint" class="hidden" style="font-size:12px; color:var(--muted); margin-top:4px;">
+          Disabled while backend is Roboflow (avoids using API credits automatically).
+        </div>
+
+        <div class="checkbox-row">
           <input type="radio" name="assist-backend" value="local" id="assist-backend-local" checked />
           <label for="assist-backend-local" style="margin:0;">Local (.pt)</label>
         </div>

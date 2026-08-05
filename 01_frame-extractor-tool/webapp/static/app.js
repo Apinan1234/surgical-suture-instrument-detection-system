@@ -1652,7 +1652,10 @@ AnnotateState.subscribe(() => {
   if (idx !== _lastLoadedFrameIdx) {
     _lastLoadedFrameIdx = idx;
     const frame = AnnotateState.currentFrame();
-    if (frame) loadAnnotateImage(frame, idx);
+    if (frame) {
+      loadAnnotateImage(frame, idx);
+      maybeAutoAssist(frame);
+    }
   }
   Canvas.requestRender();
   Filmstrip.render();
@@ -1748,15 +1751,27 @@ function updateAssistBackendFields() {
   const backend = document.querySelector('input[name="assist-backend"]:checked').value;
   document.getElementById("assist-local-fields").classList.toggle("hidden", backend !== "local");
   document.getElementById("assist-roboflow-fields").classList.toggle("hidden", backend !== "roboflow");
+  document.getElementById("assist-auto-toggle").disabled = backend === "roboflow";
+  document.getElementById("assist-auto-hint").classList.toggle("hidden", backend !== "roboflow");
 }
 document.querySelectorAll('input[name="assist-backend"]').forEach((el) => {
   el.addEventListener("change", updateAssistBackendFields);
 });
 updateAssistBackendFields();
 
-document.getElementById("assist-run-btn").addEventListener("click", async () => {
+const assistAutoToggle = document.getElementById("assist-auto-toggle");
+assistAutoToggle.checked = localStorage.getItem("annotate_auto_assist") === "true";
+assistAutoToggle.addEventListener("change", () => {
+  localStorage.setItem("annotate_auto_assist", assistAutoToggle.checked ? "true" : "false");
+});
+
+async function runAssist(opts) {
+  opts = opts || {};
   const frame = AnnotateState.currentFrame();
   if (!frame) return;
+  const runBtn = document.getElementById("assist-run-btn");
+  if (runBtn.disabled) return; // in-flight guard — also what makes auto-trigger safe to call freely
+
   const backend = document.querySelector('input[name="assist-backend"]:checked').value;
   const body = { backend, model_path: document.getElementById("assist-model-path").value };
 
@@ -1772,22 +1787,39 @@ document.getElementById("assist-run-btn").addEventListener("click", async () => 
     body.workflow_id = document.getElementById("assist-rf-workflow-id").value.trim();
   }
 
-  const runBtn = document.getElementById("assist-run-btn");
+  const idxAtRun = AnnotateState.getFrameIdx();
   runBtn.disabled = true;
   try {
     const res = await Api.postAssist(frame.id, body);
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));
-      alert(errBody.detail || "Assist failed");
+      if (opts.silent) {
+        console.warn("Auto-assist failed:", errBody.detail || res.status);
+      } else {
+        alert(errBody.detail || "Assist failed");
+      }
       return;
     }
     const data = await res.json();
+    if (AnnotateState.getFrameIdx() !== idxAtRun) return; // navigated away before this resolved
     const newBoxes = (data.detections || []).map((d) => ({ ...d, id: makeId(), _pending: true }));
     if (newBoxes.length) AnnotateState.addBoxes(newBoxes);
   } finally {
     runBtn.disabled = false;
   }
-});
+}
+
+document.getElementById("assist-run-btn").addEventListener("click", () => runAssist());
+
+function maybeAutoAssist(frame) {
+  if (localStorage.getItem("annotate_auto_assist") !== "true") return;
+  const backend = document.querySelector('input[name="assist-backend"]:checked').value;
+  if (backend !== "local") return; // hard gate, re-checked at fire time — never touches Roboflow
+  if (frame.reviewed) return; // never re-touch a finalized frame
+  if (AnnotateState.getBoxes().length !== 0) return; // already has boxes (detected or hand-drawn)
+  if (document.getElementById("assist-run-btn").disabled) return; // in-flight guard
+  runAssist({ silent: true });
+}
 
 document.getElementById("assist-accept-all-btn").addEventListener("click", () => {
   const boxes = AnnotateState.getBoxes();
