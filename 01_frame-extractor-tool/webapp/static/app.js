@@ -64,6 +64,7 @@ function switchTab(name) {
   });
   document.querySelector("main").classList.toggle("wide", name === "annotate");
   if (name === "export") refreshExportPreview();
+  if (name === "analytics") refreshAnalytics();
 }
 
 document.querySelectorAll(".tab").forEach((btn) => {
@@ -1706,6 +1707,7 @@ async function saveCurrentFrame() {
     y_center: d.y_center,
     width: d.width,
     height: d.height,
+    source: d.source || (d._pending ? "model" : "manual"),
   }));
 
   const res = await Api.putDetections(frame.id, cleanBoxes);
@@ -1716,9 +1718,16 @@ async function saveCurrentFrame() {
   }
   const saved = await res.json();
   AnnotateState.setFrameDetections(AnnotateState.getFrameIdx(), saved.detections);
-  // Save implicitly confirms any still-dashed boxes — a bookkeeping side-effect, not an undoable edit
+  // Save implicitly confirms any still-dashed boxes — a bookkeeping side-effect, not an undoable edit.
+  // Also stamp `source` onto the live boxes so a later Save in the same session (e.g. after editing a
+  // different box) doesn't recompute from a now-cleared `_pending` and lose track of which boxes were
+  // already accepted from the model.
   AnnotateState.setBoxes(
-    AnnotateState.getBoxes().map((d) => { const c = { ...d }; delete c._pending; return c; }),
+    AnnotateState.getBoxes().map((d) => {
+      const c = { ...d, source: d.source || (d._pending ? "model" : "manual") };
+      delete c._pending;
+      return c;
+    }),
     { pushUndo: false }
   );
 
@@ -1983,6 +1992,69 @@ document.getElementById("export-download-btn").addEventListener("click", () => {
   if (!currentExportJobId) return;
   window.location.href = `/api/export/${currentExportJobId}/download`;
 });
+
+// ────────────────────────────── Analytics section ──────────────────────────────
+
+function analyticsCell(text) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  return td;
+}
+
+async function refreshAnalytics() {
+  const res = await apiFetch("/api/analytics");
+  if (!res.ok) return;
+  const data = await res.json();
+
+  document.getElementById("analytics-accept-rate").textContent = `${data.accept_rate.rate_pct}%`;
+  document.getElementById("analytics-suggested-total").textContent = data.accept_rate.suggested_total;
+  document.getElementById("analytics-accepted-total").textContent = data.accept_rate.accepted_total;
+  document.getElementById("analytics-assist-calls").textContent = data.accept_rate.assist_call_count;
+
+  document.getElementById("analytics-total-frames").textContent = data.dataset.total;
+  document.getElementById("analytics-with-detection").textContent = data.dataset.with_detection;
+  document.getElementById("analytics-reviewed").textContent = data.dataset.reviewed;
+
+  const classBody = document.querySelector("#analytics-class-table tbody");
+  classBody.innerHTML = "";
+  Object.entries(data.class_counts).forEach(([name, count]) => {
+    const tr = document.createElement("tr");
+    const nameTd = document.createElement("td");
+    const dot = document.createElement("span");
+    dot.className = "class-dot";
+    dot.style.background = classColors[name] || "#AAAAAA";
+    nameTd.appendChild(dot);
+    nameTd.appendChild(document.createTextNode(name));
+    tr.appendChild(nameTd);
+    tr.appendChild(analyticsCell(count));
+    classBody.appendChild(tr);
+  });
+
+  const jobsBody = document.querySelector("#analytics-jobs-table tbody");
+  jobsBody.innerHTML = "";
+  if (!data.detect_jobs.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.style.color = "var(--muted)";
+    td.textContent = "No Detect jobs run yet.";
+    tr.appendChild(td);
+    jobsBody.appendChild(tr);
+  } else {
+    data.detect_jobs.forEach((job) => {
+      const tr = document.createElement("tr");
+      const when = job.created_at ? new Date(job.created_at).toLocaleString() : "— (before tracking)";
+      const model = job.backend === "roboflow" ? (job.workflow_id || "—") : (job.model_path || "—");
+      tr.appendChild(analyticsCell(when));
+      tr.appendChild(analyticsCell(job.backend));
+      tr.appendChild(analyticsCell(model));
+      tr.appendChild(analyticsCell(job.frame_count));
+      tr.appendChild(analyticsCell(job.detected_total));
+      tr.appendChild(analyticsCell(job.status));
+      jobsBody.appendChild(tr);
+    });
+  }
+}
 
 // ────────────────────────────── Init ──────────────────────────────
 

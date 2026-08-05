@@ -59,7 +59,7 @@ SNAPSHOT_KEEP = 10
 # ────────────────────────────── State (S-0) ──────────────────────────────
 
 _state_lock = threading.Lock()
-_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "export_jobs": {}}
+_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "export_jobs": {}, "assist_log": []}
 _last_snapshot_time = 0.0
 
 
@@ -70,6 +70,7 @@ def load_state():
             _state = json.load(f)
     for key in ("videos", "extract_jobs", "frames", "detect_jobs", "export_jobs"):
         _state.setdefault(key, {})
+    _state.setdefault("assist_log", [])
 
 
 def save_state():
@@ -601,9 +602,12 @@ def start_detect(body: DetectBody):
         "detected_total": 0,
         "backend": body.backend,
         "model_path": body.model_path if body.backend == "local" else None,
+        "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
+        "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
         "conf": body.conf,
         "iou": body.iou,
         "device": body.device,
+        "created_at": datetime.now().isoformat(),
     }
     _job_stop_flags[job_id] = False
     threading.Thread(target=_run_job_and_release, args=(_run_detect_job, job_id, body), daemon=True).start()
@@ -671,6 +675,7 @@ class DetectionIn(BaseModel):
     y_center: float = Field(ge=0.0, le=1.0)
     width: float = Field(gt=0.0, le=1.0)
     height: float = Field(gt=0.0, le=1.0)
+    source: Literal["model", "manual"] = "manual"
 
     @model_validator(mode="after")
     def _check_class(self):
@@ -770,6 +775,18 @@ def assist_frame(frame_id: str, body: AssistBody):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Assist failed: {e}")
 
+    _state["assist_log"].append({
+        "frame_id": frame_id,
+        "backend": body.backend,
+        "model_path": body.model_path if body.backend == "local" else None,
+        "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
+        "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
+        "conf": body.conf,
+        "detected_count": len(dets),
+        "created_at": datetime.now().isoformat(),
+    })
+    save_state()
+
     return {"detections": [d.to_dict() for d in dets]}
 
 
@@ -781,6 +798,63 @@ def list_models():
 @app.get("/api/classes")
 def list_classes():
     return {"class_names": CLASS_NAMES, "class_colors": CLASS_COLORS_HEX}
+
+
+# ────────────────────────────── Analytics ──────────────────────────────
+
+
+@app.get("/api/analytics")
+def analytics():
+    assist_log = _state.get("assist_log", [])
+    suggested_total = sum(int(e.get("detected_count", 0)) for e in assist_log)
+
+    frames = list(_state["frames"].values())
+    accepted_total = sum(
+        1
+        for f in frames
+        for d in f.get("detections", [])
+        if d.get("source") == "model"
+    )
+    rate_pct = round(accepted_total / suggested_total * 100, 1) if suggested_total else 0.0
+
+    job_history = [
+        {
+            "id": job["id"],
+            "backend": job.get("backend"),
+            "model_path": job.get("model_path"),
+            "workspace_name": job.get("workspace_name"),
+            "workflow_id": job.get("workflow_id"),
+            "conf": job.get("conf"),
+            "status": job.get("status"),
+            "frame_count": len(job.get("frame_ids", [])),
+            "detected_total": job.get("detected_total", 0),
+            "created_at": job.get("created_at"),  # None for jobs created before this field existed
+        }
+        for job in _state["detect_jobs"].values()
+    ]
+
+    pool = [{"has_detection": bool(f.get("detections"))} for f in frames]
+    dataset_stats = count_stats(pool)
+    reviewed_count = sum(1 for f in frames if f.get("reviewed"))
+
+    class_counts = {name: 0 for name in CLASS_NAMES}
+    for f in frames:
+        for d in f.get("detections", []):
+            name = d.get("class_name")
+            if name in class_counts:
+                class_counts[name] += 1
+
+    return {
+        "accept_rate": {
+            "suggested_total": suggested_total,
+            "accepted_total": accepted_total,
+            "rate_pct": rate_pct,
+            "assist_call_count": len(assist_log),
+        },
+        "detect_jobs": job_history,
+        "dataset": {**dataset_stats, "reviewed": reviewed_count},
+        "class_counts": class_counts,
+    }
 
 
 # ────────────────────────────── S-6 Export ──────────────────────────────

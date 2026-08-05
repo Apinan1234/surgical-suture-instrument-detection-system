@@ -573,3 +573,56 @@ main.wide {
   width: 240px;
   flex-shrink: 0;
 }
+
+.stat-tile-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.stat-tile {
+  flex: 1 1 120px;
+  background: var(--accent);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.stat-tile-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--highlight);
+}
+
+.stat-tile-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.data-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.class-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}

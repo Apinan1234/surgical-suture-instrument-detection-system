@@ -52,6 +52,7 @@ class Detection:
     y_center:   float
     width:      float
     height:     float
+    source:     str = "model"   # "model" (raw detector output) | "manual" (human-drawn/edited at save time)
 
     # ── YOLO label string ──────────────────────
     def to_yolo_str(self) -> str:
@@ -83,6 +84,7 @@ class Detection:
             "y_center":   round(self.y_center, 6),
             "width":      round(self.width,    6),
             "height":     round(self.height,   6),
+            "source":     self.source,
         }
 
 

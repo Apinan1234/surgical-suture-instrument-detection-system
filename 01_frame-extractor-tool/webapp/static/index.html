@@ -22,6 +22,7 @@
     <button class="tab" data-tab="detect">Detect</button>
     <button class="tab" data-tab="annotate">Annotate</button>
     <button class="tab" data-tab="export">Export</button>
+    <button class="tab" data-tab="analytics">Analytics</button>
   </div>
   <div style="display:flex; align-items:center; gap:8px;">
     <button id="theme-btn" class="icon-btn" title="Appearance">
@@ -414,6 +415,61 @@
         <div id="export-progress-label" style="font-size:13px; color:var(--muted);"></div>
         <button id="export-download-btn" class="btn-download hidden" style="margin-top:12px;">Download dataset as ZIP</button>
       </div>
+    </div>
+
+  </section>
+
+  <section id="analytics-section" class="hidden">
+
+    <div class="card">
+      <h2 style="margin-top:0;">AI-Assist Accept Rate</h2>
+      <div class="stat-tile-row">
+        <div class="stat-tile">
+          <div class="stat-tile-value" id="analytics-accept-rate">—</div>
+          <div class="stat-tile-label">Accept rate</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-value" id="analytics-suggested-total">—</div>
+          <div class="stat-tile-label">Boxes suggested</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-value" id="analytics-accepted-total">—</div>
+          <div class="stat-tile-label">Boxes accepted</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-value" id="analytics-assist-calls">—</div>
+          <div class="stat-tile-label">Assist calls</div>
+        </div>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-top:12px;">
+        Tracks Label Assist suggestions vs. what's currently saved as model-sourced, going forward from
+        when this tracking shipped — annotations made before that aren't counted.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Dataset Status</h2>
+      <div>
+        <span class="chip">📸 Frames: <span id="analytics-total-frames">—</span></span>
+        <span class="chip">🎯 With detections: <span id="analytics-with-detection">—</span></span>
+        <span class="chip">✅ Reviewed: <span id="analytics-reviewed">—</span></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Detections by Class</h2>
+      <table class="data-table" id="analytics-class-table">
+        <thead><tr><th>Class</th><th>Count</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Model / Detect-Job History</h2>
+      <table class="data-table" id="analytics-jobs-table">
+        <thead><tr><th>When</th><th>Backend</th><th>Model</th><th>Frames</th><th>Detected</th><th>Status</th></tr></thead>
+        <tbody></tbody>
+      </table>
     </div>
 
   </section>
