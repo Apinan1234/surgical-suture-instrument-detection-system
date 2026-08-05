@@ -8,6 +8,24 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+def _label_line(d: dict, task: str) -> str:
+    """One YOLO label line for a single detection dict (Detection.to_dict()-shaped)."""
+    if task == "segment":
+        pts = d.get("points")
+        if not pts or len(pts) < 3:
+            # legacy / bbox-only detection on this frame — fall back to the bbox's own 4 corners so a
+            # mixed dataset (some frames hand-polygoned, most still bbox-only) still exports as fully
+            # valid, trainable segmentation labels throughout.
+            x1 = d["x_center"] - d["width"] / 2
+            y1 = d["y_center"] - d["height"] / 2
+            x2 = d["x_center"] + d["width"] / 2
+            y2 = d["y_center"] + d["height"] / 2
+            pts = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+        coords = " ".join(f"{x:.6f} {y:.6f}" for x, y in pts)
+        return f"{d['class_id']} {coords}"
+    return f"{d['class_id']} {d['x_center']:.6f} {d['y_center']:.6f} {d['width']:.6f} {d['height']:.6f}"
+
+
 def export_dataset_pipeline(
     results: list[dict],
     output_dir: str,
@@ -16,9 +34,10 @@ def export_dataset_pipeline(
     include_empty: bool = True,
     as_zip: bool = False,
     seed: int = 42,
-    preprocess_config: dict = None, 
+    preprocess_config: dict = None,
     augment_config: dict = None,
-    progress_callback = None
+    progress_callback = None,
+    task: str = "detect",   # "detect" (bbox labels, unchanged/default) | "segment" (Ultralytics polygon labels)
 ) -> str:
     random.seed(seed)
     
@@ -46,8 +65,9 @@ def export_dataset_pipeline(
     do_resize = preprocess_config and preprocess_config.get("resize", False)
     resize_size = preprocess_config.get("resize_size", 640) if do_resize else None
     
-    # Augmentation pipeline using albumentations
-    do_augment = augment_config and augment_config.get("multiplier", 1) > 1
+    # Augmentation pipeline using albumentations — bbox-only (BboxParams below), so it never applies
+    # to a "segment" export even if a caller passed a stale multiplier > 1 in augment_config.
+    do_augment = task == "detect" and augment_config and augment_config.get("multiplier", 1) > 1
     multiplier = augment_config.get("multiplier", 1) if do_augment else 1
     
     transform = None
@@ -115,8 +135,8 @@ def export_dataset_pipeline(
             cv2.imwrite(str(img_dir / f"{save_name}.jpg"), img)
             
             with open(lbl_dir / f"{save_name}.txt", "w") as f:
-                for b, l in zip(bboxes, labels):
-                    f.write(f"{l} {b[0]:.6f} {b[1]:.6f} {b[2]:.6f} {b[3]:.6f}\n")
+                for d in item.get("detections", []):
+                    f.write(_label_line(d, task) + "\n")
             
             total_exported += 1
             if split_name == "train": train_count += 1
@@ -149,14 +169,15 @@ def export_dataset_pipeline(
                     done += 1
                     if progress_callback: progress_callback(done, total_ops)
 
-    _write_yaml(out / "data.yaml", class_names, out)
-    
+    _write_yaml(out / "data.yaml", class_names, out, task)
+
     summary = {
         "total_exported":  total_exported,
         "train":           train_count,
         "val":             val_count,
         "test":            test_count,
         "class_names":     class_names,
+        "task":            task,
     }
     (out / "export_summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -168,7 +189,17 @@ def export_dataset_pipeline(
 
     return str(out)
 
-def _write_yaml(path: Path, class_names: list[str], dataset_root: Path) -> None:
+def _write_yaml(path: Path, class_names: list[str], dataset_root: Path, task: str = "detect") -> None:
+    # NOTE: Ultralytics data.yaml has no `task:` key — it infers detect vs. segment from the model
+    # checkpoint / CLI command used at train time, not from this file. This comment is informational
+    # only, never a structural YAML key (a real `task:` key risks an "unknown key" warning).
+    comment = (
+        "# Labels in this dataset are in Ultralytics segmentation polygon format "
+        "(class x1 y1 x2 y2 ...). Train with the segment task/model, e.g. "
+        "`yolo segment train data=data.yaml model=yolov8n-seg.pt` — Ultralytics infers the task "
+        "from the model/CLI command, not from this file.\n"
+        if task == "segment" else ""
+    )
     try:
         import yaml  # type: ignore
         data = {
@@ -180,10 +211,12 @@ def _write_yaml(path: Path, class_names: list[str], dataset_root: Path) -> None:
             "names": class_names,
         }
         with open(path, "w", encoding="utf-8") as f:
+            if comment:
+                f.write(comment)
             yaml.dump(data, f, allow_unicode=True, default_flow_style=False,
                       sort_keys=False)
     except ImportError:
-        lines = [
+        lines = ([comment.rstrip("\n")] if comment else []) + [
             f"path: {str(dataset_root.resolve())}",
             "train: images/train",
             "val:   images/val",

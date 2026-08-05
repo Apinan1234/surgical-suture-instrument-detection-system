@@ -39,6 +39,21 @@ _DEFAULT_HEX = "#AAAAAA"
 CLASS_NAMES: list[str] = ["finger", "forcep", "needle", "needle_holder", "wound"]
 
 
+def polygon_bbox(points: list[list[float]]) -> tuple[float, float, float, float]:
+    """Normalized polygon vertices -> derived (x_center, y_center, width, height), all normalized [0,1].
+    Mirrors the JS `polygonToNormalizedBBox` in app.js exactly — keep both in sync if either changes."""
+    xs = [p[0] for p in points]
+    ys = [p[1] for p in points]
+    x1, x2 = min(xs), max(xs)
+    y1, y2 = min(ys), max(ys)
+    return (
+        min(1.0, max(0.0, (x1 + x2) / 2)),
+        min(1.0, max(0.0, (y1 + y2) / 2)),
+        min(1.0, max(0.001, x2 - x1)),   # 0.001 floor mirrors clampPos() in app.js / DetectionIn's gt=0.0
+        min(1.0, max(0.001, y2 - y1)),
+    )
+
+
 # ─────────────────────────────────────────────
 #  Data class
 # ─────────────────────────────────────────────
@@ -53,15 +68,37 @@ class Detection:
     width:      float
     height:     float
     source:     str = "model"   # "model" (raw detector output) | "manual" (human-drawn/edited at save time)
+    points:     list[list[float]] | None = None  # normalized [[x,y], ...] polygon vertices; None = plain bbox
+
+    def __post_init__(self):
+        # Server is authoritative: whenever a real polygon is present, the bbox fields are always
+        # the polygon's own derived bounding box — never whatever the caller happened to pass in.
+        if self.points and len(self.points) >= 3:
+            self.x_center, self.y_center, self.width, self.height = polygon_bbox(self.points)
 
     # ── YOLO label string ──────────────────────
     def to_yolo_str(self) -> str:
-        """คืน 1 บรรทัดสำหรับเขียนลงไฟล์ .txt"""
+        """คืน 1 บรรทัดสำหรับเขียนลงไฟล์ .txt (bbox format เท่านั้น — ดู to_yolo_seg_str() สำหรับ polygon)"""
         return (
             f"{self.class_id} "
             f"{self.x_center:.6f} {self.y_center:.6f} "
             f"{self.width:.6f} {self.height:.6f}"
         )
+
+    def _bbox_corners(self) -> list[tuple[float, float]]:
+        x1 = self.x_center - self.width / 2
+        y1 = self.y_center - self.height / 2
+        x2 = self.x_center + self.width / 2
+        y2 = self.y_center + self.height / 2
+        return [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
+
+    def to_yolo_seg_str(self) -> str:
+        """Ultralytics segmentation label line: 'class x1 y1 x2 y2 ... xn yn'.
+        Falls back to the bbox's own 4 corners when no real polygon was drawn, so a bbox-only
+        Detection still exports as a valid (rectangular) segmentation instance."""
+        pts = self.points if self.points and len(self.points) >= 3 else self._bbox_corners()
+        coords = " ".join(f"{x:.6f} {y:.6f}" for x, y in pts)
+        return f"{self.class_id} {coords}"
 
     # ── Pixel coordinates ──────────────────────
     def pixel_bbox(self, img_w: int, img_h: int) -> tuple[int, int, int, int]:
@@ -85,6 +122,7 @@ class Detection:
             "width":      round(self.width,    6),
             "height":     round(self.height,   6),
             "source":     self.source,
+            "points":     [[round(x, 6), round(y, 6)] for x, y in self.points] if self.points else None,
         }
 
 
@@ -115,15 +153,19 @@ class BaseDetector:
         font_scale: float = 0.55,
         thickness:  int   = 2,
     ) -> np.ndarray:
-        """วาด BBox + label บนภาพ (คืน copy — ไม่แก้ไขต้นฉบับ)"""
+        """วาด BBox/Polygon + label บนภาพ (คืน copy — ไม่แก้ไขต้นฉบับ)"""
         img = image_bgr.copy()
         h, w = img.shape[:2]
         for det in detections:
             color = CLASS_COLORS_BGR.get(det.class_name, _DEFAULT_BGR)
-            x1, y1, x2, y2 = det.pixel_bbox(w, h)
 
-            # กรอบ
-            cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
+            if det.points and len(det.points) >= 3:
+                pts = np.array([[int(x * w), int(y * h)] for x, y in det.points], dtype=np.int32)
+                cv2.polylines(img, [pts], isClosed=True, color=color, thickness=thickness)
+                x1, y1 = int(pts[:, 0].min()), int(pts[:, 1].min())  # label anchor = polygon's own top-left
+            else:
+                x1, y1, x2, y2 = det.pixel_bbox(w, h)
+                cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
 
             # Label background
             label = f"{det.class_name}  {det.confidence:.2f}"

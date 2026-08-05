@@ -676,11 +676,26 @@ class DetectionIn(BaseModel):
     width: float = Field(gt=0.0, le=1.0)
     height: float = Field(gt=0.0, le=1.0)
     source: Literal["model", "manual"] = "manual"
+    points: list[list[float]] | None = None
 
     @model_validator(mode="after")
     def _check_class(self):
         if self.class_name not in CLASS_NAMES:
             raise ValueError(f"Unknown class_name: {self.class_name}")
+        return self
+
+    @model_validator(mode="after")
+    def _check_points(self):
+        if self.points is None:
+            return self
+        if len(self.points) < 3:
+            raise ValueError("points must have at least 3 vertices")
+        for p in self.points:
+            if len(p) != 2:
+                raise ValueError("each point must be [x, y]")
+            x, y = p
+            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                raise ValueError("point coordinates must be within [0, 1]")
         return self
 
 
@@ -891,6 +906,7 @@ class ExportBody(BaseModel):
     detect_job_id: str
     version_name: str = Field(default="v1", max_length=64)
     reviewed_only: bool = False
+    task: Literal["detect", "segment"] = "detect"
     splits: SplitsIn = Field(default_factory=SplitsIn)
     preprocess: PreprocessIn = Field(default_factory=PreprocessIn)
     augment: AugmentIn = Field(default_factory=AugmentIn)
@@ -926,6 +942,9 @@ def _run_export_job(job_id: str, body: ExportBody):
             job["progress"] = round(done / total * 100, 1) if total else 100
 
         out_dir = EXPORTS_DIR / job_id
+        # Segmentation-format datasets can't be augmented by the bbox-only albumentations pipeline —
+        # force multiplier=1 here regardless of what the (also client-disabled) UI controls sent.
+        augment_config = body.augment.model_dump() if body.task == "detect" else {"multiplier": 1}
         zip_path = export_dataset_pipeline(
             results=pool,
             output_dir=str(out_dir),
@@ -934,8 +953,9 @@ def _run_export_job(job_id: str, body: ExportBody):
             include_empty=True,
             as_zip=True,
             preprocess_config={"resize": body.preprocess.resize, "resize_size": body.preprocess.resize_size},
-            augment_config=body.augment.model_dump(),
+            augment_config=augment_config,
             progress_callback=prog,
+            task=body.task,
         )
         job["zip_path"] = zip_path
         summary_path = out_dir / "export_summary.json"

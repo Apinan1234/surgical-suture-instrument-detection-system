@@ -246,6 +246,7 @@
       <div id="annotate-toolbar" class="hidden" style="display:flex; align-items:center; gap:12px; margin-top:12px;">
         <button id="annotate-tool-select-btn" class="btn-download" title="Select tool (V)">🖱 Select</button>
         <button id="annotate-tool-draw-btn" class="btn-download" title="Draw box tool (B)">▭ Draw</button>
+        <button id="annotate-tool-polygon-btn" class="btn-download" title="Polygon tool (P)">⬠ Polygon</button>
         <span id="annotate-review-status" class="chip">🔴 Needs Review</span>
         <button id="annotate-mark-reviewed-btn" class="btn-download">✅ Mark as Reviewed</button>
         <span style="font-size:12px; color:var(--muted); margin-left:auto;">Press ? for shortcuts</span>
@@ -355,6 +356,19 @@
     </div>
 
     <div class="card">
+      <h2 style="margin-top:0;">Export Format</h2>
+      <div class="checkbox-row">
+        <input type="radio" name="export-task" id="export-task-detect" value="detect" checked />
+        <label for="export-task-detect" style="margin:0;">Detect (bounding boxes)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="radio" name="export-task" id="export-task-segment" value="segment" />
+        <label for="export-task-segment" style="margin:0;">Segment (polygons — Ultralytics YOLO seg format)</label>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-top:4px;">Bbox-only detections export as their rectangle's 4 corners when Segment is selected, so a mixed dataset still trains.</div>
+    </div>
+
+    <div class="card">
       <h2 style="margin-top:0;">Train / Val / Test Split</h2>
       <div class="field-row">
         <div>
@@ -377,7 +391,7 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="export-augment-card">
       <h2 style="margin-top:0;">Augmentation</h2>
       <div class="checkbox-row">
         <input type="checkbox" id="export-aug-flip" checked />

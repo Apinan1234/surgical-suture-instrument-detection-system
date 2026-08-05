@@ -513,6 +513,22 @@ function rectToNormalized(x1, y1, x2, y2, imgW, imgH) {
   };
 }
 
+// Unlike rectToNormalized (which takes pixel coords + imgW/imgH), this operates on already-normalized
+// [0,1] polygon points directly — polygon points are stored normalized from the moment they're
+// committed, whereas box-drag gesture state is naturally tracked in pixel/image space mid-drag.
+// Mirrors detector.py's polygon_bbox() exactly — keep both in sync if either changes.
+function polygonToNormalizedBBox(points) {
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  const x1 = Math.min(...xs), x2 = Math.max(...xs);
+  const y1 = Math.min(...ys), y2 = Math.max(...ys);
+  return {
+    x_center: clamp01((x1 + x2) / 2),
+    y_center: clamp01((y1 + y2) / 2),
+    width: clampPos(x2 - x1),
+    height: clampPos(y2 - y1),
+  };
+}
+
 function hitTestHandles(imgPt, box, imgW, imgH, tolImg) {
   const handles = handlePositions(boxRectImg(box, imgW, imgH));
   for (const name in handles) {
@@ -522,7 +538,50 @@ function hitTestHandles(imgPt, box, imgW, imgH, tolImg) {
   return null;
 }
 
+// Polygon vertex hit-testing — returns the index of the vertex under imgPt, or null.
+function hitTestPolygonVertices(imgPt, box, imgW, imgH, tolImg) {
+  if (!box.points) return null;
+  for (let i = 0; i < box.points.length; i++) {
+    const [nx, ny] = box.points[i];
+    if (Math.abs(imgPt.x - nx * imgW) <= tolImg && Math.abs(imgPt.y - ny * imgH) <= tolImg) return i;
+  }
+  return null;
+}
+
+function distToSegment(pt, a, b) {
+  const abx = b.x - a.x, aby = b.y - a.y;
+  const lenSq = abx * abx + aby * aby;
+  let t = lenSq ? ((pt.x - a.x) * abx + (pt.y - a.y) * aby) / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(pt.x - (a.x + t * abx), pt.y - (a.y + t * aby));
+}
+
+// Nearest polygon edge to imgPt within tolImg — used for double-click-to-insert-vertex.
+function hitTestPolygonEdge(imgPt, box, imgW, imgH, tolImg) {
+  const pts = box.points.map(([x, y]) => ({ x: x * imgW, y: y * imgH }));
+  let best = null, bestDist = tolImg;
+  for (let i = 0; i < pts.length; i++) {
+    const d = distToSegment(imgPt, pts[i], pts[(i + 1) % pts.length]);
+    if (d <= bestDist) { bestDist = d; best = { afterIndex: i }; }
+  }
+  return best;
+}
+
+// Ray-casting point-in-polygon test, image-space pixel coordinates.
+function pointInPolygonImg(imgPt, normPoints, imgW, imgH) {
+  const pts = normPoints.map(([x, y]) => ({ x: x * imgW, y: y * imgH }));
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i].x, yi = pts[i].y, xj = pts[j].x, yj = pts[j].y;
+    const intersect = ((yi > imgPt.y) !== (yj > imgPt.y)) &&
+      (imgPt.x < (xj - xi) * (imgPt.y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 function hitTestBoxBody(imgPt, box, imgW, imgH) {
+  if (box.points && box.points.length >= 3) return pointInPolygonImg(imgPt, box.points, imgW, imgH);
   const rect = boxRectImg(box, imgW, imgH);
   return imgPt.x >= rect.x1 && imgPt.x <= rect.x2 && imgPt.y >= rect.y1 && imgPt.y <= rect.y2;
 }
@@ -659,6 +718,8 @@ const AnnotateState = (() => {
 
   function selectFrame(idx) {
     if (idx < 0 || idx >= frames.length) return;
+    const tool = Tools[activeTool];
+    if (tool && tool.onDeactivate) tool.onDeactivate(); // discard in-progress draw/drag before switching frames
     frameIdx = idx;
     boxes = hydrate(frames[idx].detections);
     selectedIds = new Set();
@@ -732,6 +793,14 @@ const AnnotateState = (() => {
     setBoxes(boxes.filter((b) => !idSet.has(b.id)));
   }
 
+  function deleteVertex(boxId, vIdx) {
+    const box = boxes.find((b) => b.id === boxId);
+    if (!box || !box.points || box.points.length <= 3) return; // floor: never drop below 3 points
+    const points = box.points.filter((_, i) => i !== vIdx);
+    const bbox = polygonToNormalizedBBox(points);
+    setBoxes(boxes.map((b) => (b.id === boxId ? { ...b, points, ...bbox } : b)));
+  }
+
   function reassignClassByIds(ids, className) {
     if (!ids.length) return;
     const idSet = new Set(ids);
@@ -784,7 +853,7 @@ const AnnotateState = (() => {
   return {
     subscribe, init, selectFrame, currentFrame, getBoxes, setBoxes, addBoxes,
     selectBox, selectBoxes, getSelected, isSelected, getSelectedIds, getSelectedCount,
-    reselectIfMissing, deleteBoxesByIds, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
+    reselectIfMissing, deleteBoxesByIds, deleteVertex, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
     setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
     findNextUnreviewedIndex, markReviewedLocal, setFrameDetections,
@@ -818,38 +887,55 @@ const Canvas = (() => {
 
   function drawBox(b) {
     const imgW = img.naturalWidth, imgH = img.naturalHeight;
-    const x1 = (b.x_center - b.width / 2) * imgW;
-    const y1 = (b.y_center - b.height / 2) * imgH;
-    const bw = b.width * imgW;
-    const bh = b.height * imgH;
     const color = classColors[b.class_name] || "#AAAAAA";
     const lw = 2 / cssScale;
     const isSelected = AnnotateState.isSelected(b.id);
+    const isPolygon = b.points && b.points.length >= 3;
 
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = lw;
     ctx.setLineDash(b._pending ? [6 / cssScale, 4 / cssScale] : []);
-    ctx.strokeRect(x1, y1, bw, bh);
+
+    let x1, y1, bw, bh, labelX, labelY;
+    if (isPolygon) {
+      const pts = b.points.map(([x, y]) => [x * imgW, y * imgH]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.stroke();
+      x1 = Math.min(...pts.map((p) => p[0]));
+      y1 = Math.min(...pts.map((p) => p[1]));
+    } else {
+      x1 = (b.x_center - b.width / 2) * imgW;
+      y1 = (b.y_center - b.height / 2) * imgH;
+      bw = b.width * imgW;
+      bh = b.height * imgH;
+      ctx.strokeRect(x1, y1, bw, bh);
+    }
     ctx.setLineDash([]);
 
     if (isSelected) {
       ctx.strokeStyle = "#2563eb";
       ctx.lineWidth = lw * 1.5;
       ctx.setLineDash([4 / cssScale, 2 / cssScale]);
-      ctx.strokeRect(x1 - lw, y1 - lw, bw + 2 * lw, bh + 2 * lw);
+      if (isPolygon) {
+        ctx.stroke(); // re-stroke the same path built above (still current — no beginPath since)
+      } else {
+        ctx.strokeRect(x1 - lw, y1 - lw, bw + 2 * lw, bh + 2 * lw);
+      }
       ctx.setLineDash([]);
     }
 
     ctx.fillStyle = color;
     ctx.font = `${13 / cssScale}px sans-serif`;
-    const labelY = y1 - 4 / cssScale > 10 / cssScale ? y1 - 4 / cssScale : y1 + 12 / cssScale;
+    labelY = y1 - 4 / cssScale > 10 / cssScale ? y1 - 4 / cssScale : y1 + 12 / cssScale;
     ctx.fillText(b.class_name, x1, labelY);
 
     if (b._pending && b.confidence < 0.5) {
       ctx.fillStyle = "#e94560"; // var(--highlight) — identical across every theme in style.css
-      const warnY = y1 + bh + 14 / cssScale < imgH ? y1 + bh + 14 / cssScale : y1 + bh - 4 / cssScale;
-      ctx.fillText(`⚠ ${b.confidence.toFixed(2)}`, x1, warnY);
+      ctx.fillText(`⚠ ${b.confidence.toFixed(2)}`, x1, labelY + 14 / cssScale);
     }
     ctx.restore();
   }
@@ -936,7 +1022,7 @@ const Canvas = (() => {
 
   function setSpaceHeld(v) {
     spaceHeld = v;
-    if (!panDragStart) setCursor(v ? "grab" : (AnnotateState.getActiveTool() === "draw_box" ? "crosshair" : "default"));
+    if (!panDragStart) setCursor(v ? "grab" : (["draw_box", "polygon"].includes(AnnotateState.getActiveTool()) ? "crosshair" : "default"));
   }
 
   function dispatch(method, e) {
@@ -979,9 +1065,25 @@ const Canvas = (() => {
     e.preventDefault();
     if (!img) return;
     const imgPt = screenToImage(e.clientX, e.clientY);
-    const hit = findTopBoxAt(imgPt, img.naturalWidth, img.naturalHeight);
+    const imgW = img.naturalWidth, imgH = img.naturalHeight;
+
+    const selected = AnnotateState.getSelected();
+    if (AnnotateState.getActiveTool() === "select" && selected && selected.points) {
+      const tolImg = HANDLE_PX / cssScale;
+      const vIdx = hitTestPolygonVertices(imgPt, selected, imgW, imgH, tolImg);
+      if (vIdx !== null) {
+        ContextMenu.openForVertex(e.clientX, e.clientY, selected, vIdx);
+        return;
+      }
+    }
+
+    const hit = findTopBoxAt(imgPt, imgW, imgH);
     if (hit) ContextMenu.openForBox(e.clientX, e.clientY, hit);
     else ContextMenu.close();
+  });
+  canvas.addEventListener("dblclick", (e) => {
+    if (e.button !== 0) return;
+    dispatch("onDoubleClick", e);
   });
 
   window.addEventListener("resize", () => resize());
@@ -1069,14 +1171,107 @@ const DrawBoxTool = (() => {
     cancel();
   }
 
-  return { onPointerDown, onPointerMove, onPointerUp, render, onActivate, onDeactivate, cancel };
+  return { onPointerDown, onPointerMove, onPointerUp, render, onActivate, onDeactivate, cancel, onEscape: cancel };
+})();
+
+// ── PolygonTool: click to add vertices; double-click/Enter to close (≥3 pts); Esc cancels ──
+
+const PolygonTool = (() => {
+  let points = null;    // array of {x,y} in IMAGE space while drawing
+  let cursorPt = null;  // live mouse position, for the rubber-band preview segment
+
+  function onPointerDown(e) {
+    if (!AnnotateState.currentFrame()) return;
+    const pt = Canvas.screenToImage(e.clientX, e.clientY);
+    if (!points) points = [];
+    points.push(pt);
+    cursorPt = pt;
+    Canvas.requestRender();
+  }
+
+  function onPointerMove(e) {
+    if (!points) return;
+    cursorPt = Canvas.screenToImage(e.clientX, e.clientY);
+    Canvas.requestRender();
+  }
+
+  function commit() {
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const normPoints = points.map((p) => [clamp01(p.x / imgW), clamp01(p.y / imgH)]);
+    const bbox = polygonToNormalizedBBox(normPoints);
+    const className = document.getElementById("annotate-class-select").value;
+    AnnotateState.addBoxes([{
+      id: makeId(),
+      class_id: classNames.indexOf(className),
+      class_name: className,
+      confidence: 1.0,
+      points: normPoints,
+      ...bbox,
+    }]);
+    cancel();
+  }
+
+  function onDoubleClick(e) {
+    if (!points) return;
+    // A double-click delivers TWO pointerdown events at ~the same spot; the 2nd one already pushed
+    // a near-duplicate point before this handler runs — drop it so we don't commit a degenerate
+    // zero-length final edge.
+    if (points.length >= 2) {
+      const a = points[points.length - 1], b = points[points.length - 2];
+      if (Math.hypot(a.x - b.x, a.y - b.y) * Canvas.getCssScale() < 5) points.pop();
+    }
+    if (points.length < 3) return; // no-op — keep drawing until there are enough vertices to close
+    commit();
+  }
+
+  // Called from the global Enter shortcut; returns true if it consumed the keypress.
+  function onEnter() {
+    if (!points) return false; // not drawing — let Enter behave normally (Save & Next)
+    if (points.length >= 3) commit();
+    return true; // consumed while a draw is in progress, even as a no-op with <3 points
+  }
+
+  function cancel() {
+    points = null;
+    cursorPt = null;
+    Canvas.requestRender();
+  }
+
+  function render(ctx) {
+    if (!points || !points.length) return;
+    const scale = Canvas.getCssScale();
+    const className = document.getElementById("annotate-class-select").value;
+    const color = classColors[className] || "#AAAAAA";
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 2 / scale;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+    if (cursorPt) ctx.lineTo(cursorPt.x, cursorPt.y);                          // live segment to cursor
+    if (points.length >= 3 && cursorPt) ctx.lineTo(points[0].x, points[0].y);  // preview closing edge
+    ctx.stroke();
+    points.forEach((p) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 3 / scale, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function onActivate() { Canvas.setCursor("crosshair"); }
+  function onDeactivate() { cancel(); }
+
+  return { onPointerDown, onPointerMove, onDoubleClick, onEnter, render, onActivate, onDeactivate, cancel, onEscape: cancel };
 })();
 
 // ── SelectTool: click to select, drag to move, drag a handle to resize ──
 
 const SelectTool = (() => {
-  let mode = null; // null | "move" | "resize" | "marquee"
+  let mode = null; // null | "move" | "resize" | "vertex-drag" | "marquee"
   let activeHandle = null;
+  let activeVertexIndex = null;
   let startImgPt = null;
   let startBox = null;
   let preDragBoxes = null;
@@ -1091,7 +1286,18 @@ const SelectTool = (() => {
     const tolImg = HANDLE_PX / Canvas.getCssScale();
 
     const selected = AnnotateState.getSelected();
-    if (selected) {
+    if (selected && selected.points) {
+      const vIdx = hitTestPolygonVertices(imgPt, selected, imgW, imgH, tolImg);
+      if (vIdx !== null) {
+        mode = "vertex-drag";
+        activeVertexIndex = vIdx;
+        startImgPt = imgPt;
+        startBox = { ...selected, points: selected.points.map((p) => [...p]) };
+        preDragBoxes = AnnotateState.getBoxes();
+        snapshotTaken = false;
+        return;
+      }
+    } else if (selected) {
       const handle = hitTestHandles(imgPt, selected, imgW, imgH, tolImg);
       if (handle) {
         mode = "resize";
@@ -1109,7 +1315,7 @@ const SelectTool = (() => {
       AnnotateState.selectBox(hit.id);
       mode = "move";
       startImgPt = imgPt;
-      startBox = { ...hit };
+      startBox = hit.points ? { ...hit, points: hit.points.map((p) => [...p]) } : { ...hit };
       preDragBoxes = AnnotateState.getBoxes();
       snapshotTaken = false;
     } else {
@@ -1128,7 +1334,13 @@ const SelectTool = (() => {
     const imgPt = Canvas.screenToImage(e.clientX, e.clientY);
     const tolImg = HANDLE_PX / Canvas.getCssScale();
     const selected = AnnotateState.getSelected();
-    if (selected) {
+    if (selected && selected.points) {
+      const vIdx = hitTestPolygonVertices(imgPt, selected, imgW, imgH, tolImg);
+      if (vIdx !== null) {
+        Canvas.setCursor("pointer");
+        return;
+      }
+    } else if (selected) {
       const handle = hitTestHandles(imgPt, selected, imgW, imgH, tolImg);
       if (handle) {
         Canvas.setCursor(CURSOR_BY_HANDLE[handle]);
@@ -1158,6 +1370,23 @@ const SelectTool = (() => {
     if (!snapshotTaken) {
       UndoManager.recordSnapshot(preDragBoxes);
       snapshotTaken = true;
+    }
+
+    if (mode === "vertex-drag") {
+      const points = startBox.points.map((p, i) => (i === activeVertexIndex
+        ? [clamp01((p[0] * imgW + dx) / imgW), clamp01((p[1] * imgH + dy) / imgH)]
+        : p));
+      const bbox = polygonToNormalizedBBox(points);
+      const boxes = AnnotateState.getBoxes().map((b) => (b.id === startBox.id ? { ...b, points, ...bbox } : b));
+      AnnotateState.setBoxes(boxes, { pushUndo: false });
+      return;
+    }
+    if (mode === "move" && startBox.points) {
+      const points = startBox.points.map((p) => [clamp01((p[0] * imgW + dx) / imgW), clamp01((p[1] * imgH + dy) / imgH)]);
+      const bbox = polygonToNormalizedBBox(points);
+      const boxes = AnnotateState.getBoxes().map((b) => (b.id === startBox.id ? { ...b, points, ...bbox } : b));
+      AnnotateState.setBoxes(boxes, { pushUndo: false });
+      return;
     }
 
     let { x1, y1, x2, y2 } = boxRectImg(startBox, imgW, imgH);
@@ -1199,10 +1428,25 @@ const SelectTool = (() => {
     }
     mode = null;
     activeHandle = null;
+    activeVertexIndex = null;
     startImgPt = null;
     startBox = null;
     preDragBoxes = null;
     snapshotTaken = false;
+  }
+
+  function onDoubleClick(e) {
+    const selected = AnnotateState.getSelected();
+    if (!selected || !selected.points) return;
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const imgPt = Canvas.screenToImage(e.clientX, e.clientY);
+    const tolImg = HANDLE_PX / Canvas.getCssScale();
+    const edge = hitTestPolygonEdge(imgPt, selected, imgW, imgH, tolImg);
+    if (!edge) return;
+    const points = selected.points.slice();
+    points.splice(edge.afterIndex + 1, 0, [clamp01(imgPt.x / imgW), clamp01(imgPt.y / imgH)]);
+    const bbox = polygonToNormalizedBBox(points);
+    AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) => (b.id === selected.id ? { ...b, points, ...bbox } : b)));
   }
 
   function nudgeSelected(dxSign, dySign, big) {
@@ -1211,8 +1455,15 @@ const SelectTool = (() => {
     const { w: imgW, h: imgH } = Canvas.getImageSize();
     if (!imgW || !imgH) return;
     const stepPx = big ? 10 : 1;
-    const nx = clamp01(selected.x_center + (dxSign * stepPx) / imgW);
-    const ny = clamp01(selected.y_center + (dySign * stepPx) / imgH);
+    const dxN = (dxSign * stepPx) / imgW, dyN = (dySign * stepPx) / imgH;
+    if (selected.points) {
+      const points = selected.points.map(([x, y]) => [clamp01(x + dxN), clamp01(y + dyN)]);
+      const bbox = polygonToNormalizedBBox(points);
+      AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) => (b.id === selected.id ? { ...b, points, ...bbox } : b)));
+      return;
+    }
+    const nx = clamp01(selected.x_center + dxN);
+    const ny = clamp01(selected.y_center + dyN);
     AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) =>
       b.id === selected.id ? { ...b, x_center: nx, y_center: ny } : b
     ));
@@ -1226,18 +1477,31 @@ const SelectTool = (() => {
     const selected = AnnotateState.getSelected();
     if (!selected) return;
     const { w: imgW, h: imgH } = Canvas.getImageSize();
-    const handles = handlePositions(boxRectImg(selected, imgW, imgH));
     const dpr = window.devicePixelRatio || 1;
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    Object.values(handles).forEach((h) => {
-      const pt = Canvas.imageToScreen(h.x, h.y);
-      ctx.fillStyle = "#ffffff";
-      ctx.strokeStyle = "#2563eb";
-      ctx.lineWidth = 1.5;
-      ctx.fillRect(pt.x - HANDLE_PX / 2, pt.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
-      ctx.strokeRect(pt.x - HANDLE_PX / 2, pt.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
-    });
+    if (selected.points) {
+      selected.points.forEach(([nx, ny]) => {
+        const pt = Canvas.imageToScreen(nx * imgW, ny * imgH);
+        ctx.beginPath();
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.arc(pt.x, pt.y, HANDLE_PX / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    } else {
+      const handles = handlePositions(boxRectImg(selected, imgW, imgH));
+      Object.values(handles).forEach((h) => {
+        const pt = Canvas.imageToScreen(h.x, h.y);
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(pt.x - HANDLE_PX / 2, pt.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+        ctx.strokeRect(pt.x - HANDLE_PX / 2, pt.y - HANDLE_PX / 2, HANDLE_PX, HANDLE_PX);
+      });
+    }
     ctx.restore();
   }
 
@@ -1248,6 +1512,7 @@ const SelectTool = (() => {
   function onDeactivate() {
     mode = null;
     activeHandle = null;
+    activeVertexIndex = null;
     preDragBoxes = null;
     snapshotTaken = false;
     marqueeStart = null;
@@ -1255,13 +1520,14 @@ const SelectTool = (() => {
   }
 
   return {
-    onPointerDown, onPointerMove, onPointerUp, render, onActivate, onDeactivate,
+    onPointerDown, onPointerMove, onPointerUp, onDoubleClick, render, onActivate, onDeactivate,
     nudgeSelected,
   };
 })();
 
 Tools.draw_box = DrawBoxTool;
 Tools.select = SelectTool;
+Tools.polygon = PolygonTool;
 
 // ── ContextMenu: right-click canvas → Delete / Reassign class (flat list, no submenus) ──
 
@@ -1299,6 +1565,27 @@ const ContextMenu = (() => {
     positionAt(clientX, clientY);
   }
 
+  function buildVertexRows(box, vIdx) {
+    el.innerHTML = "";
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    const canDelete = box.points.length > 3;
+    delBtn.textContent = "Delete vertex";
+    delBtn.disabled = !canDelete;
+    if (!canDelete) delBtn.title = "A polygon needs at least 3 points — delete the whole shape instead.";
+    delBtn.addEventListener("click", () => {
+      if (!canDelete) return;
+      AnnotateState.deleteVertex(box.id, vIdx);
+      close();
+    });
+    el.appendChild(delBtn);
+  }
+
+  function openForVertex(clientX, clientY, box, vIdx) {
+    buildVertexRows(box, vIdx);
+    positionAt(clientX, clientY);
+  }
+
   function close() { el.classList.remove("open"); }
   function isOpen() { return el.classList.contains("open"); }
 
@@ -1307,7 +1594,7 @@ const ContextMenu = (() => {
     if (isOpen() && e.button === 0 && !el.contains(e.target)) close();
   }, true);
 
-  return { openForBox, close, isOpen };
+  return { openForBox, openForVertex, close, isOpen };
 })();
 
 // ── Keyboard: one listener + one lookup table (also renders the "?" cheat-sheet) ──
@@ -1347,11 +1634,9 @@ const Keyboard = (() => {
   }
 
   function onEscape() {
-    if (AnnotateState.getActiveTool() === "draw_box") {
-      DrawBoxTool.cancel();
-    } else {
-      AnnotateState.selectBox(null);
-    }
+    const tool = Tools[AnnotateState.getActiveTool()];
+    if (tool && tool.onEscape) tool.onEscape();
+    else AnnotateState.selectBox(null);
   }
 
   function toggleCheatSheet() {
@@ -1369,6 +1654,7 @@ const Keyboard = (() => {
   const SHORTCUTS = [
     { key: "v", label: "V — Select tool", handler: () => AnnotateState.setActiveTool("select") },
     { key: "b", label: "B — Draw box tool", handler: () => AnnotateState.setActiveTool("draw_box") },
+    { key: "p", label: "P — Polygon tool", handler: () => AnnotateState.setActiveTool("polygon") },
     { key: "1", label: "1-5 — Set class", handler: () => setClassByNumber(1) },
     { key: "2", handler: () => setClassByNumber(2) },
     { key: "3", handler: () => setClassByNumber(3) },
@@ -1387,7 +1673,12 @@ const Keyboard = (() => {
     { key: "]", handler: () => navFrame(1) },
     { key: "a", label: "A — Run Assist", handler: () => document.getElementById("assist-run-btn").click() },
     { key: "r", label: "R — Toggle reviewed", handler: () => toggleReviewed() },
-    { key: "Enter", label: "Enter — Save & Next", handler: () => saveAndNext() },
+    { key: "Enter", label: "Enter — Save & Next (or close polygon while drawing)", handler: () => {
+        const tool = Tools[AnnotateState.getActiveTool()];
+        if (tool && tool.onEnter && tool.onEnter()) return; // tool consumed Enter (e.g. closed a polygon)
+        saveAndNext();
+      }
+    },
     { key: "Escape", label: "Esc — Cancel draw / deselect", handler: () => onEscape() },
     { key: "?", label: "? — Show this cheat-sheet", handler: () => toggleCheatSheet() },
   ];
@@ -1628,6 +1919,7 @@ function updateToolButtons() {
   const tool = AnnotateState.getActiveTool();
   document.getElementById("annotate-tool-select-btn").classList.toggle("active-tool", tool === "select");
   document.getElementById("annotate-tool-draw-btn").classList.toggle("active-tool", tool === "draw_box");
+  document.getElementById("annotate-tool-polygon-btn").classList.toggle("active-tool", tool === "polygon");
 }
 
 function updateBulkActionsBar() {
@@ -1672,6 +1964,7 @@ document.querySelector('.tab[data-tab="annotate"]').addEventListener("click", ()
 
 document.getElementById("annotate-tool-select-btn").addEventListener("click", () => AnnotateState.setActiveTool("select"));
 document.getElementById("annotate-tool-draw-btn").addEventListener("click", () => AnnotateState.setActiveTool("draw_box"));
+document.getElementById("annotate-tool-polygon-btn").addEventListener("click", () => AnnotateState.setActiveTool("polygon"));
 
 document.getElementById("annotate-bulk-delete-btn").addEventListener("click", () => AnnotateState.deleteSelectedBoxes());
 document.getElementById("annotate-bulk-class-select").addEventListener("change", (e) => {
@@ -1708,6 +2001,7 @@ async function saveCurrentFrame() {
     width: d.width,
     height: d.height,
     source: d.source || (d._pending ? "model" : "manual"),
+    points: d.points || null,
   }));
 
   const res = await Api.putDetections(frame.id, cleanBoxes);
@@ -1913,9 +2207,18 @@ function updateExportMaxSizeLabel() {
   const trainCount = Math.floor(total * tr);
   const valCount = Math.floor(total * va);
   const testCount = total - trainCount - valCount;
-  const mult = parseInt(document.getElementById("export-aug-multiplier").value, 10);
+  const isSegment = document.getElementById("export-task-segment").checked;
+  const mult = isSegment ? 1 : parseInt(document.getElementById("export-aug-multiplier").value, 10);
   const finalSize = trainCount * mult + valCount + testCount;
   document.getElementById("export-max-size-label").textContent = `Maximum Version Size: ${finalSize} images (${mult}x)`;
+}
+
+function updateExportTaskUI() {
+  const isSegment = document.getElementById("export-task-segment").checked;
+  const card = document.getElementById("export-augment-card");
+  card.style.opacity = isSegment ? "0.5" : "";
+  card.querySelectorAll("input").forEach((el) => { el.disabled = isSegment; });
+  updateExportMaxSizeLabel();
 }
 
 ["export-train-pct", "export-val-pct"].forEach((id) => {
@@ -1925,6 +2228,10 @@ document.getElementById("export-aug-multiplier").addEventListener("input", (e) =
   document.getElementById("export-aug-multiplier-label").textContent = e.target.value;
   updateExportMaxSizeLabel();
 });
+document.querySelectorAll('input[name="export-task"]').forEach((el) => {
+  el.addEventListener("change", updateExportTaskUI);
+});
+updateExportTaskUI();
 
 document.getElementById("export-start-btn").addEventListener("click", async () => {
   if (!currentDetectJobId) return;
@@ -1936,6 +2243,7 @@ document.getElementById("export-start-btn").addEventListener("click", async () =
     detect_job_id: currentDetectJobId,
     version_name: document.getElementById("export-version-name").value || "v1",
     reviewed_only: document.getElementById("export-reviewed-only").checked,
+    task: document.querySelector('input[name="export-task"]:checked').value,
     splits: { train: tr, val: va, test: te },
     preprocess: { resize: document.getElementById("export-resize").checked, resize_size: 640 },
     augment: {
