@@ -29,11 +29,13 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import os
 import random
 import shutil
 import sys
 import zipfile
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
@@ -99,6 +101,24 @@ def load_data_yaml(dataset_dir: Path) -> dict:
     return data
 
 
+def resolve_kpt_count(task: str, yaml_data: dict) -> int:
+    """0 for --task detect (bbox-only, unchanged default). For --task pose, reads kpt_shape: [n, 3]
+    from data.yaml — Roboflow's 'yolov8' pose export format includes this key (verified against
+    Roboflow's own docs) — and raises a clear error if it's missing/malformed rather than silently
+    parsing label lines at the wrong stride."""
+    if task != "pose":
+        return 0
+    kpt_shape = yaml_data.get("kpt_shape")
+    if not (isinstance(kpt_shape, list) and len(kpt_shape) == 2
+            and isinstance(kpt_shape[0], int) and kpt_shape[0] > 0 and kpt_shape[1] == 3):
+        raise ValueError(
+            f"--task pose requires data.yaml to have a valid 'kpt_shape: [n, 3]' key; got {kpt_shape!r}. "
+            f"If you downloaded with a bbox-only format, re-download with --format yolov8 from a "
+            f"Roboflow project that has keypoint (pose) annotations."
+        )
+    return kpt_shape[0]
+
+
 def resolve_split_images_dir(dataset_dir: Path, yaml_data: dict, split: str) -> Path | None:
     raw = yaml_data.get(split)
     if not raw:
@@ -152,12 +172,18 @@ def copy_train_split_for_balancing(orig_images_dir: Path, orig_labels_dir: Path,
     return images_copy, labels_copy
 
 
-def parse_labels_in_dir(images_dir: Path, labels_dir: Path, split: str, class_names: list[str]) -> list[dict]:
+def parse_labels_in_dir(images_dir: Path, labels_dir: Path, split: str, class_names: list[str],
+                         kpt_count: int = 0) -> list[dict]:
     """One dict per labeled instance: {split, image (full path str), class_id, class_name,
     x_center, y_center, width, height} — all normalized [0,1], read straight from the .txt files in a
     single images/labels directory pair. Split out of parse_yolo_labels() so callers can point it at
-    either the original dataset's val/test dirs or the train_balanced working copy's dirs."""
+    either the original dataset's val/test dirs or the train_balanced working copy's dirs.
+
+    kpt_count=0 (default): bbox-only, exactly 5 values/line — identical behavior to before pose
+    support was added, used for --task detect. kpt_count>0: pose labels, exactly 5 + kpt_count*3
+    values/line; the trailing triples become a 'keypoints': [[x,y,v], ...] list on the record dict."""
     records: list[dict] = []
+    expected_len = 5 + kpt_count * 3 if kpt_count > 0 else 5
     for img_path in sorted(images_dir.iterdir()):
         if img_path.suffix.lower() not in IMAGE_EXTS:
             continue
@@ -171,21 +197,26 @@ def parse_labels_in_dir(images_dir: Path, labels_dir: Path, split: str, class_na
             parts = line.split()
             if len(parts) < 5:
                 continue
-            if len(parts) > 5:
-                print(f"[warn] {label_path.name}: {len(parts)} values (expected 5 for bbox format) — "
-                      f"skipping; is --format a detection export, not segmentation/pose?")
+            if len(parts) != expected_len:
+                kind = f"pose (kpt_count={kpt_count})" if kpt_count > 0 else "bbox"
+                print(f"[warn] {label_path.name}: {len(parts)} values (expected {expected_len} for "
+                      f"{kind} format) — skipping; is --format/--task correct?")
                 continue
             cid = int(parts[0])
             x, y, w, h = (float(v) for v in parts[1:5])
             name = class_names[cid] if cid < len(class_names) else str(cid)
-            records.append({
+            record = {
                 "split": split, "image": str(img_path), "class_id": cid, "class_name": name,
                 "x_center": x, "y_center": y, "width": w, "height": h,
-            })
+            }
+            if kpt_count > 0:
+                kp = [float(v) for v in parts[5:]]
+                record["keypoints"] = [[kp[i * 3], kp[i * 3 + 1], int(kp[i * 3 + 2])] for i in range(kpt_count)]
+            records.append(record)
     return records
 
 
-def parse_yolo_labels(dataset_dir: Path, yaml_data: dict) -> list[dict]:
+def parse_yolo_labels(dataset_dir: Path, yaml_data: dict, kpt_count: int = 0) -> list[dict]:
     """All splits from the original dataset_dir, read-only. Used only for the pre-balance train count
     (always safe to read) — the post-balance ground-truth log reads train from the working copy instead,
     see main()."""
@@ -196,7 +227,7 @@ def parse_yolo_labels(dataset_dir: Path, yaml_data: dict) -> list[dict]:
         if images_dir is None:
             continue
         labels_dir = labels_dir_for(images_dir)
-        records.extend(parse_labels_in_dir(images_dir, labels_dir, split, class_names))
+        records.extend(parse_labels_in_dir(images_dir, labels_dir, split, class_names, kpt_count))
     return records
 
 
@@ -294,6 +325,39 @@ def balance_train_split(
     }
 
 
+# ────────────────────────────── Keypoint angle math (pose task only) ──────────────────────────────
+
+def keypoint_angle_deg(dx: float, dy: float) -> float:
+    """Orientation angle in DEGREES for a base->tip direction vector, image/screen coordinate
+    convention: 0deg=+x (right), 90deg=+y (down) — y grows downward, NOT flipped to "math" convention.
+    MUST mirror webapp/static/app.js's keypointAngleDeg() bit-for-bit (same atan2(dy,dx) formula) or
+    the webapp's displayed angle and this script's CSV-logged angle become incomparable for the same
+    annotation. Range: (-180, 180]."""
+    return math.degrees(math.atan2(dy, dx))
+
+
+def keypoint_pair_angle_deg(keypoints: list[list[float]] | None, img_w: int, img_h: int) -> float | None:
+    """Angle for a 2-keypoint [[x,y,v],[x,y,v]] instance (normalized [0,1], base=index 0, tip=index 1),
+    or None if not exactly 2 keypoints or either point has v==0 (not-labeled placeholder). img_w/img_h
+    de-normalize x and y on their own separate axis before the angle math."""
+    if not keypoints or len(keypoints) != 2:
+        return None
+    (bx, by, bv), (tx, ty, tv) = keypoints
+    if bv == 0 or tv == 0:
+        return None
+    return keypoint_angle_deg((tx - bx) * img_w, (ty - by) * img_h)
+
+
+@lru_cache(maxsize=None)
+def _image_size(path_str: str) -> tuple[int, int]:
+    """(width, height) of an image file, memoized so multiple instances sharing one image (the common
+    case) don't reopen/re-decode it repeatedly. PIL.Image.open().size is a header-only read (no full
+    pixel decode). Both Pillow and ultralytics are already installed in webapp/.venv — no new deps."""
+    from PIL import Image
+    with Image.open(path_str) as im:
+        return im.size
+
+
 # ────────────────────────────── Position logging ──────────────────────────────
 
 def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
@@ -304,20 +368,46 @@ def _write_csv(path: Path, rows: list[dict], fieldnames: list[str]) -> None:
         writer.writerows(rows)
 
 
-def log_ground_truth_positions(records: list[dict], out_path: Path) -> int:
-    rows = [{
-        "split": r["split"], "image": Path(r["image"]).name, "class_id": r["class_id"],
-        "class_name": r["class_name"], "x_center": round(r["x_center"], 6),
-        "y_center": round(r["y_center"], 6), "width": round(r["width"], 6), "height": round(r["height"], 6),
-    } for r in records]
-    _write_csv(out_path, rows, ["split", "image", "class_id", "class_name", "x_center", "y_center", "width", "height"])
+def log_ground_truth_positions(records: list[dict], out_path: Path, task: str = "detect") -> int:
+    pose = task == "pose"
+    rows = []
+    for r in records:
+        row = {
+            "split": r["split"], "image": Path(r["image"]).name, "class_id": r["class_id"],
+            "class_name": r["class_name"], "x_center": round(r["x_center"], 6),
+            "y_center": round(r["y_center"], 6), "width": round(r["width"], 6), "height": round(r["height"], 6),
+        }
+        if pose:
+            # A v==0 point's own x/y/v are blanked too (not just the angle) — dataset_exporter.py's
+            # own pose export zero-pads unlabeled points as [0.0, 0.0, 0], so a v==0 coordinate is a
+            # dummy placeholder, not real data worth logging.
+            base_x = base_y = base_v = tip_x = tip_y = tip_v = angle = ""
+            kpts = r.get("keypoints")
+            if kpts and len(kpts) == 2:
+                (bx, by, bv), (tx, ty, tv) = kpts
+                if bv != 0:
+                    base_x, base_y, base_v = round(bx, 6), round(by, 6), int(bv)
+                if tv != 0:
+                    tip_x, tip_y, tip_v = round(tx, 6), round(ty, 6), int(tv)
+                if bv != 0 and tv != 0:
+                    img_w, img_h = _image_size(r["image"])  # r["image"] is a full path here
+                    angle = round(keypoint_pair_angle_deg(kpts, img_w, img_h), 2)
+            row.update({"base_x": base_x, "base_y": base_y, "base_v": base_v,
+                        "tip_x": tip_x, "tip_y": tip_y, "tip_v": tip_v, "angle_deg": angle})
+        rows.append(row)
+
+    fieldnames = ["split", "image", "class_id", "class_name", "x_center", "y_center", "width", "height"]
+    if pose:
+        fieldnames += ["base_x", "base_y", "base_v", "tip_x", "tip_y", "tip_v", "angle_deg"]
+    _write_csv(out_path, rows, fieldnames)
     return len(rows)
 
 
 def log_predicted_positions(weights_path: Path, image_dirs: list[Path], class_names: list[str],
-                             conf: float, device: str, out_path: Path) -> int:
+                             conf: float, device: str, out_path: Path, task: str = "detect") -> int:
     from ultralytics import YOLO
     model = YOLO(str(weights_path))
+    pose = task == "pose"
 
     image_paths: list[Path] = []
     for d in image_dirs:
@@ -328,17 +418,39 @@ def log_predicted_positions(weights_path: Path, image_dirs: list[Path], class_na
     for img_path in tqdm(image_paths, desc="Predicting"):
         results = model.predict(str(img_path), conf=conf, device=device, verbose=False)
         for r in results:
-            for box in r.boxes:
+            img_h, img_w = r.orig_shape  # Ultralytics: (height, width), NOT (width, height)
+            kpts_xyn = r.keypoints.xyn if (pose and r.keypoints is not None) else None
+            has_pair = kpts_xyn is not None and kpts_xyn.shape[1] == 2  # exactly 2 kpts/instance
+
+            for i, box in enumerate(r.boxes):
                 cid = int(box.cls[0])
                 name = class_names[cid] if cid < len(class_names) else str(cid)
                 x, y, w, h = (float(v) for v in box.xywhn[0].tolist())
-                rows.append({
+                row = {
                     "image": img_path.name, "class_id": cid, "class_name": name,
                     "confidence": round(float(box.conf[0]), 4),
                     "x_center": round(x, 6), "y_center": round(y, 6),
                     "width": round(w, 6), "height": round(h, 6),
-                })
-    _write_csv(out_path, rows, ["image", "class_id", "class_name", "confidence", "x_center", "y_center", "width", "height"])
+                }
+                if pose:
+                    # No visibility (v) concept on predictions — angle is always computed when 2
+                    # keypoints were predicted, never suppressed the way a v=0 ground-truth point
+                    # suppresses it (that's a training-label-only concept).
+                    base_x = base_y = tip_x = tip_y = angle = ""
+                    if has_pair:
+                        # r.keypoints.xyn is index-aligned with r.boxes (Ultralytics Results object).
+                        bx, by = (float(v) for v in kpts_xyn[i][0].tolist())
+                        tx, ty = (float(v) for v in kpts_xyn[i][1].tolist())
+                        base_x, base_y, tip_x, tip_y = round(bx, 6), round(by, 6), round(tx, 6), round(ty, 6)
+                        angle = round(keypoint_angle_deg((tx - bx) * img_w, (ty - by) * img_h), 2)
+                    row.update({"base_x": base_x, "base_y": base_y, "tip_x": tip_x, "tip_y": tip_y,
+                                "angle_deg": angle})
+                rows.append(row)
+
+    fieldnames = ["image", "class_id", "class_name", "confidence", "x_center", "y_center", "width", "height"]
+    if pose:
+        fieldnames += ["base_x", "base_y", "tip_x", "tip_y", "angle_deg"]
+    _write_csv(out_path, rows, fieldnames)
     return len(rows)
 
 
@@ -356,6 +468,10 @@ def write_working_data_yaml(yaml_data: dict, train_images_dir: Path, val_images_
         data["val"] = str(val_images_dir)
     if test_images_dir:
         data["test"] = str(test_images_dir)
+    if "kpt_shape" in yaml_data:
+        # --task pose: Ultralytics needs this key present at train time, not inferred from labels
+        # alone — without it, training would silently fall back to a detect head.
+        data["kpt_shape"] = yaml_data["kpt_shape"]
     path = output_dir / "data.yaml"
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
@@ -428,16 +544,23 @@ def main():
     parser.add_argument("--version", type=int)
     parser.add_argument("--api-key", default=os.environ.get("ROBOFLOW_API_KEY"),
                          help="Roboflow API key — never hardcode; defaults to $ROBOFLOW_API_KEY")
-    parser.add_argument("--format", dest="fmt", default="yolov5pytorch",
-                         help="Roboflow export format string. Default 'yolov5pytorch' is confirmed by "
-                              "Roboflow's own docs and produces the same plain YOLO txt/data.yaml format "
-                              "Ultralytics YOLOv8/v11 trains on. Try 'yolov8' if you know your workspace "
-                              "supports it.")
+    parser.add_argument("--task", choices=["detect", "pose"], default="detect",
+                         help="'detect' (bbox-only, default — 100%% unchanged behavior for every "
+                              "existing invocation) or 'pose' (2-keypoint base/tip labels — auto-"
+                              "switches --format to 'yolov8' and --model to 'yolo11n-pose.pt' unless "
+                              "explicitly overridden, and adds base/tip/angle_deg columns to both CSVs).")
+    parser.add_argument("--format", dest="fmt", default=None,
+                         help="Roboflow export format string. Defaults to 'yolov5pytorch' for --task "
+                              "detect (confirmed by Roboflow's own docs — same plain YOLO txt/data.yaml "
+                              "format Ultralytics YOLOv8/v11 trains on), or 'yolov8' for --task pose "
+                              "(the Roboflow format that includes keypoints + a kpt_shape key in "
+                              "data.yaml). Pass explicitly to override either default.")
     parser.add_argument("--dataset-dir", default="./roboflow_dataset")
     parser.add_argument("--skip-download", action="store_true",
                          help="reuse an already-downloaded dataset at --dataset-dir (must contain data.yaml) "
                               "instead of fetching from Roboflow")
-    parser.add_argument("--model", default="yolo11n.pt")
+    parser.add_argument("--model", default=None,
+                         help="Defaults to yolo11n.pt (--task detect) or yolo11n-pose.pt (--task pose).")
     parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--batch", type=int, default=16)
@@ -452,6 +575,12 @@ def main():
     parser.add_argument("--skip-train", action="store_true",
                          help="download + balance + log ground truth only; skip training/prediction (dry run)")
     args = parser.parse_args()
+
+    args.fmt = args.fmt or ("yolov8" if args.task == "pose" else "yolov5pytorch")
+    args.model = args.model or ("yolo11n-pose.pt" if args.task == "pose" else "yolo11n.pt")
+    if args.task == "pose":
+        print(f"[info] --task pose selected — using Roboflow export format '{args.fmt}' "
+              f"(includes keypoints + kpt_shape) and model '{args.model}'.")
 
     dataset_dir = Path(args.dataset_dir).resolve()
     output_dir = Path(args.output_dir).resolve()
@@ -474,13 +603,17 @@ def main():
         class_names = yaml_data["names"]
         print(f"[info] classes: {class_names}")
 
+        kpt_count = resolve_kpt_count(args.task, yaml_data)
+        if args.task == "pose":
+            print(f"[info] task=pose kpt_count={kpt_count}")
+
         orig_train_images = resolve_split_images_dir(dataset_dir, yaml_data, "train")
         if orig_train_images is None:
             print("[error] could not resolve the train split's images directory from data.yaml", file=sys.stderr)
             sys.exit(1)
         orig_train_labels = labels_dir_for(orig_train_images)
 
-        before_records = parse_labels_in_dir(orig_train_images, orig_train_labels, "train", class_names)
+        before_records = parse_labels_in_dir(orig_train_images, orig_train_labels, "train", class_names, kpt_count)
         print(f"[info] train class counts before balancing: {compute_class_counts(before_records)}")
 
         # Non-destructive: every mutation below targets this working copy only, never dataset_dir itself
@@ -488,7 +621,7 @@ def main():
         train_copy_images, train_copy_labels = copy_train_split_for_balancing(orig_train_images, orig_train_labels, output_dir)
         print(f"[info] original dataset untouched — balancing a working copy at {train_copy_images.parent}")
 
-        copy_records = parse_labels_in_dir(train_copy_images, train_copy_labels, "train", class_names)
+        copy_records = parse_labels_in_dir(train_copy_images, train_copy_labels, "train", class_names, kpt_count)
         report = balance_train_split(copy_records, seed=args.seed,
                                       max_drop_fraction=args.max_drop_fraction,
                                       imbalance_threshold=args.imbalance_threshold,
@@ -497,15 +630,15 @@ def main():
 
         # Ground-truth log: re-parse the working copy (post-balance) for train, and the ORIGINAL for
         # val/test — val/test are never modified, so reading the original for them is always accurate.
-        post_balance_train = parse_labels_in_dir(train_copy_images, train_copy_labels, "train", class_names)
+        post_balance_train = parse_labels_in_dir(train_copy_images, train_copy_labels, "train", class_names, kpt_count)
         val_images = resolve_split_images_dir(dataset_dir, yaml_data, "val")
         test_images = resolve_split_images_dir(dataset_dir, yaml_data, "test")
-        val_records = parse_labels_in_dir(val_images, labels_dir_for(val_images), "val", class_names) if val_images else []
-        test_records = parse_labels_in_dir(test_images, labels_dir_for(test_images), "test", class_names) if test_images else []
+        val_records = parse_labels_in_dir(val_images, labels_dir_for(val_images), "val", class_names, kpt_count) if val_images else []
+        test_records = parse_labels_in_dir(test_images, labels_dir_for(test_images), "test", class_names, kpt_count) if test_images else []
         all_records = post_balance_train + val_records + test_records
 
         gt_path = output_dir / "ground_truth_positions.csv"
-        n_gt = log_ground_truth_positions(all_records, gt_path)
+        n_gt = log_ground_truth_positions(all_records, gt_path, task=args.task)
         print(f"[log] wrote {n_gt} ground-truth instance rows to {gt_path}")
 
         if args.skip_train:
@@ -521,7 +654,7 @@ def main():
 
         pred_path = output_dir / "predicted_positions.csv"
         n_pred = log_predicted_positions(best_weights, [d for d in (val_images, test_images) if d],
-                                          class_names, args.conf, args.device, pred_path)
+                                          class_names, args.conf, args.device, pred_path, task=args.task)
         print(f"[log] wrote {n_pred} predicted instance rows to {pred_path}")
 
     except Exception as e:
