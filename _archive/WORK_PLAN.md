@@ -156,13 +156,21 @@ chip แบบ rounded-pill (ใช้กับ detection confidence chip ใน
 - **AI-assist trigger** (ต่อกับ S-8 เดิม)
 - **Accept All / Reject All** — จัดการกล่อง `source="model"` ทั้งหมดในเฟรมทีเดียว แทนที่จะกดทีละกล่องแบบ Roboflow
 
-**ตั้งใจไม่ทำตอนนี้** (พร้อมเหตุผล): Polygon/Smart-Polygon (SAM) — `dataset_exporter.py` เขียนออกเป็น YOLO bbox
-`.txt` เท่านั้น ไม่มี use case segmentation จริง · Keypoint/Pose — ไม่มี class ท่าทางใน `CLASS_NAMES`, และ
-`WF-3` (gesture) ที่ backlog ไว้แนะนำให้ลอง bbox pipeline ก่อนอยู่แล้ว · Foundation model (SAM) แยกต่างหาก —
-loop retrain (train→assist→review→retrain) แก้ปัญหาเดียวกันด้วยวิธีของแอปเองอยู่แล้ว ไม่ต้องเพิ่ม dependency
-หนักอีกตัว · Occlusion/truncation attribute — YOLO format ไม่มีที่เก็บ ต้องมีหลักฐานว่าปัญหาจริงมาจากเรื่องนี้ก่อน
-· Video track-based interpolation — ใหญ่กว่าที่เห็น (ต้องมี tracker) และ "copy จากเฟรมก่อนหน้า" ได้ประโยชน์
-ส่วนใหญ่ไปแล้วด้วยต้นทุนต่ำกว่ามาก
+**[อัปเดต 2026-08-08] Polygon/segmentation และ Keypoint/Pose ทำเสร็จแล้ว** — ทั้งสองรายการที่เดิมระบุว่า
+"ตั้งใจไม่ทำตอนนี้" ด้านล่างนี้ ได้ implement + verify + commit + push จริงแล้ว: Polygon/segmentation tool
+(2026-08-06, commit `20e945e`) และ Keypoint/pose tool (2026-08-08, commit `4d6332c`) ทั้งคู่มี export mode
+จริง (`task=segment`/`task=pose`) เขียน label ตาม Ultralytics format จริง ไม่ใช่แค่ annotation เฉยๆ ตามที่
+เอกสารนี้เคยตั้งใจเลื่อนไว้ (เหตุผลเดิมที่ระบุว่า `dataset_exporter.py` เขียนได้แค่ bbox ไม่จริงแล้ว) รายละเอียด
+เต็มอยู่ใน memory `project_videoframeextractor_web_rewrite.md` (ค้นหา "Phase 3 item 1/6"/"Phase 3 item 2/6")
+ไม่ใช่เอกสารนี้ — เอกสารนี้เก็บไว้เป็น design rationale ต้นฉบับ ไม่อัปเดตรายละเอียด implementation ย้อนหลัง
+
+**ตั้งใจไม่ทำตอนนี้ (ยังเหลืออยู่จริง)**: SAM-assisted auto-box (foundation model) — loop retrain
+(train→assist→review→retrain) แก้ปัญหาเดียวกันด้วยวิธีของแอปเองอยู่แล้ว ไม่ต้องเพิ่ม dependency หนักอีกตัว ·
+OBB (Oriented Bounding Box) — พูดคุยกันแล้ว 2026-08-08 ตอนคุยเรื่องแท็กทิศทางนิ้วที่หมุน แต่เลือกใช้ 2-keypoint
+(base+tip) + คำนวณมุมทีหลังแทน เพราะ reuse keypoint tool ที่มีอยู่แล้วได้เลย ไม่ต้องสร้าง tool ใหม่ · Occlusion/
+truncation attribute — YOLO format ไม่มีที่เก็บ ต้องมีหลักฐานว่าปัญหาจริงมาจากเรื่องนี้ก่อน · Video track-based
+interpolation — ใหญ่กว่าที่เห็น (ต้องมี tracker) และ "copy จากเฟรมก่อนหน้า" ได้ประโยชน์ส่วนใหญ่ไปแล้วด้วยต้นทุน
+ต่ำกว่ามาก · OCR — ยังไม่มีการพูดคุยขอบเขตจริง
 
 ### 2. AI-Assisted Annotation Loop (ครบวงจร)
 
@@ -236,9 +244,11 @@ sequential เดิมใน background thread ต่อไป ไม่เพ�
 **Phase 2 (ถัดไป)**: multi-select/rubber-band + bulk delete/reassign, right-click context menu, toggle
 "auto-assist ตอนเปิดเฟรม", occlusion/truncation attribute ต่อกล่อง, หน้า analytics เวอร์ชันโมเดล/accept-rate
 
-**Phase 3 (ตั้งใจเลื่อนไปก่อน แต่ architecture ต้องไม่ปิดกั้น)**: polygon/segmentation tool, keypoint/pose tool,
-SAM-assisted auto-box, OCR, video track-based annotation, multi-user concurrency — Tool abstraction ในข้อ 4
-ออกแบบมาเพื่อให้เพิ่มสิ่งเหล่านี้ทีหลังได้โดยไม่ต้องเขียน canvas engine ใหม่
+**Phase 3 (ตั้งใจเลื่อนไปก่อน แต่ architecture ต้องไม่ปิดกั้น)**: ~~polygon/segmentation tool~~ (เสร็จแล้ว
+2026-08-06, `20e945e`), ~~keypoint/pose tool~~ (เสร็จแล้ว 2026-08-08, `4d6332c`), SAM-assisted auto-box, OCR,
+video track-based annotation, multi-user concurrency, OBB (oriented bounding box — เพิ่มเข้ามาในลิสต์
+2026-08-08) — Tool abstraction ในข้อ 4 ออกแบบมาเพื่อให้เพิ่มสิ่งเหล่านี้ทีหลังได้โดยไม่ต้องเขียน canvas engine
+ใหม่ พิสูจน์แล้วจริงกับ 2 รายการแรกที่ทำเสร็จ — ไม่ต้องแก้ `Canvas`/event wiring เลยแม้แต่บรรทัดเดียว
 
 ---
 

@@ -1,11 +1,16 @@
 Handoff document saved to:
 
-C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\afd3ac14-25f9-46c4-9913-52241df16558\scratchpad\handoff-videoframeextractor-keypoint-tool-roboflow-training-2026-08-08.md
+C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\afd3ac14-25f9-46c4-9913-52241df16558\scratchpad\handoff-videoframeextractor-experiment-tracking-2026-08-08.md
 
-Summary: the working tree is clean and fully pushed (origin/main at 16b7f03) — the keypoint/pose
-annotation tool (Phase 3 item 2/6) and a new standalone train_roboflow_yolo.py training script are both
-shipped, nothing left pending. The doc references the plan file and updated project memory rather than
-duplicating their content, and covers the mid-session scope additions (rotating-finger orientation
-research, Roboflow free-plan research, a corrected class-balancing direction sent to a running Plan agent
-mid-flight), the OBB task explicitly deferred as a future item, and a new claude-in-chrome technique
-(calling Tool functions directly instead of dispatching synthetic DOM events) worth reusing.
+Summary: working tree is NOT clean this time (unlike previous handoffs) — a real destructive bug was found
+and fixed (dataset balancing was deleting real files from the user's manually-downloaded Roboflow dataset;
+now non-destructive with a runtime safety assertion, hash-verified), and a full Jupyter experiment-tracking
+notebook (train_yolo_experiment.ipynb + experiment_tracking.py) was built and verified twice against real
+data per a detailed user spec. A real 100-epoch training run was authorized, started, then explicitly
+paused mid-run (user is adding more data first) — all processes killed cleanly, partial artifacts removed,
+original dataset confirmed untouched. A small real 10-epoch test model already exists separately and is in
+active use for web testing, unaffected by any of this. Several files are uncommitted pending the user's
+go-ahead. Next web-app task is undecided — user was mid-review of an options list when this handoff was
+requested; resume that question rather than re-deriving it.
+
+Note (not committed as of this pointer update — this file itself is part of the pending uncommitted work).
