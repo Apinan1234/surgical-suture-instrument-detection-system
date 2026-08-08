@@ -6,3 +6,4 @@ webapp/.venv/
 __pycache__/
 roboflow_dataset/
 runs/
+models/

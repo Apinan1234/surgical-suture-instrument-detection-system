@@ -271,6 +271,25 @@ async function refreshModelOptions() {
   });
 }
 
+document.getElementById("model-upload-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await apiFetch("/api/models", { method: "POST", body: formData });
+  if (res.ok) {
+    const data = await res.json();
+    await refreshModelOptions();
+    document.getElementById("model-path").value = data.uploaded;
+  } else {
+    const body = await res.json().catch(() => ({}));
+    alert(body.detail || "Upload failed");
+  }
+  e.target.value = "";
+});
+
 let classNames = [];
 
 async function refreshClasses() {

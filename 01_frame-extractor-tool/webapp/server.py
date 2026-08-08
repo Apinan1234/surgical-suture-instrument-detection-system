@@ -44,7 +44,11 @@ VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
 BACKUPS_DIR = DATA_DIR / "backups"
 EXPORTS_DIR = DATA_DIR / "exports"
-for d in (VIDEOS_DIR, FRAMES_DIR, BACKUPS_DIR, EXPORTS_DIR):
+# Deliberately under TOOL_DIR, not DATA_DIR: _resolve_model_path()'s containment check (below) is
+# anchored to TOOL_DIR, and DATA_DIR is env-overridable for deployment — keeping MODELS_DIR under the
+# same root the security check already trusts means that check needs zero changes for uploaded models.
+MODELS_DIR = TOOL_DIR / "models"
+for d in (VIDEOS_DIR, FRAMES_DIR, BACKUPS_DIR, EXPORTS_DIR, MODELS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 STATE_PATH = WEBAPP_DIR / "state.json"
@@ -824,9 +828,55 @@ def assist_frame(frame_id: str, body: AssistBody):
     return {"detections": [d.to_dict() for d in dets]}
 
 
+# ────────────────────────────── S-7 Models ──────────────────────────────
+
+
+def _scan_models() -> list[str]:
+    """Every .pt reachable for backend="local": top-level TOOL_DIR (pretrained convention, e.g.
+    yolo11n.pt), MODELS_DIR (uploads), and runs/ (already-trained outputs from
+    train_roboflow_yolo.py / experiment_tracking.py — surfaced automatically, no manual copying).
+    Returned as relative-to-TOOL_DIR POSIX path strings, not bare names: once runs/ is included,
+    multiple best.pt/last.pt share a filename across different run folders, so bare names would
+    collide/be ambiguous. _resolve_model_path() already resolves values like this correctly."""
+    paths = set(TOOL_DIR.glob("*.pt")) | set(MODELS_DIR.glob("*.pt")) | set((TOOL_DIR / "runs").rglob("*.pt"))
+    return sorted(str(p.relative_to(TOOL_DIR)).replace("\\", "/") for p in paths)
+
+
 @app.get("/api/models")
 def list_models():
-    return {"models": sorted(p.name for p in TOOL_DIR.glob("*.pt"))}
+    return {"models": _scan_models()}
+
+
+@app.post("/api/models")
+async def upload_model(file: UploadFile = File(...)):
+    ext = Path(file.filename).suffix.lower()
+    if ext != ".pt":
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext or '(none)'}")
+
+    # Strip any path components a crafted filename= could carry (same fix already applied to the
+    # Extract prefix field during the 2026-08-01 security review).
+    safe_name = os.path.basename(file.filename)
+    dest_path = MODELS_DIR / safe_name
+    if dest_path.exists():
+        # Never silently overwrite an existing model file — dedupe instead.
+        stem, suffix = dest_path.stem, dest_path.suffix
+        n = 2
+        while (MODELS_DIR / f"{stem}_{n}{suffix}").exists():
+            n += 1
+        dest_path = MODELS_DIR / f"{stem}_{n}{suffix}"
+
+    size = 0
+    with open(dest_path, "wb") as out:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_SIZE_BYTES:
+                out.close()
+                dest_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="File too large")
+            out.write(chunk)
+
+    relative_path = str(dest_path.relative_to(TOOL_DIR)).replace("\\", "/")
+    return {"uploaded": relative_path, "models": _scan_models()}
 
 
 @app.get("/api/classes")

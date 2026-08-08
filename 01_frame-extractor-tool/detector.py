@@ -8,10 +8,17 @@ Framework: Ultralytics YOLO (รองรับ YOLOv8–v11)
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import cv2
 import numpy as np
+
+# ultralytics' torch_safe_load() defaults to UNRESTRICTED torch.load() (arbitrary pickled code can
+# execute on load) unless this env var is set. Must be set before ultralytics is ever imported (its
+# SAFE_LOAD constant is read once at import time) — set here, at module load, since YOLOv11Detector
+# below imports ultralytics lazily. setdefault() so an operator can still explicitly opt out.
+os.environ.setdefault("ULTRALYTICS_SAFE_LOAD", "1")
 
 
 # ─────────────────────────────────────────────
