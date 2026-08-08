@@ -4,3 +4,5 @@ webapp/state.json.bak
 webapp/data/
 webapp/.venv/
 __pycache__/
+roboflow_dataset/
+runs/
