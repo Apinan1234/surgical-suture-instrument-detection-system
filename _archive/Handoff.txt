@@ -1,27 +1,11 @@
-Handoff document written to:
+Handoff document saved to:
 
-C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\28bf1f05-fe3a-4276-a74e-7897fb5c9fc9\scratchpad\handoff-videoframeextractor-contextmenu-2026-08-03.md
+C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\afd3ac14-25f9-46c4-9913-52241df16558\scratchpad\handoff-videoframeextractor-keypoint-tool-roboflow-training-2026-08-08.md
 
-Summary: the working tree is clean and fully pushed (origin/main at 1cbaaf2) — both the multi-select/bulk-actions commit and the new right-click context menu are shipped, nothing left pending. The doc references the plan file and updated project memory rather than duplicating their content, and captures the two claude-in-chrome environment quirks (stale CSS cache, click-coordinate scale offset) plus their fixes so a future session doesn't have to rediscover them.
-
-✻ Crunched for 1m 41s
-
-
-
-
-
-
-Handoff document saved to C:\Users\USER\AppData\Local\Temp\videoframeextractor-handoff-2026-08-02.md.
-
-Summary: covers the two-frontend repo split (vanilla 01_frame-extractor-tool/webapp vs React 02_web-app), what was installed this session (Framer Motion, uipro-cli UI/UX Pro Max skill) with file locations and uncommitted-state details, the pending decision on running the 21st.dev MCP install command (needs the user's own API key), standing preferences (no third-party credentials, minimal tooling), and suggested next-session skills (security-review, run, claude-in-chrome).
-
-✻ Crunched for 54s
-
-
-
-Handoff doc saved to C:\Users\USER\AppData\Local\Temp\open-donate-handoff-20260803-post-bf25.md.
-
-I checked git state first — still on commit 4508d15, still 137 changed/untracked files, nothing committed since the last handoff. So this one is intentionally short: it confirms nothing changed and points to the prior doc (open-donate-handoff-20260729-bf25-tier-list.md) for full detail rather than duplicating it, per the skill's dedup instruction. Same bottom line stands: /code-review is the clear next step before any commit.
-
-✻ Cogitated for 1m 16s
-
+Summary: the working tree is clean and fully pushed (origin/main at 16b7f03) — the keypoint/pose
+annotation tool (Phase 3 item 2/6) and a new standalone train_roboflow_yolo.py training script are both
+shipped, nothing left pending. The doc references the plan file and updated project memory rather than
+duplicating their content, and covers the mid-session scope additions (rotating-finger orientation
+research, Roboflow free-plan research, a corrected class-balancing direction sent to a running Plan agent
+mid-flight), the OBB task explicitly deferred as a future item, and a new claude-in-chrome technique
+(calling Tool functions directly instead of dispatching synthetic DOM events) worth reusing.
