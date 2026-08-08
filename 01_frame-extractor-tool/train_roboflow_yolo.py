@@ -3,12 +3,22 @@ Standalone CLI: download a Roboflow-annotated dataset, undersample an over-repre
 train split (whole-image removal, never partial-label edits), train a YOLOv11 model on CPU, and log
 both ground-truth and model-predicted object positions to CSV.
 
+The original --dataset-dir is NEVER modified: balancing operates only on a working copy of the train
+split under --output-dir/train_balanced/ (see copy_train_split_for_balancing()), and every deletion is
+runtime-asserted to fall outside --dataset-dir (see balance_train_split()'s protected_dir check). val/test
+are read straight from the original (never copied, never written to).
+
 Never touches webapp/server.py or static/app.js — fully independent of the annotation tool.
 No credentials are ever hardcoded or requested interactively: the Roboflow API key must come from the
-ROBOFLOW_API_KEY environment variable or --api-key.
+ROBOFLOW_API_KEY environment variable, --api-key, or webapp/.env (same gitignored file + python-dotenv
+already used by webapp/server.py for its own secrets — reused here, not a new mechanism).
 
 Usage:
+    # One-time setup: add a line to webapp/.env (create it from webapp/.env.example if it doesn't exist)
+    #   ROBOFLOW_API_KEY=rf_xxx
     python train_roboflow_yolo.py --workspace my-ws --project my-proj --version 3
+
+    # Or pass it inline instead, without touching webapp/.env:
     ROBOFLOW_API_KEY=rf_xxx python train_roboflow_yolo.py --workspace my-ws --project my-proj --version 3
 
     # Reuse an already-downloaded dataset (also useful for a credential-free dry run):
@@ -27,7 +37,14 @@ import zipfile
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 from tqdm import tqdm
+
+# Same webapp/.env file + python-dotenv already used by webapp/server.py — one shared place for
+# secrets in this project, not a second convention. A missing file is fine (find_dotenv-less load_dotenv
+# on a nonexistent path is a silent no-op); real env vars set before launch always take precedence
+# since load_dotenv() never overrides an already-set os.environ value.
+load_dotenv(Path(__file__).resolve().parent / "webapp" / ".env")
 
 IMAGE_EXTS = (".jpg", ".jpeg", ".png")
 
@@ -91,7 +108,18 @@ def resolve_split_images_dir(dataset_dir: Path, yaml_data: dict, split: str) -> 
         p = Path(yaml_data["path"])
         base = p if p.is_absolute() else (dataset_dir / p)
     resolved = (base / raw).resolve()
-    return resolved if resolved.exists() else None
+    if resolved.exists():
+        return resolved
+    # Fallback for Roboflow's plain "download zip to computer" export: its data.yaml has no `path:` key
+    # and train/val/test values like "../train/images" that only resolve correctly when consumed via
+    # Roboflow's own SDK (which injects a working `path:`). A manually-unzipped folder instead has
+    # train/valid/test as direct children of dataset_dir — strip the ".." traversal and retry there.
+    stripped_parts = [p for p in Path(raw).parts if p != ".."]
+    if stripped_parts:
+        fallback = (dataset_dir / Path(*stripped_parts)).resolve()
+        if fallback.exists():
+            return fallback
+    return None
 
 
 def labels_dir_for(images_dir: Path) -> Path:
@@ -108,9 +136,59 @@ def labels_dir_for(images_dir: Path) -> Path:
     raise ValueError(f"no 'images' path segment in {images_dir} to derive its labels dir")
 
 
-def parse_yolo_labels(dataset_dir: Path, yaml_data: dict) -> list[dict]:
+def copy_train_split_for_balancing(orig_images_dir: Path, orig_labels_dir: Path, output_dir: Path) -> tuple[Path, Path]:
+    """Copies the train split's images+labels into a fresh working directory under output_dir so every
+    downstream balancing operation (which deletes files) only ever touches this copy — the original
+    dataset directory is never opened in a write/delete mode anywhere in this script. Always starts from
+    a clean copy (deletes any leftover copy from a prior run first) so re-running is deterministic and
+    never compounds an already-balanced copy."""
+    work_dir = output_dir / "train_balanced"
+    if work_dir.exists():
+        shutil.rmtree(work_dir)
+    images_copy = work_dir / "images"
+    labels_copy = work_dir / "labels"
+    shutil.copytree(orig_images_dir, images_copy)
+    shutil.copytree(orig_labels_dir, labels_copy)
+    return images_copy, labels_copy
+
+
+def parse_labels_in_dir(images_dir: Path, labels_dir: Path, split: str, class_names: list[str]) -> list[dict]:
     """One dict per labeled instance: {split, image (full path str), class_id, class_name,
-    x_center, y_center, width, height} — all normalized [0,1], read straight from the .txt files."""
+    x_center, y_center, width, height} — all normalized [0,1], read straight from the .txt files in a
+    single images/labels directory pair. Split out of parse_yolo_labels() so callers can point it at
+    either the original dataset's val/test dirs or the train_balanced working copy's dirs."""
+    records: list[dict] = []
+    for img_path in sorted(images_dir.iterdir()):
+        if img_path.suffix.lower() not in IMAGE_EXTS:
+            continue
+        label_path = labels_dir / (img_path.stem + ".txt")
+        if not label_path.exists():
+            continue
+        for line in label_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            if len(parts) > 5:
+                print(f"[warn] {label_path.name}: {len(parts)} values (expected 5 for bbox format) — "
+                      f"skipping; is --format a detection export, not segmentation/pose?")
+                continue
+            cid = int(parts[0])
+            x, y, w, h = (float(v) for v in parts[1:5])
+            name = class_names[cid] if cid < len(class_names) else str(cid)
+            records.append({
+                "split": split, "image": str(img_path), "class_id": cid, "class_name": name,
+                "x_center": x, "y_center": y, "width": w, "height": h,
+            })
+    return records
+
+
+def parse_yolo_labels(dataset_dir: Path, yaml_data: dict) -> list[dict]:
+    """All splits from the original dataset_dir, read-only. Used only for the pre-balance train count
+    (always safe to read) — the post-balance ground-truth log reads train from the working copy instead,
+    see main()."""
     class_names = yaml_data["names"]
     records: list[dict] = []
     for split in ("train", "val", "test"):
@@ -118,30 +196,7 @@ def parse_yolo_labels(dataset_dir: Path, yaml_data: dict) -> list[dict]:
         if images_dir is None:
             continue
         labels_dir = labels_dir_for(images_dir)
-        for img_path in sorted(images_dir.iterdir()):
-            if img_path.suffix.lower() not in IMAGE_EXTS:
-                continue
-            label_path = labels_dir / (img_path.stem + ".txt")
-            if not label_path.exists():
-                continue
-            for line in label_path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                parts = line.split()
-                if len(parts) < 5:
-                    continue
-                if len(parts) > 5:
-                    print(f"[warn] {label_path.name}: {len(parts)} values (expected 5 for bbox format) — "
-                          f"skipping; is --format a detection export, not segmentation/pose?")
-                    continue
-                cid = int(parts[0])
-                x, y, w, h = (float(v) for v in parts[1:5])
-                name = class_names[cid] if cid < len(class_names) else str(cid)
-                records.append({
-                    "split": split, "image": str(img_path), "class_id": cid, "class_name": name,
-                    "x_center": x, "y_center": y, "width": w, "height": h,
-                })
+        records.extend(parse_labels_in_dir(images_dir, labels_dir, split, class_names))
     return records
 
 
@@ -172,6 +227,7 @@ def balance_train_split(
     seed: int,
     max_drop_fraction: float = 0.9,
     imbalance_threshold: float = 1.5,
+    protected_dir: Path | None = None,
 ) -> dict:
     """Undersamples the single most over-represented class by DELETING WHOLE train images (image file
     + its .txt label file together) — never edits label lines inside a kept image, since that would
@@ -181,7 +237,13 @@ def balance_train_split(
     Explicit trade-off: an image containing BOTH the dominant class and other classes still loses
     those other classes' instances if it's selected for removal — an unavoidable cost of image-level
     (vs. instance-level) undersampling, accepted specifically to avoid the false-negative risk of
-    partial in-image label edits."""
+    partial in-image label edits.
+
+    protected_dir, if given, is a hard runtime guarantee (not just a caller convention): every deletion
+    is asserted to fall outside it. Callers must always pass the original --dataset-dir here and only
+    ever hand this function records from the train_balanced working copy — this makes the "never touch
+    the original dataset" contract fail loudly instead of silently, even if a future edit gets a call
+    site wrong."""
     random.seed(seed)
     counts = compute_class_counts(train_records)
     dominant = find_dominant_class(counts, imbalance_threshold)
@@ -212,6 +274,11 @@ def balance_train_split(
 
     for img in removed_images:
         img_path = Path(img)
+        if protected_dir is not None:
+            assert not str(img_path.resolve()).startswith(str(protected_dir.resolve())), (
+                f"Refusing to delete {img_path} — it is inside the protected original dataset dir "
+                f"{protected_dir}. This must only ever run against the train_balanced working copy."
+            )
         label_path = labels_dir_for(img_path.parent) / (img_path.stem + ".txt")
         img_path.unlink(missing_ok=True)
         label_path.unlink(missing_ok=True)
@@ -275,6 +342,26 @@ def log_predicted_positions(weights_path: Path, image_dirs: list[Path], class_na
     return len(rows)
 
 
+def write_working_data_yaml(yaml_data: dict, train_images_dir: Path, val_images_dir: Path | None,
+                             test_images_dir: Path | None, output_dir: Path) -> Path:
+    """A fresh data.yaml for model.train() that points train: at the balanced working copy and val:/test:
+    straight at the ORIGINAL dataset's images — val/test are never copied (no need, they're never
+    mutated), so training always evaluates against the real, untouched data."""
+    data = {
+        "train": str(train_images_dir),
+        "nc": len(yaml_data["names"]),
+        "names": yaml_data["names"],
+    }
+    if val_images_dir:
+        data["val"] = str(val_images_dir)
+    if test_images_dir:
+        data["test"] = str(test_images_dir)
+    path = output_dir / "data.yaml"
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.dump(data, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
+    return path
+
+
 # ────────────────────────────── Training ──────────────────────────────
 
 def train_model(data_yaml: Path, model_weights: str, epochs: int, imgsz: int, batch: int,
@@ -290,6 +377,44 @@ def train_model(data_yaml: Path, model_weights: str, epochs: int, imgsz: int, ba
     if not best.exists():
         raise FileNotFoundError(f"Training finished but best.pt not found at {best}")
     return best
+
+
+def verify_and_report_outputs(output_dir: Path) -> dict:
+    """Confirms every artifact the user explicitly asked for is really on disk, and prints their exact
+    absolute paths in one place — makes this an explicit, checked contract rather than an implicit side
+    effect of however Ultralytics happens to be configured."""
+    train_dir = output_dir / "train"
+    checks = {
+        "results.csv": train_dir / "results.csv",
+        "results.png": train_dir / "results.png",
+        "confusion_matrix.png": train_dir / "confusion_matrix.png",
+        "best.pt": train_dir / "weights" / "best.pt",
+    }
+    gt_images = sorted(train_dir.glob("val_batch*_labels.jpg"))
+    pred_images = sorted(train_dir.glob("val_batch*_pred.jpg"))
+
+    print("\n==== Output manifest ====")
+    missing = []
+    for label, path in checks.items():
+        ok = path.exists()
+        print(f"  [{'OK' if ok else 'MISSING'}] {label}: {path}")
+        if not ok:
+            missing.append(label)
+    print(f"  [{'OK' if gt_images else 'MISSING'}] ground-truth validation images: "
+          f"{len(gt_images)} found" + (f" (e.g. {gt_images[0]})" if gt_images else ""))
+    print(f"  [{'OK' if pred_images else 'MISSING'}] prediction validation images: "
+          f"{len(pred_images)} found" + (f" (e.g. {pred_images[0]})" if pred_images else ""))
+    if not gt_images:
+        missing.append("ground-truth validation images")
+    if not pred_images:
+        missing.append("prediction validation images")
+    print("==========================\n")
+
+    if missing:
+        print(f"[warn] expected output(s) not found: {', '.join(missing)} — training likely still "
+              f"succeeded (this can happen with a very small/edge-case val set), but check {train_dir} "
+              f"directly.", file=sys.stderr)
+    return {"missing": missing, "gt_images": gt_images, "pred_images": pred_images}
 
 
 # ────────────────────────────── CLI ──────────────────────────────
@@ -349,16 +474,36 @@ def main():
         class_names = yaml_data["names"]
         print(f"[info] classes: {class_names}")
 
-        train_records = [r for r in parse_yolo_labels(dataset_dir, yaml_data) if r["split"] == "train"]
-        print(f"[info] train class counts before balancing: {compute_class_counts(train_records)}")
+        orig_train_images = resolve_split_images_dir(dataset_dir, yaml_data, "train")
+        if orig_train_images is None:
+            print("[error] could not resolve the train split's images directory from data.yaml", file=sys.stderr)
+            sys.exit(1)
+        orig_train_labels = labels_dir_for(orig_train_images)
 
-        report = balance_train_split(train_records, seed=args.seed,
+        before_records = parse_labels_in_dir(orig_train_images, orig_train_labels, "train", class_names)
+        print(f"[info] train class counts before balancing: {compute_class_counts(before_records)}")
+
+        # Non-destructive: every mutation below targets this working copy only, never dataset_dir itself
+        # (also enforced at runtime by balance_train_split's protected_dir assertion below).
+        train_copy_images, train_copy_labels = copy_train_split_for_balancing(orig_train_images, orig_train_labels, output_dir)
+        print(f"[info] original dataset untouched — balancing a working copy at {train_copy_images.parent}")
+
+        copy_records = parse_labels_in_dir(train_copy_images, train_copy_labels, "train", class_names)
+        report = balance_train_split(copy_records, seed=args.seed,
                                       max_drop_fraction=args.max_drop_fraction,
-                                      imbalance_threshold=args.imbalance_threshold)
+                                      imbalance_threshold=args.imbalance_threshold,
+                                      protected_dir=dataset_dir)
         print(f"[balance] {report}")
 
-        # Re-parse from disk so the ground-truth log reflects exactly what survived balancing.
-        all_records = parse_yolo_labels(dataset_dir, yaml_data)
+        # Ground-truth log: re-parse the working copy (post-balance) for train, and the ORIGINAL for
+        # val/test — val/test are never modified, so reading the original for them is always accurate.
+        post_balance_train = parse_labels_in_dir(train_copy_images, train_copy_labels, "train", class_names)
+        val_images = resolve_split_images_dir(dataset_dir, yaml_data, "val")
+        test_images = resolve_split_images_dir(dataset_dir, yaml_data, "test")
+        val_records = parse_labels_in_dir(val_images, labels_dir_for(val_images), "val", class_names) if val_images else []
+        test_records = parse_labels_in_dir(test_images, labels_dir_for(test_images), "test", class_names) if test_images else []
+        all_records = post_balance_train + val_records + test_records
+
         gt_path = output_dir / "ground_truth_positions.csv"
         n_gt = log_ground_truth_positions(all_records, gt_path)
         print(f"[log] wrote {n_gt} ground-truth instance rows to {gt_path}")
@@ -367,14 +512,15 @@ def main():
             print("[info] --skip-train set, stopping here.")
             return
 
-        best_weights = train_model(dataset_dir / "data.yaml", args.model, args.epochs, args.imgsz,
+        work_yaml = write_working_data_yaml(yaml_data, train_copy_images, val_images, test_images, output_dir)
+        best_weights = train_model(work_yaml, args.model, args.epochs, args.imgsz,
                                     args.batch, args.device, args.seed, output_dir)
         print(f"[train] done — best weights at {best_weights}")
 
-        val_dir = resolve_split_images_dir(dataset_dir, yaml_data, "val")
-        test_dir = resolve_split_images_dir(dataset_dir, yaml_data, "test")
+        verify_and_report_outputs(output_dir)
+
         pred_path = output_dir / "predicted_positions.csv"
-        n_pred = log_predicted_positions(best_weights, [d for d in (val_dir, test_dir) if d],
+        n_pred = log_predicted_positions(best_weights, [d for d in (val_images, test_images) if d],
                                           class_names, args.conf, args.device, pred_path)
         print(f"[log] wrote {n_pred} predicted instance rows to {pred_path}")
 
