@@ -548,6 +548,24 @@ function hitTestPolygonVertices(imgPt, box, imgW, imgH, tolImg) {
   return null;
 }
 
+// Keypoint hit-testing — returns the index of the point under imgPt, or null. Ignores the 3rd
+// (visibility) element of each [x, y, v] triple. Kept as its own function (not a generalization of
+// hitTestPolygonVertices) since the tuple shape differs — [x,y,v] vs [x,y].
+function hitTestKeypoints(imgPt, box, imgW, imgH, tolImg) {
+  if (!box.keypoints) return null;
+  for (let i = 0; i < box.keypoints.length; i++) {
+    const [nx, ny] = box.keypoints[i];
+    if (Math.abs(imgPt.x - nx * imgW) <= tolImg && Math.abs(imgPt.y - ny * imgH) <= tolImg) return i;
+  }
+  return null;
+}
+
+// A keypoint set's bbox derivation is the same "AABB of an arbitrary point array" operation as a
+// polygon's — reuses polygonToNormalizedBBox on the (x,y) projection of each [x,y,v] keypoint.
+function keypointsToNormalizedBBox(keypoints) {
+  return polygonToNormalizedBBox(keypoints.map(([x, y]) => [x, y]));
+}
+
 function distToSegment(pt, a, b) {
   const abx = b.x - a.x, aby = b.y - a.y;
   const lenSq = abx * abx + aby * aby;
@@ -795,10 +813,25 @@ const AnnotateState = (() => {
 
   function deleteVertex(boxId, vIdx) {
     const box = boxes.find((b) => b.id === boxId);
-    if (!box || !box.points || box.points.length <= 3) return; // floor: never drop below 3 points
-    const points = box.points.filter((_, i) => i !== vIdx);
-    const bbox = polygonToNormalizedBBox(points);
-    setBoxes(boxes.map((b) => (b.id === boxId ? { ...b, points, ...bbox } : b)));
+    if (!box) return;
+    if (box.points) {
+      if (box.points.length <= 3) return; // floor: polygon never drops below 3 points
+      const points = box.points.filter((_, i) => i !== vIdx);
+      const bbox = polygonToNormalizedBBox(points);
+      setBoxes(boxes.map((b) => (b.id === boxId ? { ...b, points, ...bbox } : b)));
+    } else if (box.keypoints) {
+      if (box.keypoints.length <= 1) return; // never drop the last point this way — delete the instance instead
+      const keypoints = box.keypoints.filter((_, i) => i !== vIdx);
+      const bbox = keypointsToNormalizedBBox(keypoints);
+      setBoxes(boxes.map((b) => (b.id === boxId ? { ...b, keypoints, ...bbox } : b)));
+    }
+  }
+
+  function setKeypointVisibility(boxId, vIdx, v) {
+    const box = boxes.find((b) => b.id === boxId);
+    if (!box || !box.keypoints) return;
+    const keypoints = box.keypoints.map((p, i) => (i === vIdx ? [p[0], p[1], v] : p));
+    setBoxes(boxes.map((b) => (b.id === boxId ? { ...b, keypoints } : b)));
   }
 
   function reassignClassByIds(ids, className) {
@@ -853,7 +886,7 @@ const AnnotateState = (() => {
   return {
     subscribe, init, selectFrame, currentFrame, getBoxes, setBoxes, addBoxes,
     selectBox, selectBoxes, getSelected, isSelected, getSelectedIds, getSelectedCount,
-    reselectIfMissing, deleteBoxesByIds, deleteVertex, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
+    reselectIfMissing, deleteBoxesByIds, deleteVertex, setKeypointVisibility, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
     setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
     findNextUnreviewedIndex, markReviewedLocal, setFrameDetections,
@@ -891,6 +924,7 @@ const Canvas = (() => {
     const lw = 2 / cssScale;
     const isSelected = AnnotateState.isSelected(b.id);
     const isPolygon = b.points && b.points.length >= 3;
+    const isKeypoints = b.keypoints && b.keypoints.length > 0;
 
     ctx.save();
     ctx.strokeStyle = color;
@@ -907,6 +941,27 @@ const Canvas = (() => {
       ctx.stroke();
       x1 = Math.min(...pts.map((p) => p[0]));
       y1 = Math.min(...pts.map((p) => p[1]));
+    } else if (isKeypoints) {
+      const pts = b.keypoints.map(([x, y, v]) => [x * imgW, y * imgH, v]);
+      pts.forEach(([px, py, v]) => {
+        ctx.beginPath();
+        if (v === 2) {
+          ctx.fillStyle = color;
+          ctx.arc(px, py, 4 / cssScale, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (v === 1) {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = lw;
+          ctx.arc(px, py, 4 / cssScale, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = "#888888";
+          ctx.arc(px, py, 2 / cssScale, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      x1 = Math.min(...pts.map((p) => p[0]));
+      y1 = Math.min(...pts.map((p) => p[1]));
     } else {
       x1 = (b.x_center - b.width / 2) * imgW;
       y1 = (b.y_center - b.height / 2) * imgH;
@@ -916,7 +971,9 @@ const Canvas = (() => {
     }
     ctx.setLineDash([]);
 
-    if (isSelected) {
+    if (isSelected && !isKeypoints) {
+      // Keypoint selection feedback is drawn per-point by SelectTool.render instead — mirrors how
+      // polygon vertex handles are also SelectTool's job, not drawBox's.
       ctx.strokeStyle = "#2563eb";
       ctx.lineWidth = lw * 1.5;
       ctx.setLineDash([4 / cssScale, 2 / cssScale]);
@@ -1022,7 +1079,7 @@ const Canvas = (() => {
 
   function setSpaceHeld(v) {
     spaceHeld = v;
-    if (!panDragStart) setCursor(v ? "grab" : (["draw_box", "polygon"].includes(AnnotateState.getActiveTool()) ? "crosshair" : "default"));
+    if (!panDragStart) setCursor(v ? "grab" : (["draw_box", "polygon", "keypoint"].includes(AnnotateState.getActiveTool()) ? "crosshair" : "default"));
   }
 
   function dispatch(method, e) {
@@ -1068,12 +1125,20 @@ const Canvas = (() => {
     const imgW = img.naturalWidth, imgH = img.naturalHeight;
 
     const selected = AnnotateState.getSelected();
-    if (AnnotateState.getActiveTool() === "select" && selected && selected.points) {
+    if (AnnotateState.getActiveTool() === "select" && selected) {
       const tolImg = HANDLE_PX / cssScale;
-      const vIdx = hitTestPolygonVertices(imgPt, selected, imgW, imgH, tolImg);
-      if (vIdx !== null) {
-        ContextMenu.openForVertex(e.clientX, e.clientY, selected, vIdx);
-        return;
+      if (selected.points) {
+        const vIdx = hitTestPolygonVertices(imgPt, selected, imgW, imgH, tolImg);
+        if (vIdx !== null) {
+          ContextMenu.openForVertex(e.clientX, e.clientY, selected, vIdx);
+          return;
+        }
+      } else if (selected.keypoints) {
+        const kIdx = hitTestKeypoints(imgPt, selected, imgW, imgH, tolImg);
+        if (kIdx !== null) {
+          ContextMenu.openForKeypoint(e.clientX, e.clientY, selected, kIdx);
+          return;
+        }
       }
     }
 
@@ -1266,6 +1331,84 @@ const PolygonTool = (() => {
   return { onPointerDown, onPointerMove, onDoubleClick, onEnter, render, onActivate, onDeactivate, cancel, onEscape: cancel };
 })();
 
+// ── KeypointTool: click to add points (v=2/visible by default); Enter/double-click to commit ──
+// No rubber-band preview needed — unlike PolygonTool, points never connect, so there's no "next
+// segment" to draw a live preview of. Visibility (occluded/not-labeled) is a post-hoc edit via the
+// Select tool's right-click menu, not a draw-time gesture.
+
+const KeypointTool = (() => {
+  let keypoints = null; // array of {x,y} in IMAGE space while drawing
+
+  function onPointerDown(e) {
+    if (!AnnotateState.currentFrame()) return;
+    const pt = Canvas.screenToImage(e.clientX, e.clientY);
+    if (!keypoints) keypoints = [];
+    keypoints.push(pt);
+    Canvas.requestRender();
+  }
+
+  function commit() {
+    const { w: imgW, h: imgH } = Canvas.getImageSize();
+    const normKeypoints = keypoints.map((p) => [clamp01(p.x / imgW), clamp01(p.y / imgH), 2]);
+    const bbox = keypointsToNormalizedBBox(normKeypoints);
+    const className = document.getElementById("annotate-class-select").value;
+    AnnotateState.addBoxes([{
+      id: makeId(),
+      class_id: classNames.indexOf(className),
+      class_name: className,
+      confidence: 1.0,
+      keypoints: normKeypoints,
+      ...bbox,
+    }]);
+    cancel();
+  }
+
+  function onDoubleClick() {
+    if (!keypoints || !keypoints.length) return;
+    // Same duplicate-point artifact PolygonTool's dblclick has (the 2nd click's own pointerdown
+    // already pushed a near-duplicate point before dblclick fires) — drop it.
+    if (keypoints.length >= 2) {
+      const a = keypoints[keypoints.length - 1], b = keypoints[keypoints.length - 2];
+      if (Math.hypot(a.x - b.x, a.y - b.y) * Canvas.getCssScale() < 5) keypoints.pop();
+    }
+    commit();
+  }
+
+  // Called from the global Enter shortcut; returns true if it consumed the keypress.
+  function onEnter() {
+    if (!keypoints) return false; // not drawing — let Enter behave normally (Save & Next)
+    if (keypoints.length >= 1) commit();
+    return true; // consumed while a draw is in progress
+  }
+
+  function cancel() {
+    keypoints = null;
+    Canvas.requestRender();
+  }
+
+  function render(ctx) {
+    if (!keypoints || !keypoints.length) return;
+    const scale = Canvas.getCssScale();
+    const className = document.getElementById("annotate-class-select").value;
+    const color = classColors[className] || "#AAAAAA";
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.font = `${11 / scale}px sans-serif`;
+    keypoints.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4 / scale, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillText(String(i + 1), p.x + 6 / scale, p.y - 6 / scale);
+    });
+    ctx.restore();
+  }
+
+  function onActivate() { Canvas.setCursor("crosshair"); }
+  function onDeactivate() { cancel(); }
+
+  return { onPointerDown, onDoubleClick, onEnter, render, onActivate, onDeactivate, cancel, onEscape: cancel };
+})();
+
 // ── SelectTool: click to select, drag to move, drag a handle to resize ──
 
 const SelectTool = (() => {
@@ -1297,6 +1440,19 @@ const SelectTool = (() => {
         snapshotTaken = false;
         return;
       }
+    } else if (selected && selected.keypoints) {
+      const kIdx = hitTestKeypoints(imgPt, selected, imgW, imgH, tolImg);
+      if (kIdx !== null) {
+        mode = "keypoint-drag";
+        activeVertexIndex = kIdx; // reused — only one mode is ever active at a time
+        startImgPt = imgPt;
+        startBox = { ...selected, keypoints: selected.keypoints.map((p) => [...p]) };
+        preDragBoxes = AnnotateState.getBoxes();
+        snapshotTaken = false;
+        return;
+      }
+      // no exact point hit — fall through to findTopBoxAt below, which (via hitTestBoxBody's
+      // unmodified plain-AABB fallback) treats the instance's derived bbox as its "grab body".
     } else if (selected) {
       const handle = hitTestHandles(imgPt, selected, imgW, imgH, tolImg);
       if (handle) {
@@ -1315,7 +1471,9 @@ const SelectTool = (() => {
       AnnotateState.selectBox(hit.id);
       mode = "move";
       startImgPt = imgPt;
-      startBox = hit.points ? { ...hit, points: hit.points.map((p) => [...p]) } : { ...hit };
+      startBox = hit.points ? { ...hit, points: hit.points.map((p) => [...p]) }
+               : hit.keypoints ? { ...hit, keypoints: hit.keypoints.map((p) => [...p]) }
+               : { ...hit };
       preDragBoxes = AnnotateState.getBoxes();
       snapshotTaken = false;
     } else {
@@ -1337,6 +1495,12 @@ const SelectTool = (() => {
     if (selected && selected.points) {
       const vIdx = hitTestPolygonVertices(imgPt, selected, imgW, imgH, tolImg);
       if (vIdx !== null) {
+        Canvas.setCursor("pointer");
+        return;
+      }
+    } else if (selected && selected.keypoints) {
+      const kIdx = hitTestKeypoints(imgPt, selected, imgW, imgH, tolImg);
+      if (kIdx !== null) {
         Canvas.setCursor("pointer");
         return;
       }
@@ -1381,10 +1545,27 @@ const SelectTool = (() => {
       AnnotateState.setBoxes(boxes, { pushUndo: false });
       return;
     }
+    if (mode === "keypoint-drag") {
+      const keypoints = startBox.keypoints.map((p, i) => (i === activeVertexIndex
+        ? [clamp01((p[0] * imgW + dx) / imgW), clamp01((p[1] * imgH + dy) / imgH), p[2]]
+        : p));
+      const bbox = keypointsToNormalizedBBox(keypoints);
+      const boxes = AnnotateState.getBoxes().map((b) => (b.id === startBox.id ? { ...b, keypoints, ...bbox } : b));
+      AnnotateState.setBoxes(boxes, { pushUndo: false });
+      return;
+    }
     if (mode === "move" && startBox.points) {
       const points = startBox.points.map((p) => [clamp01((p[0] * imgW + dx) / imgW), clamp01((p[1] * imgH + dy) / imgH)]);
       const bbox = polygonToNormalizedBBox(points);
       const boxes = AnnotateState.getBoxes().map((b) => (b.id === startBox.id ? { ...b, points, ...bbox } : b));
+      AnnotateState.setBoxes(boxes, { pushUndo: false });
+      return;
+    }
+    if (mode === "move" && startBox.keypoints) {
+      const keypoints = startBox.keypoints.map(([x, y, v]) =>
+        [clamp01((x * imgW + dx) / imgW), clamp01((y * imgH + dy) / imgH), v]);
+      const bbox = keypointsToNormalizedBBox(keypoints);
+      const boxes = AnnotateState.getBoxes().map((b) => (b.id === startBox.id ? { ...b, keypoints, ...bbox } : b));
       AnnotateState.setBoxes(boxes, { pushUndo: false });
       return;
     }
@@ -1462,6 +1643,12 @@ const SelectTool = (() => {
       AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) => (b.id === selected.id ? { ...b, points, ...bbox } : b)));
       return;
     }
+    if (selected.keypoints) {
+      const keypoints = selected.keypoints.map(([x, y, v]) => [clamp01(x + dxN), clamp01(y + dyN), v]);
+      const bbox = keypointsToNormalizedBBox(keypoints);
+      AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) => (b.id === selected.id ? { ...b, keypoints, ...bbox } : b)));
+      return;
+    }
     const nx = clamp01(selected.x_center + dxN);
     const ny = clamp01(selected.y_center + dyN);
     AnnotateState.setBoxes(AnnotateState.getBoxes().map((b) =>
@@ -1482,6 +1669,17 @@ const SelectTool = (() => {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (selected.points) {
       selected.points.forEach(([nx, ny]) => {
+        const pt = Canvas.imageToScreen(nx * imgW, ny * imgH);
+        ctx.beginPath();
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#2563eb";
+        ctx.lineWidth = 1.5;
+        ctx.arc(pt.x, pt.y, HANDLE_PX / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      });
+    } else if (selected.keypoints) {
+      selected.keypoints.forEach(([nx, ny]) => {
         const pt = Canvas.imageToScreen(nx * imgW, ny * imgH);
         ctx.beginPath();
         ctx.fillStyle = "#ffffff";
@@ -1528,6 +1726,7 @@ const SelectTool = (() => {
 Tools.draw_box = DrawBoxTool;
 Tools.select = SelectTool;
 Tools.polygon = PolygonTool;
+Tools.keypoint = KeypointTool;
 
 // ── ContextMenu: right-click canvas → Delete / Reassign class (flat list, no submenus) ──
 
@@ -1586,6 +1785,35 @@ const ContextMenu = (() => {
     positionAt(clientX, clientY);
   }
 
+  function buildKeypointVertexRows(box, vIdx) {
+    el.innerHTML = "";
+    const currentV = box.keypoints[vIdx][2];
+    [[2, "Mark Visible"], [1, "Mark Occluded"], [0, "Mark Not Labeled"]].forEach(([v, label]) => {
+      const btn = document.createElement("button");
+      btn.textContent = (currentV === v ? "✓ " : "") + label;
+      btn.addEventListener("click", () => { AnnotateState.setKeypointVisibility(box.id, vIdx, v); close(); });
+      el.appendChild(btn);
+    });
+    el.appendChild(document.createElement("hr"));
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    const canDelete = box.keypoints.length > 1;
+    delBtn.textContent = "Delete point";
+    delBtn.disabled = !canDelete;
+    if (!canDelete) delBtn.title = "A keypoint instance needs at least 1 point — delete the whole shape instead.";
+    delBtn.addEventListener("click", () => {
+      if (!canDelete) return;
+      AnnotateState.deleteVertex(box.id, vIdx);
+      close();
+    });
+    el.appendChild(delBtn);
+  }
+
+  function openForKeypoint(clientX, clientY, box, vIdx) {
+    buildKeypointVertexRows(box, vIdx);
+    positionAt(clientX, clientY);
+  }
+
   function close() { el.classList.remove("open"); }
   function isOpen() { return el.classList.contains("open"); }
 
@@ -1594,7 +1822,7 @@ const ContextMenu = (() => {
     if (isOpen() && e.button === 0 && !el.contains(e.target)) close();
   }, true);
 
-  return { openForBox, openForVertex, close, isOpen };
+  return { openForBox, openForVertex, openForKeypoint, close, isOpen };
 })();
 
 // ── Keyboard: one listener + one lookup table (also renders the "?" cheat-sheet) ──
@@ -1655,6 +1883,7 @@ const Keyboard = (() => {
     { key: "v", label: "V — Select tool", handler: () => AnnotateState.setActiveTool("select") },
     { key: "b", label: "B — Draw box tool", handler: () => AnnotateState.setActiveTool("draw_box") },
     { key: "p", label: "P — Polygon tool", handler: () => AnnotateState.setActiveTool("polygon") },
+    { key: "k", label: "K — Keypoint tool", handler: () => AnnotateState.setActiveTool("keypoint") },
     { key: "1", label: "1-5 — Set class", handler: () => setClassByNumber(1) },
     { key: "2", handler: () => setClassByNumber(2) },
     { key: "3", handler: () => setClassByNumber(3) },
@@ -1920,6 +2149,7 @@ function updateToolButtons() {
   document.getElementById("annotate-tool-select-btn").classList.toggle("active-tool", tool === "select");
   document.getElementById("annotate-tool-draw-btn").classList.toggle("active-tool", tool === "draw_box");
   document.getElementById("annotate-tool-polygon-btn").classList.toggle("active-tool", tool === "polygon");
+  document.getElementById("annotate-tool-keypoint-btn").classList.toggle("active-tool", tool === "keypoint");
 }
 
 function updateBulkActionsBar() {
@@ -1965,6 +2195,7 @@ document.querySelector('.tab[data-tab="annotate"]').addEventListener("click", ()
 document.getElementById("annotate-tool-select-btn").addEventListener("click", () => AnnotateState.setActiveTool("select"));
 document.getElementById("annotate-tool-draw-btn").addEventListener("click", () => AnnotateState.setActiveTool("draw_box"));
 document.getElementById("annotate-tool-polygon-btn").addEventListener("click", () => AnnotateState.setActiveTool("polygon"));
+document.getElementById("annotate-tool-keypoint-btn").addEventListener("click", () => AnnotateState.setActiveTool("keypoint"));
 
 document.getElementById("annotate-bulk-delete-btn").addEventListener("click", () => AnnotateState.deleteSelectedBoxes());
 document.getElementById("annotate-bulk-class-select").addEventListener("change", (e) => {
@@ -2002,6 +2233,7 @@ async function saveCurrentFrame() {
     height: d.height,
     source: d.source || (d._pending ? "model" : "manual"),
     points: d.points || null,
+    keypoints: d.keypoints || null,
   }));
 
   const res = await Api.putDetections(frame.id, cleanBoxes);
@@ -2207,17 +2439,19 @@ function updateExportMaxSizeLabel() {
   const trainCount = Math.floor(total * tr);
   const valCount = Math.floor(total * va);
   const testCount = total - trainCount - valCount;
-  const isSegment = document.getElementById("export-task-segment").checked;
-  const mult = isSegment ? 1 : parseInt(document.getElementById("export-aug-multiplier").value, 10);
+  // Augmentation is server-side force-disabled for any non-"detect" task (segment, pose) — see
+  // dataset_exporter.py's do_augment gate — so the size estimate must match for both, not just segment.
+  const isDetect = document.querySelector('input[name="export-task"]:checked').value === "detect";
+  const mult = isDetect ? parseInt(document.getElementById("export-aug-multiplier").value, 10) : 1;
   const finalSize = trainCount * mult + valCount + testCount;
   document.getElementById("export-max-size-label").textContent = `Maximum Version Size: ${finalSize} images (${mult}x)`;
 }
 
 function updateExportTaskUI() {
-  const isSegment = document.getElementById("export-task-segment").checked;
+  const isDetect = document.querySelector('input[name="export-task"]:checked').value === "detect";
   const card = document.getElementById("export-augment-card");
-  card.style.opacity = isSegment ? "0.5" : "";
-  card.querySelectorAll("input").forEach((el) => { el.disabled = isSegment; });
+  card.style.opacity = isDetect ? "" : "0.5";
+  card.querySelectorAll("input").forEach((el) => { el.disabled = !isDetect; });
   updateExportMaxSizeLabel();
 }
 

@@ -247,6 +247,7 @@
         <button id="annotate-tool-select-btn" class="btn-download" title="Select tool (V)">🖱 Select</button>
         <button id="annotate-tool-draw-btn" class="btn-download" title="Draw box tool (B)">▭ Draw</button>
         <button id="annotate-tool-polygon-btn" class="btn-download" title="Polygon tool (P)">⬠ Polygon</button>
+        <button id="annotate-tool-keypoint-btn" class="btn-download" title="Keypoint tool (K)">● Keypoint</button>
         <span id="annotate-review-status" class="chip">🔴 Needs Review</span>
         <button id="annotate-mark-reviewed-btn" class="btn-download">✅ Mark as Reviewed</button>
         <span style="font-size:12px; color:var(--muted); margin-left:auto;">Press ? for shortcuts</span>
@@ -365,7 +366,11 @@
         <input type="radio" name="export-task" id="export-task-segment" value="segment" />
         <label for="export-task-segment" style="margin:0;">Segment (polygons — Ultralytics YOLO seg format)</label>
       </div>
-      <div style="font-size:12px; color:var(--muted); margin-top:4px;">Bbox-only detections export as their rectangle's 4 corners when Segment is selected, so a mixed dataset still trains.</div>
+      <div class="checkbox-row">
+        <input type="radio" name="export-task" id="export-task-pose" value="pose" />
+        <label for="export-task-pose" style="margin:0;">Pose (keypoints — Ultralytics YOLO-pose format)</label>
+      </div>
+      <div style="font-size:12px; color:var(--muted); margin-top:4px;">Bbox-only detections export as their rectangle's 4 corners when Segment is selected, or as bbox-only with all-zero (unlabeled) keypoint slots when Pose is selected — so a mixed dataset still trains either way.</div>
     </div>
 
     <div class="card">

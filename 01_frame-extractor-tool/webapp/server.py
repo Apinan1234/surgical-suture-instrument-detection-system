@@ -677,6 +677,7 @@ class DetectionIn(BaseModel):
     height: float = Field(gt=0.0, le=1.0)
     source: Literal["model", "manual"] = "manual"
     points: list[list[float]] | None = None
+    keypoints: list[list[float]] | None = None
 
     @model_validator(mode="after")
     def _check_class(self):
@@ -696,6 +697,24 @@ class DetectionIn(BaseModel):
             x, y = p
             if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
                 raise ValueError("point coordinates must be within [0, 1]")
+        return self
+
+    @model_validator(mode="after")
+    def _check_keypoints(self):
+        if self.keypoints is None:
+            return self
+        if self.points:
+            raise ValueError("a detection cannot have both points (polygon) and keypoints (pose)")
+        if len(self.keypoints) < 1:
+            raise ValueError("keypoints must have at least 1 entry")
+        for p in self.keypoints:
+            if len(p) != 3:
+                raise ValueError("each keypoint must be [x, y, v]")
+            x, y, v = p
+            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                raise ValueError("keypoint coordinates must be within [0, 1]")
+            if v not in (0, 1, 2):
+                raise ValueError("keypoint visibility v must be 0, 1, or 2")
         return self
 
 
@@ -906,7 +925,7 @@ class ExportBody(BaseModel):
     detect_job_id: str
     version_name: str = Field(default="v1", max_length=64)
     reviewed_only: bool = False
-    task: Literal["detect", "segment"] = "detect"
+    task: Literal["detect", "segment", "pose"] = "detect"
     splits: SplitsIn = Field(default_factory=SplitsIn)
     preprocess: PreprocessIn = Field(default_factory=PreprocessIn)
     augment: AugmentIn = Field(default_factory=AugmentIn)

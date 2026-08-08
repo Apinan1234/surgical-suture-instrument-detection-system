@@ -69,12 +69,17 @@ class Detection:
     height:     float
     source:     str = "model"   # "model" (raw detector output) | "manual" (human-drawn/edited at save time)
     points:     list[list[float]] | None = None  # normalized [[x,y], ...] polygon vertices; None = plain bbox
+    keypoints:  list[list[float]] | None = None  # normalized [[x,y,v], ...] pose keypoints; v: 0=unlabeled,1=occluded,2=visible
 
     def __post_init__(self):
-        # Server is authoritative: whenever a real polygon is present, the bbox fields are always
-        # the polygon's own derived bounding box — never whatever the caller happened to pass in.
+        # Server is authoritative: whenever a real polygon/keypoint set is present, the bbox fields are
+        # always derived from it — never whatever the caller happened to pass in.
         if self.points and len(self.points) >= 3:
             self.x_center, self.y_center, self.width, self.height = polygon_bbox(self.points)
+        elif self.keypoints and len(self.keypoints) >= 1:
+            self.x_center, self.y_center, self.width, self.height = polygon_bbox(
+                [[p[0], p[1]] for p in self.keypoints]
+            )
 
     # ── YOLO label string ──────────────────────
     def to_yolo_str(self) -> str:
@@ -123,6 +128,7 @@ class Detection:
             "height":     round(self.height,   6),
             "source":     self.source,
             "points":     [[round(x, 6), round(y, 6)] for x, y in self.points] if self.points else None,
+            "keypoints":  [[round(x, 6), round(y, 6), int(v)] for x, y, v in self.keypoints] if self.keypoints else None,
         }
 
 
@@ -163,6 +169,18 @@ class BaseDetector:
                 pts = np.array([[int(x * w), int(y * h)] for x, y in det.points], dtype=np.int32)
                 cv2.polylines(img, [pts], isClosed=True, color=color, thickness=thickness)
                 x1, y1 = int(pts[:, 0].min()), int(pts[:, 1].min())  # label anchor = polygon's own top-left
+            elif det.keypoints:
+                xs, ys = [], []
+                for px, py, v in det.keypoints:
+                    cx, cy = int(px * w), int(py * h)
+                    xs.append(cx); ys.append(cy)
+                    if v == 2:
+                        cv2.circle(img, (cx, cy), 4, color, -1)          # solid = visible
+                    elif v == 1:
+                        cv2.circle(img, (cx, cy), 4, color, thickness)   # hollow = occluded
+                    else:
+                        cv2.circle(img, (cx, cy), 2, _DEFAULT_BGR, -1)   # small/grey = not-labeled
+                x1, y1 = min(xs), min(ys)  # label anchor = keypoints' own top-left
             else:
                 x1, y1, x2, y2 = det.pixel_bbox(w, h)
                 cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)

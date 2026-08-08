@@ -8,7 +8,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-def _label_line(d: dict, task: str) -> str:
+def _label_line(d: dict, task: str, n_kpts: int = 0) -> str:
     """One YOLO label line for a single detection dict (Detection.to_dict()-shaped)."""
     if task == "segment":
         pts = d.get("points")
@@ -23,6 +23,15 @@ def _label_line(d: dict, task: str) -> str:
             pts = [(x1, y1), (x2, y1), (x2, y2), (x1, y2)]
         coords = " ".join(f"{x:.6f} {y:.6f}" for x, y in pts)
         return f"{d['class_id']} {coords}"
+    if task == "pose":
+        # Zero-pad every instance up to the pool-wide max keypoint count (n_kpts) so a mixed dataset
+        # (varying point counts per instance, or none at all) exports as one valid, rectangular
+        # kpt_shape=[n_kpts,3] Ultralytics pose dataset.
+        kpts = (d.get("keypoints") or [])[:n_kpts]
+        kpts = kpts + [[0.0, 0.0, 0]] * (n_kpts - len(kpts))
+        kpt_str = " ".join(f"{x:.6f} {y:.6f} {int(v)}" for x, y, v in kpts)
+        base = f"{d['class_id']} {d['x_center']:.6f} {d['y_center']:.6f} {d['width']:.6f} {d['height']:.6f}"
+        return f"{base} {kpt_str}".rstrip()
     return f"{d['class_id']} {d['x_center']:.6f} {d['y_center']:.6f} {d['width']:.6f} {d['height']:.6f}"
 
 
@@ -37,15 +46,24 @@ def export_dataset_pipeline(
     preprocess_config: dict = None,
     augment_config: dict = None,
     progress_callback = None,
-    task: str = "detect",   # "detect" (bbox labels, unchanged/default) | "segment" (Ultralytics polygon labels)
+    task: str = "detect",   # "detect" (bbox) | "segment" (polygon) | "pose" (bbox + keypoints) — Ultralytics label formats
 ) -> str:
     random.seed(seed)
-    
+
     # Filter
     pool = [r for r in results if r.get("has_detection") or include_empty]
     if not pool:
         raise ValueError("ไม่มีข้อมูลที่จะ export (pool ว่าง)")
-        
+
+    n_kpts = 0
+    if task == "pose":
+        for item in pool:
+            for d in item.get("detections", []):
+                n_kpts = max(n_kpts, len(d.get("keypoints") or []))
+        if n_kpts == 0:
+            raise ValueError("task='pose' but no detection in the export pool has any keypoints — "
+                              "annotate at least one instance with the Keypoint tool first")
+
     random.shuffle(pool)
     
     total_len = len(pool)
@@ -136,7 +154,7 @@ def export_dataset_pipeline(
             
             with open(lbl_dir / f"{save_name}.txt", "w") as f:
                 for d in item.get("detections", []):
-                    f.write(_label_line(d, task) + "\n")
+                    f.write(_label_line(d, task, n_kpts) + "\n")
             
             total_exported += 1
             if split_name == "train": train_count += 1
@@ -169,7 +187,7 @@ def export_dataset_pipeline(
                     done += 1
                     if progress_callback: progress_callback(done, total_ops)
 
-    _write_yaml(out / "data.yaml", class_names, out, task)
+    _write_yaml(out / "data.yaml", class_names, out, task, n_kpts)
 
     summary = {
         "total_exported":  total_exported,
@@ -178,6 +196,7 @@ def export_dataset_pipeline(
         "test":            test_count,
         "class_names":     class_names,
         "task":            task,
+        "kpt_shape":       [n_kpts, 3] if task == "pose" else None,
     }
     (out / "export_summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
@@ -189,16 +208,22 @@ def export_dataset_pipeline(
 
     return str(out)
 
-def _write_yaml(path: Path, class_names: list[str], dataset_root: Path, task: str = "detect") -> None:
-    # NOTE: Ultralytics data.yaml has no `task:` key — it infers detect vs. segment from the model
+def _write_yaml(path: Path, class_names: list[str], dataset_root: Path, task: str = "detect", n_kpts: int = 0) -> None:
+    # NOTE: Ultralytics data.yaml has no `task:` key — it infers detect/segment/pose from the model
     # checkpoint / CLI command used at train time, not from this file. This comment is informational
-    # only, never a structural YAML key (a real `task:` key risks an "unknown key" warning).
+    # only, never a structural YAML key (a real `task:` key risks an "unknown key" warning). Pose is
+    # the one exception that DOES need an extra structural key — `kpt_shape` — verified against
+    # Ultralytics docs (https://docs.ultralytics.com/datasets/pose).
     comment = (
         "# Labels in this dataset are in Ultralytics segmentation polygon format "
         "(class x1 y1 x2 y2 ...). Train with the segment task/model, e.g. "
         "`yolo segment train data=data.yaml model=yolov8n-seg.pt` — Ultralytics infers the task "
         "from the model/CLI command, not from this file.\n"
-        if task == "segment" else ""
+        if task == "segment" else
+        "# Labels in this dataset are in Ultralytics pose format (bbox + keypoints). Train with "
+        "`yolo pose train data=data.yaml model=yolov8n-pose.pt` — Ultralytics infers the task from "
+        "the model/CLI command, not from this file.\n"
+        if task == "pose" else ""
     )
     try:
         import yaml  # type: ignore
@@ -210,6 +235,8 @@ def _write_yaml(path: Path, class_names: list[str], dataset_root: Path, task: st
             "nc":    len(class_names),
             "names": class_names,
         }
+        if task == "pose":
+            data["kpt_shape"] = [n_kpts, 3]   # ndim=3: (x, y, visibility)
         with open(path, "w", encoding="utf-8") as f:
             if comment:
                 f.write(comment)
@@ -222,6 +249,7 @@ def _write_yaml(path: Path, class_names: list[str], dataset_root: Path, task: st
             "val:   images/val",
             "test:  images/test",
             f"nc: {len(class_names)}",
+        ] + ([f"kpt_shape: [{n_kpts}, 3]"] if task == "pose" else []) + [
             "names:",
         ] + [f"  - {n}" for n in class_names]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
