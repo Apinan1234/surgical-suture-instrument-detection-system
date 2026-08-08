@@ -585,6 +585,28 @@ function keypointsToNormalizedBBox(keypoints) {
   return polygonToNormalizedBBox(keypoints.map(([x, y]) => [x, y]));
 }
 
+// Orientation angle helper for a 2-point (base->tip) keypoint pair — shared by the committed-
+// detection angle badge (renderDetectionList) and KeypointTool's live draw-time preview.
+// Image/screen coordinate convention: 0deg = +x (right), 90deg = +y (down) — y grows downward,
+// this is NOT flipped to "math"/Cartesian convention. MUST mirror train_roboflow_yolo.py's
+// keypoint_angle_deg() bit-for-bit (same atan2(dy, dx) formula) or the webapp's displayed angle and
+// the CSV-logged angle become incomparable numbers for the same annotation. Range: (-180, 180].
+function keypointAngleDeg(dx, dy) {
+  return (Math.atan2(dy, dx) * 180) / Math.PI;
+}
+
+// Angle for a committed instance's normalized keypoints [[x,y,v],[x,y,v]], or null if not exactly
+// 2 points, or either point has v===0 (not-labeled — a meaningless placeholder position, not a
+// real coordinate). imgW/imgH (Canvas.getImageSize()) de-normalize x and y on their own separate
+// axis before the angle math — required for an aspect-correct angle on a non-square frame (x is
+// stored normalized by width, y by height, independently).
+function keypointPairAngleDeg(keypoints, imgW, imgH) {
+  if (!keypoints || keypoints.length !== 2 || !imgW || !imgH) return null;
+  const [[bx, by, bv], [tx, ty, tv]] = keypoints;
+  if (bv === 0 || tv === 0) return null;
+  return keypointAngleDeg((tx - bx) * imgW, (ty - by) * imgH);
+}
+
 function distToSegment(pt, a, b) {
   const abx = b.x - a.x, aby = b.y - a.y;
   const lenSq = abx * abx + aby * aby;
@@ -1427,6 +1449,15 @@ const KeypointTool = (() => {
       ctx.fill();
       ctx.fillText(String(i + 1), p.x + 6 / scale, p.y - 6 / scale);
     });
+    if (keypoints.length === 2) {
+      // Live angle preview while placing point 2 (base=point 1, tip=point 2, by placement order).
+      // keypoints here are already raw IMAGE-pixel {x,y} — no width/height de-normalization needed
+      // (unlike the committed-instance path in renderDetectionList).
+      const angle = keypointAngleDeg(keypoints[1].x - keypoints[0].x, keypoints[1].y - keypoints[0].y);
+      const midX = (keypoints[0].x + keypoints[1].x) / 2;
+      const midY = (keypoints[0].y + keypoints[1].y) / 2;
+      ctx.fillText(`∠ ${angle.toFixed(1)}°`, midX + 6 / scale, midY - 6 / scale);
+    }
     ctx.restore();
   }
 
@@ -2100,6 +2131,7 @@ function renderDetectionList() {
   const list = document.getElementById("annotate-detection-list");
   list.innerHTML = "";
   const boxes = AnnotateState.getBoxes();
+  const { w: imgW, h: imgH } = Canvas.getImageSize();
 
   if (!boxes.length) {
     const empty = document.createElement("div");
@@ -2134,6 +2166,20 @@ function renderDetectionList() {
     badge.className = "conf-badge" + (b.confidence < 0.5 ? " low" : "");
     badge.textContent = (b._pending ? "🏷 " : "") + b.confidence.toFixed(2);
 
+    // Orientation angle badge — only for a 2-keypoint (base+tip) instance with both points
+    // labeled (v != 0). Recomputed on every render, so this stays live while dragging an endpoint
+    // (SelectTool's keypoint-drag mode already calls setBoxes → full renderDetectionList rebuild).
+    let angleBadge = null;
+    if (b.keypoints && b.keypoints.length === 2) {
+      const angle = keypointPairAngleDeg(b.keypoints, imgW, imgH);
+      if (angle !== null) {
+        angleBadge = document.createElement("span");
+        angleBadge.className = "angle-badge";
+        angleBadge.title = "Orientation: point 1 = base, point 2 = tip";
+        angleBadge.textContent = `∠ ${angle.toFixed(1)}°`;
+      }
+    }
+
     const del = document.createElement("button");
     del.className = "del-btn";
     del.textContent = "✕";
@@ -2144,6 +2190,7 @@ function renderDetectionList() {
 
     li.appendChild(select);
     li.appendChild(badge);
+    if (angleBadge) li.appendChild(angleBadge);
     li.appendChild(del);
     list.appendChild(li);
   });

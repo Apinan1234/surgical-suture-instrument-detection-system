@@ -455,6 +455,12 @@ main.wide {
   color: var(--highlight);
 }
 
+.detection-list .angle-badge {
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
 .detection-list .del-btn {
   background: transparent;
   border: none;
