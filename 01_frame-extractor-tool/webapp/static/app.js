@@ -696,6 +696,9 @@ const Api = {
       body: JSON.stringify(body),
     });
   },
+  postOcr(frameId) {
+    return apiFetch(`/api/frames/${frameId}/ocr`, { method: "POST" });
+  },
   imageUrl(frameId) {
     return `/api/frames/${frameId}/image.jpg?t=${Date.now()}`;
   },
@@ -932,13 +935,17 @@ const AnnotateState = (() => {
     if (frames[idx]) frames[idx].detections = detections;
   }
 
+  function setFrameOcrText(idx, text) {
+    if (frames[idx]) frames[idx].ocr_text = text;
+  }
+
   return {
     subscribe, init, selectFrame, currentFrame, getBoxes, setBoxes, addBoxes,
     selectBox, selectBoxes, getSelected, isSelected, getSelectedIds, getSelectedCount,
     reselectIfMissing, deleteBoxesByIds, deleteVertex, setKeypointVisibility, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
     setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
-    findNextUnreviewedIndex, markReviewedLocal, setFrameDetections,
+    findNextUnreviewedIndex, markReviewedLocal, setFrameDetections, setFrameOcrText,
   };
 })();
 
@@ -2243,6 +2250,17 @@ function loadAnnotateImage(frame, idxAtLoad) {
   img.src = Api.imageUrl(frame.id);
 }
 
+function renderOcrPanel(frame) {
+  const resultEl = document.getElementById("ocr-result");
+  if (!frame || frame.ocr_text === undefined || frame.ocr_text === null) {
+    resultEl.textContent = "Not run yet.";
+  } else if (frame.ocr_text === "") {
+    resultEl.textContent = "(No text detected)";
+  } else {
+    resultEl.textContent = frame.ocr_text;
+  }
+}
+
 let _lastLoadedFrameIdx = -2; // sentinel distinct from the -1 "no frame selected" state
 AnnotateState.subscribe(() => {
   const idx = AnnotateState.getFrameIdx();
@@ -2253,6 +2271,7 @@ AnnotateState.subscribe(() => {
       loadAnnotateImage(frame, idx);
       maybeAutoAssist(frame);
     }
+    renderOcrPanel(frame); // frame may be null (no frames loaded yet) — handles that itself
   }
   Canvas.requestRender();
   Filmstrip.render();
@@ -2441,6 +2460,36 @@ document.getElementById("assist-reject-all-btn").addEventListener("click", () =>
   if (!boxes.some((b) => b._pending)) return;
   AnnotateState.setBoxes(boxes.filter((b) => !b._pending));
 });
+
+// ── OCR ──
+
+async function runOcr() {
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return;
+  const runBtn = document.getElementById("ocr-run-btn");
+  if (runBtn.disabled) return;
+
+  const idxAtRun = AnnotateState.getFrameIdx();
+  runBtn.disabled = true;
+  document.getElementById("ocr-result").textContent = "Running OCR…";
+  try {
+    const res = await Api.postOcr(frame.id);
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      alert(errBody.detail || "OCR failed");
+      if (AnnotateState.getFrameIdx() === idxAtRun) renderOcrPanel(AnnotateState.currentFrame());
+      return;
+    }
+    const data = await res.json();
+    AnnotateState.setFrameOcrText(idxAtRun, data.ocr_text); // stash even if user navigated away
+    if (AnnotateState.getFrameIdx() !== idxAtRun) return; // don't repaint the wrong frame's panel
+    renderOcrPanel(AnnotateState.currentFrame());
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+document.getElementById("ocr-run-btn").addEventListener("click", runOcr);
 
 document.getElementById("annotate-clear-btn").addEventListener("click", () => {
   if (!AnnotateState.currentFrame() || !AnnotateState.getBoxes().length) return;

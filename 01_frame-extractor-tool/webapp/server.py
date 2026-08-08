@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Literal
 
 import cv2
+import pytesseract
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -828,6 +829,54 @@ def assist_frame(frame_id: str, body: AssistBody):
     save_state()
 
     return {"detections": [d.to_dict() for d in dets]}
+
+
+# ────────────────────────────── OCR (burned-in overlay text) ──────────────────────────────
+
+
+def _resolve_tesseract_cmd() -> str:
+    """Locate the Tesseract binary: PATH first (shutil.which), then the default UB-Mannheim
+    Windows installer location (covers install-succeeded-but-server-predates-PATH-refresh).
+    Raises with an actionable install hint if neither is found."""
+    found = shutil.which("tesseract")
+    if found:
+        return found
+    standard = Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+    if standard.exists():
+        return str(standard)
+    raise RuntimeError(
+        "Tesseract OCR binary not found. Install it (e.g. `winget install --id "
+        "UB-Mannheim.TesseractOCR -e`), then restart this server."
+    )
+
+
+def run_ocr(img) -> str:
+    """Run Tesseract against a full frame (BGR ndarray from cv2.imread) and return the extracted
+    text, whitespace-trimmed. Full-frame only, Tesseract defaults only — no ROI/crop, no
+    language/PSM config, per confirmed v1 scope."""
+    pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract_cmd()
+    rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # same BGR->RGB conversion app.py already does
+    # (app.py:906, app.py:1091) before handing a cv2 frame to a non-cv2 library.
+    return pytesseract.image_to_string(rgb).strip()
+
+
+@app.post("/api/frames/{frame_id}/ocr")
+def ocr_frame(frame_id: str):
+    record = _get_frame_or_404(frame_id)
+
+    img = cv2.imread(record["path"])
+    if img is None:
+        raise HTTPException(status_code=404, detail="Frame image missing on disk")
+
+    try:
+        text = run_ocr(img)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"OCR failed: {e}")
+
+    record["ocr_text"] = text
+    save_state()
+
+    return {"frame_id": frame_id, "ocr_text": text}
 
 
 # ────────────────────────────── S-7 Models ──────────────────────────────
