@@ -6,3 +6,5 @@ tqdm
 ultralytics
 PyYAML
 inference-sdk
+ipykernel
+nbconvert
