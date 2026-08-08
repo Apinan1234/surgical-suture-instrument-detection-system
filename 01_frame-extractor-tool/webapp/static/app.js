@@ -736,8 +736,16 @@ const AnnotateState = (() => {
     listeners.push(fn);
   }
 
-  function hydrate(detections) {
-    return (detections || []).map((d) => ({ ...d, id: makeId() }));
+  function hydrate(detections, reviewed) {
+    // Model-sourced boxes on a not-yet-reviewed frame are unconfirmed AI suggestions — render them
+    // the same dashed/pending way Label Assist's own suggestions already do (setLineDash, confidence
+    // badge, Accept All/Reject All, "Save implicitly confirms"), so bulk Detect (S-4) results go
+    // through the same human-review gate Label Assist (S-8) results always have.
+    return (detections || []).map((d) => ({
+      ...d,
+      id: makeId(),
+      ...(d.source === "model" && !reviewed ? { _pending: true } : {}),
+    }));
   }
 
   function init(frameList) {
@@ -758,7 +766,7 @@ const AnnotateState = (() => {
     const tool = Tools[activeTool];
     if (tool && tool.onDeactivate) tool.onDeactivate(); // discard in-progress draw/drag before switching frames
     frameIdx = idx;
-    boxes = hydrate(frames[idx].detections);
+    boxes = hydrate(frames[idx].detections, frames[idx].reviewed);
     selectedIds = new Set();
     UndoManager.reset();
     emit();

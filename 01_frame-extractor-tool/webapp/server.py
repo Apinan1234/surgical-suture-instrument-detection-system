@@ -557,9 +557,11 @@ def _run_detect_job(job_id: str, body: DetectBody):
                 job["log"].append(f"[error] cannot read {record['path']}")
                 continue
             dets = det.predict(img)
-            # กล่องที่เก็บที่นี่ทั้งหมดมาจากโมเดล — ถ้า Annotate ต้องแยก manual/model
-            # ในอนาคต ให้ wrap เป็น {**d, "source": ...} ตอน PUT /api/frames/{id}/detections แทน
-            record["detections"] = [d.to_dict() for d in dets]
+            record["detections"] = [d.to_dict() for d in dets]  # Detection.source defaults to "model"
+            if record.get("reviewed"):
+                # Only reachable with the explicit skip_reviewed=false override — fresh unconfirmed
+                # model output shouldn't silently keep inheriting the frame's prior review status.
+                record["reviewed"] = False
             if dets:
                 detected_total += 1
             job["log"].append(f"[{'detected' if dets else 'empty'}] {Path(record['path']).name}: {len(dets)} obj")
