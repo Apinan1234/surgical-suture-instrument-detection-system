@@ -241,6 +241,9 @@ function startPolling() {
 
 let lastExtractedFrameIds = [];
 let classColors = {};
+// Mirrors the server's MAX_BULK_FRAMES default so a too-long span is refused before it is built.
+// The server is authoritative (it 422s regardless) — this only buys a clearer message.
+const MAX_BULK_FRAMES = 500;
 let currentDetectJobId = null;
 let detectPollTimer = null;
 let detectFrames = [];
@@ -679,6 +682,109 @@ function drawMarquee(ctx, start, current, scale) {
   ctx.restore();
 }
 
+// ── Keyframe interpolation math (pure functions, no state, no DOM) ──
+
+// Normalized-space IoU. Used only to pair instances between two keyframes, never for hit-testing,
+// so it deliberately ignores polygon/keypoint outlines and compares the bboxes those already derive.
+function bboxIou(a, b) {
+  const ax1 = a.x_center - a.width / 2, ax2 = a.x_center + a.width / 2;
+  const ay1 = a.y_center - a.height / 2, ay2 = a.y_center + a.height / 2;
+  const bx1 = b.x_center - b.width / 2, bx2 = b.x_center + b.width / 2;
+  const by1 = b.y_center - b.height / 2, by2 = b.y_center + b.height / 2;
+  const iw = Math.min(ax2, bx2) - Math.max(ax1, bx1);
+  const ih = Math.min(ay2, by2) - Math.max(ay1, by1);
+  if (iw <= 0 || ih <= 0) return 0;
+  const inter = iw * ih;
+  const union = a.width * a.height + b.width * b.height - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+// Two instances may be interpolated only if the result would be meaningful the whole way across:
+// same class, and the same shape with the same number of vertices. Interpolating a 4-vertex polygon
+// into a 7-vertex one, or a polygon into a plain box, has no correct answer — such a pair is left
+// unmatched rather than guessed at.
+function canPairForInterpolation(a, b) {
+  if (a.class_name !== b.class_name) return false;
+  const aPts = a.points ? a.points.length : 0, bPts = b.points ? b.points.length : 0;
+  const aKps = a.keypoints ? a.keypoints.length : 0, bKps = b.keypoints ? b.keypoints.length : 0;
+  return aPts === bPts && aKps === bKps;
+}
+
+// Greedy pairing between two keyframes' instances, best correspondence first. Greedy rather than
+// optimal (Hungarian): with the handful of instances a surgical frame actually holds, the two agree
+// in practice, and one obviously-correct pass beats a matrix solver nobody will maintain.
+//
+// Every class-compatible pair is a candidate — overlap is a ranking signal, NOT a requirement. A
+// keyframe pair is often seconds apart, and an instrument that travelled further than its own width
+// has zero IoU with itself; gating on overlap would refuse to interpolate in exactly the case the
+// feature exists for. IoU orders the candidates where it discriminates, centre distance breaks the
+// ties (which includes every zero-overlap pair).
+//
+// Instances left unpaired are simply not interpolated — an unpaired box means the object entered or
+// left mid-span, and inventing a track for it would fabricate ground truth.
+function matchInstances(aDets, zDets) {
+  const candidates = [];
+  (aDets || []).forEach((a, ai) => {
+    (zDets || []).forEach((z, zi) => {
+      if (!canPairForInterpolation(a, z)) return;
+      candidates.push({
+        ai, zi,
+        iou: bboxIou(a, z),
+        dist: Math.hypot(a.x_center - z.x_center, a.y_center - z.y_center),
+      });
+    });
+  });
+  candidates.sort((p, q) => (q.iou - p.iou) || (p.dist - q.dist));
+  const usedA = new Set(), usedZ = new Set(), pairs = [];
+  for (const c of candidates) {
+    if (usedA.has(c.ai) || usedZ.has(c.zi)) continue;
+    usedA.add(c.ai);
+    usedZ.add(c.zi);
+    pairs.push({ a: aDets[c.ai], z: zDets[c.zi] });
+  }
+  return pairs;
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+// One interpolated instance at position t in (0, 1) between keyframe instances a and z.
+function lerpDetection(a, z, t) {
+  const out = {
+    id: makeId(),
+    class_id: a.class_id,
+    class_name: a.class_name,
+    confidence: lerp(a.confidence ?? 1, z.confidence ?? 1, t),
+    x_center: lerp(a.x_center, z.x_center, t),
+    y_center: lerp(a.y_center, z.y_center, t),
+    width: lerp(a.width, z.width, t),
+    height: lerp(a.height, z.height, t),
+    source: "interpolated",
+    // Attributes are carried only where both ends agree. Taking them from one end would assert an
+    // occlusion the annotator never claimed for these frames.
+    occluded: !!a.occluded && !!z.occluded,
+    truncated: !!a.truncated && !!z.truncated,
+  };
+  if (a.points && z.points) {
+    // Vertex i to vertex i: counts are equal (canPairForInterpolation) and the polygon tool appends
+    // in draw order, so index correspondence is the ordering the annotator actually drew.
+    out.points = a.points.map((p, i) => [lerp(p[0], z.points[i][0], t), lerp(p[1], z.points[i][1], t)]);
+  }
+  if (a.keypoints && z.keypoints) {
+    // Position interpolates; visibility does not - v is a discrete label (0/1/2), and a midpoint
+    // between "occluded" and "visible" is not a state. Take the lower of the two, so a point that is
+    // unlabeled at either end stays unlabeled across the span instead of being promoted to a real
+    // coordinate the annotator never placed.
+    out.keypoints = a.keypoints.map((p, i) => [
+      lerp(p[0], z.keypoints[i][0], t),
+      lerp(p[1], z.keypoints[i][1], t),
+      Math.min(p[2], z.keypoints[i][2]),
+    ]);
+  }
+  return out;
+}
+
 // ── Api: one wrapper per endpoint used by Annotate ──
 
 const Api = {
@@ -691,6 +797,15 @@ const Api = {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+    });
+  },
+  putDetectionsBulk(items) {
+    // items: [{ frame_id, detections, rev }]. All-or-nothing server-side — a 409 means nothing was
+    // written, so the caller never has to work out how far a partial batch got.
+    return apiFetch("/api/frames/detections/bulk", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
     });
   },
   postReview(frameId, reviewed) {
@@ -812,14 +927,17 @@ const AnnotateState = (() => {
   }
 
   function hydrate(detections, reviewed) {
-    // Model-sourced boxes on a not-yet-reviewed frame are unconfirmed AI suggestions — render them
+    // Machine-sourced boxes on a not-yet-reviewed frame are unconfirmed suggestions — render them
     // the same dashed/pending way Label Assist's own suggestions already do (setLineDash, confidence
-    // badge, Accept All/Reject All, "Save implicitly confirms"), so bulk Detect (S-4) results go
-    // through the same human-review gate Label Assist (S-8) results always have.
+    // badge, Accept All/Reject All, "Save implicitly confirms"), so bulk Detect (S-4) results and
+    // interpolated spans go through the same human-review gate Label Assist (S-8) results have.
+    // Tested against the two machine values explicitly rather than `!== "manual"`: frame records
+    // written before `source` existed carry no such key, and those are human work, not suggestions.
+    const machine = (s) => s === "model" || s === "interpolated";
     return (detections || []).map((d) => ({
       ...d,
       id: makeId(),
-      ...(d.source === "model" && !reviewed ? { _pending: true } : {}),
+      ...(machine(d.source) && !reviewed ? { _pending: true } : {}),
     }));
   }
 
@@ -2042,6 +2160,8 @@ const Keyboard = (() => {
     { key: "]", handler: () => navFrame(1) },
     { key: "a", label: "A — Run Assist", handler: () => document.getElementById("assist-run-btn").click() },
     { key: "r", label: "R — Toggle reviewed", handler: () => toggleReviewed() },
+    { key: "s", label: "S — Set start keyframe (interpolation)", handler: () => Interpolate.setStart() },
+    { key: "i", label: "I — Interpolate from start keyframe to here", handler: () => Interpolate.run() },
     { key: "o", label: "O — Toggle occluded on selected box(es)", handler: () => toggleAttrOnSelection("occluded") },
     { key: "t", label: "T — Toggle truncated on selected box(es)", handler: () => toggleAttrOnSelection("truncated") },
     { key: "Enter", label: "Enter — Save & Next (or close polygon while drawing)", handler: () => {
@@ -2120,6 +2240,7 @@ function populateAnnotateClassSelect() {
 
 function initAnnotateFrames(frames) {
   const list = frames || [];
+  Interpolate.clear(); // frame indices are about to change; a keyframe pinned to an old one is junk
   document.getElementById("annotate-frames-info").classList.toggle("hidden", list.length > 0);
   document.getElementById("annotate-toolbar").classList.toggle("hidden", list.length === 0);
   document.getElementById("annotate-workspace").classList.toggle("hidden", list.length === 0);
@@ -2404,6 +2525,7 @@ AnnotateState.subscribe(() => {
   updateAnnotateReviewStatus();
   updateToolButtons();
   updateBulkActionsBar();
+  Interpolate.renderStatus();
   ContextMenu.close();
 });
 
@@ -2435,12 +2557,162 @@ document.getElementById("annotate-copy-prev-btn").addEventListener("click", () =
   AnnotateState.addBoxes(copied);
 });
 
+// ── Interpolate: fill the frames between two keyframes from their matched instances ──
+
+const Interpolate = (() => {
+  // Captured when "Set start keyframe" is pressed, not read back at run time. "Set keyframe" then
+  // means exactly what it says — it anchors the boxes as they are at that moment — and the feature
+  // works on frames the user has not saved yet, with no dependency on save order.
+  let start = null; // { idx, frameId, boxes }
+
+  function setStart() {
+    const frame = AnnotateState.currentFrame();
+    if (!frame) return;
+    const boxes = AnnotateState.getBoxes();
+    if (!boxes.length) {
+      alert("This frame has no boxes — annotate it first, then set it as the start keyframe.");
+      return;
+    }
+    start = { idx: AnnotateState.getFrameIdx(), frameId: frame.id, boxes: structuredClone(boxes) };
+    renderStatus();
+  }
+
+  function clear() {
+    start = null;
+    renderStatus();
+  }
+
+  function renderStatus() {
+    const el = document.getElementById("interpolate-status");
+    const runBtn = document.getElementById("interpolate-run-btn");
+    if (!el || !runBtn) return;
+    if (!start) {
+      el.textContent = "No start keyframe";
+      runBtn.disabled = true;
+      return;
+    }
+    const n = start.boxes.length;
+    el.textContent = `Start: frame ${start.idx + 1} (${n} box${n === 1 ? "" : "es"})`;
+    runBtn.disabled = AnnotateState.getFrameIdx() <= start.idx;
+  }
+
+  // The start frame may have been dropped by a reload, in which case its index means nothing.
+  function startStillValid() {
+    const frames = AnnotateState.getFrames();
+    return !!start && frames[start.idx] && frames[start.idx].id === start.frameId;
+  }
+
+  async function run() {
+    const frames = AnnotateState.getFrames();
+    const endIdx = AnnotateState.getFrameIdx();
+    if (!start) {
+      alert("Set a start keyframe first (S), then move to a later frame and interpolate.");
+      return;
+    }
+    if (!startStillValid()) {
+      alert("The start keyframe is no longer in the frame list. Set it again.");
+      clear();
+      return;
+    }
+    if (endIdx <= start.idx) {
+      alert(`The end frame must come after the start keyframe (frame ${start.idx + 1}).`);
+      return;
+    }
+    const span = endIdx - start.idx;
+    if (span < 2) {
+      alert("These two keyframes are adjacent — there are no frames between them to fill.");
+      return;
+    }
+
+    const endBoxes = AnnotateState.getBoxes();
+    const pairs = matchInstances(start.boxes, endBoxes);
+    if (!pairs.length) {
+      // Writing zero boxes to every frame in the span would silently erase whatever Detect put
+      // there, which is never what someone pressing "Interpolate" wants.
+      alert(
+        "No instances could be paired between the two keyframes.\n\n" +
+          "Instances pair by class, and polygons/keypoints must also have the same number of " +
+          "points. Nothing was changed."
+      );
+      return;
+    }
+
+    const targets = [];
+    let skipped = 0;
+    for (let i = start.idx + 1; i < endIdx; i++) {
+      if (frames[i].reviewed) { skipped += 1; continue; } // never overwrite human-confirmed work
+      targets.push(i);
+    }
+    if (!targets.length) {
+      alert(`All ${skipped} frame(s) between the keyframes are already reviewed — nothing to fill.`);
+      return;
+    }
+    if (targets.length > MAX_BULK_FRAMES) {
+      alert(`That span is ${targets.length} frames; the limit is ${MAX_BULK_FRAMES} per interpolation.`);
+      return;
+    }
+
+    const unpairedA = start.boxes.length - pairs.length;
+    const unpairedZ = endBoxes.length - pairs.length;
+    const ok = window.confirm(
+      `Interpolate frames ${start.idx + 2}–${endIdx} from keyframes ${start.idx + 1} and ${endIdx + 1}?\n\n` +
+        `Instances tracked: ${pairs.length}` +
+        (unpairedA || unpairedZ ? `  (${unpairedA} unmatched at the start, ${unpairedZ} at the end — these are not carried)` : "") +
+        `\nFrames to fill: ${targets.length}` +
+        (skipped ? `\nSkipped (already reviewed): ${skipped}` : "") +
+        `\n\nThis REPLACES existing boxes on those frames and cannot be undone with Ctrl+Z. ` +
+        `The new boxes arrive unconfirmed (dashed) for you to review.`
+    );
+    if (!ok) return;
+
+    const items = targets.map((i) => ({
+      frame_id: frames[i].id,
+      rev: frames[i].rev,
+      detections: pairs.map((p) => toWireDetection(lerpDetection(p.a, p.z, (i - start.idx) / span))),
+    }));
+
+    const res = await Api.putDetectionsBulk(items);
+    if (res.status === 409) {
+      const detail = (await res.json().catch(() => ({}))).detail || {};
+      const names = (detail.conflicts || []).slice(0, 5).map((c) => c.frame_id).join(", ");
+      alert(
+        "Nothing was changed — some of those frames were modified by someone else.\n\n" +
+          `Conflicting frames: ${names}${(detail.conflicts || []).length > 5 ? ", …" : ""}\n\n` +
+          "Re-run Detect (or reload the page) to pick up the current frame list, then try again."
+      );
+      return;
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(typeof err.detail === "string" ? err.detail : "Failed to write interpolated frames");
+      return;
+    }
+
+    const { results } = await res.json();
+    const revByFrameId = new Map(results.map((r) => [r.frame_id, r.rev]));
+    items.forEach((item) => {
+      const idx = frames.findIndex((f) => f.id === item.frame_id);
+      if (idx >= 0) AnnotateState.setFrameDetections(idx, item.detections, revByFrameId.get(item.frame_id));
+    });
+    // Re-selecting the current frame is what repaints the filmstrip badges and the canvas from the
+    // now-updated records. Safe here: the end keyframe's own boxes were not touched by this write.
+    AnnotateState.selectFrame(endIdx);
+    alert(`Filled ${targets.length} frame(s) with ${pairs.length} interpolated instance(s) each.`);
+  }
+
+  return { setStart, run, renderStatus, clear };
+})();
+
+document.getElementById("interpolate-start-btn").addEventListener("click", () => Interpolate.setStart());
+document.getElementById("interpolate-run-btn").addEventListener("click", () => Interpolate.run());
+Interpolate.renderStatus(); // the run button starts disabled until a keyframe exists
+
 document.getElementById("annotate-save-next-btn").addEventListener("click", saveAndNext);
 
-async function saveCurrentFrame() {
-  const frame = AnnotateState.currentFrame();
-  if (!frame) return false;
-  const cleanBoxes = AnnotateState.getBoxes().map((d) => ({
+// The one place that knows the server's detection shape. Client-only keys (id, _pending) are
+// excluded by construction rather than deleted, so a new client-side field can never leak into a PUT.
+function toWireDetection(d) {
+  return {
     class_id: d.class_id,
     class_name: d.class_name,
     confidence: d.confidence,
@@ -2455,7 +2727,13 @@ async function saveCurrentFrame() {
     // undefined/null would 422 against the server's `bool` field.
     occluded: !!d.occluded,
     truncated: !!d.truncated,
-  }));
+  };
+}
+
+async function saveCurrentFrame() {
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return false;
+  const cleanBoxes = AnnotateState.getBoxes().map(toWireDetection);
 
   const res = await Api.putDetections(frame.id, cleanBoxes, frame.rev);
   // 409 must be handled BEFORE the generic branch below: its `detail` is an object, and the generic

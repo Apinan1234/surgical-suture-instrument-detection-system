@@ -40,6 +40,9 @@ MAX_TOTAL_UPLOAD_MB = int(os.environ.get("MAX_TOTAL_UPLOAD_MB", "51200"))
 MAX_TOTAL_UPLOAD_BYTES = MAX_TOTAL_UPLOAD_MB * 1024 * 1024
 MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "2"))
 MAX_FRAMES_ALL_MODE = int(os.environ.get("MAX_FRAMES_ALL_MODE", "20000"))
+# Upper bound on one bulk detections write, i.e. on how long an interpolated span may be. The whole
+# batch is applied under a single _state_lock, so this is really a cap on how long that lock is held.
+MAX_BULK_FRAMES = int(os.environ.get("MAX_BULK_FRAMES", "500"))
 
 VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
@@ -799,7 +802,7 @@ class DetectionIn(BaseModel):
     y_center: float = Field(ge=0.0, le=1.0)
     width: float = Field(gt=0.0, le=1.0)
     height: float = Field(gt=0.0, le=1.0)
-    source: Literal["model", "manual"] = "manual"
+    source: Literal["model", "manual", "interpolated"] = "manual"
     points: list[list[float]] | None = None
     keypoints: list[list[float]] | None = None
     # Set by a human in the Annotate tab only — never by the detectors (see Detection in detector.py).
@@ -890,6 +893,86 @@ def replace_frame_detections(frame_id: str, body: FrameDetectionsBody):
 
     save_state()
     return {"frame_id": frame_id, "detections": new_dets, "rev": rev}
+
+
+class BulkItemIn(BaseModel):
+    frame_id: str
+    detections: list[DetectionIn]
+    rev: int | None = None
+
+
+class BulkDetectionsBody(BaseModel):
+    items: list[BulkItemIn]
+
+    @model_validator(mode="after")
+    def _check_len(self):
+        if not self.items:
+            raise ValueError("items must not be empty")
+        if len(self.items) > MAX_BULK_FRAMES:
+            raise ValueError(f"at most {MAX_BULK_FRAMES} frames per bulk write")
+        seen = set()
+        for item in self.items:
+            if item.frame_id in seen:
+                # Two entries for one frame would make the second silently win, and the rev the
+                # caller sent for it would already be stale from the first. Reject instead.
+                raise ValueError(f"duplicate frame_id in items: {item.frame_id}")
+            seen.add(item.frame_id)
+        return self
+
+
+# Note the path shape: "/api/frames/bulk/detections" would be swallowed by the route above with
+# frame_id="bulk". This one cannot collide with it whatever order they are registered in.
+@app.put("/api/frames/detections/bulk")
+def replace_frame_detections_bulk(body: BulkDetectionsBody):
+    """Replace detections on many frames as one all-or-nothing write.
+
+    Exists because the single-frame route calls save_state() — a full serialisation of every frame in
+    the app — once per frame. Filling a 300-frame interpolated span through it would mean 300 of
+    those. It also could not be made atomic: a 409 partway through would leave the span half written
+    with no way to tell how far it got.
+    """
+    # Built outside the lock for the same reason the single-frame route does it: Detection's
+    # __post_init__ re-derives bboxes from polygons/keypoints, and this batch is far larger.
+    prepared = [
+        (item.frame_id, [Detection(**d.model_dump()).to_dict() for d in item.detections], item.rev)
+        for item in body.items
+    ]
+
+    with _state_lock:
+        # Pass 1 decides; pass 2 mutates. Nothing is written unless every item passes, so a caller
+        # that gets a 409 knows the whole batch was rejected and can reload without reconciling.
+        conflicts = []
+        for frame_id, _dets, rev in prepared:
+            record = _state["frames"].get(frame_id)
+            if record is None:
+                conflicts.append({"frame_id": frame_id, "error": "not_found"})
+                continue
+            current_rev = int(record.get("rev", 0))
+            if rev is not None and rev != current_rev:
+                conflicts.append({
+                    "frame_id": frame_id,
+                    "error": "stale_rev",
+                    "your_rev": rev,
+                    "current_rev": current_rev,
+                })
+        if conflicts:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "bulk_rejected",
+                    "message": "No frames were changed. Reload the frame list and try again.",
+                    "conflicts": conflicts,
+                },
+            )
+
+        results = []
+        for frame_id, dets, _rev in prepared:
+            record = _state["frames"][frame_id]
+            record["detections"] = dets
+            results.append({"frame_id": frame_id, "rev": _bump_rev(record)})
+
+    save_state()
+    return {"results": results}
 
 
 class ReviewBody(BaseModel):

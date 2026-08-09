@@ -74,7 +74,12 @@ class Detection:
     y_center:   float
     width:      float
     height:     float
-    source:     str = "model"   # "model" (raw detector output) | "manual" (human-drawn/edited at save time)
+    # "model"        raw detector output
+    # "manual"       human-drawn/edited at save time
+    # "interpolated" geometry synthesised between two human keyframes; no detector and no human ever
+    #                saw this exact box, so it is kept distinct from both — the Analytics accept-rate
+    #                counts only "model", and a human confirming one does not rewrite it to "manual".
+    source:     str = "model"
     points:     list[list[float]] | None = None  # normalized [[x,y], ...] polygon vertices; None = plain bbox
     keypoints:  list[list[float]] | None = None  # normalized [[x,y,v], ...] pose keypoints; v: 0=unlabeled,1=occluded,2=visible
     # Human-only annotation attributes. The YOLO label line has nowhere to put them, so they never
