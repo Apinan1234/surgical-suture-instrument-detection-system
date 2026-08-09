@@ -778,6 +778,9 @@ class DetectionIn(BaseModel):
     source: Literal["model", "manual"] = "manual"
     points: list[list[float]] | None = None
     keypoints: list[list[float]] | None = None
+    # Set by a human in the Annotate tab only — never by the detectors (see Detection in detector.py).
+    occluded: bool = False
+    truncated: bool = False
 
     @model_validator(mode="after")
     def _check_class(self):

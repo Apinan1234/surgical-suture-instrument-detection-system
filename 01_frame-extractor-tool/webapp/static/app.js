@@ -910,6 +910,14 @@ const AnnotateState = (() => {
     setBoxes(boxes.map((b) => (idSet.has(b.id) ? { ...b, class_id: classId, class_name: className } : b)));
   }
 
+  function setBoxAttrByIds(ids, key, value) {
+    if (!ids.length) return;
+    const idSet = new Set(ids);
+    // Spread-based and routed through setBoxes, exactly like reassignClassByIds: keeps id/_pending/
+    // points/keypoints intact and makes a toggle one undoable step no matter how many boxes.
+    setBoxes(boxes.map((b) => (idSet.has(b.id) ? { ...b, [key]: !!value } : b)));
+  }
+
   function deleteSelectedBoxes() {
     deleteBoxesByIds(getSelectedIds());
   }
@@ -967,7 +975,7 @@ const AnnotateState = (() => {
   return {
     subscribe, init, selectFrame, currentFrame, getBoxes, setBoxes, addBoxes,
     selectBox, selectBoxes, getSelected, isSelected, getSelectedIds, getSelectedCount,
-    reselectIfMissing, deleteBoxesByIds, deleteVertex, setKeypointVisibility, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
+    reselectIfMissing, deleteBoxesByIds, deleteVertex, setKeypointVisibility, reassignClassByIds, setBoxAttrByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
     setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
     findNextUnreviewedIndex, markReviewedLocal, setFrameDetections, setFrameRev, setFrameOcrText,
@@ -1969,6 +1977,15 @@ const Keyboard = (() => {
     popover.classList.toggle("open");
   }
 
+  function toggleAttrOnSelection(key) {
+    const ids = AnnotateState.getSelectedIds();
+    if (!ids.length) return;
+    // Toggle a multi-selection against the FIRST box so a mixed selection converges on one value
+    // instead of flip-flopping each box independently.
+    const first = AnnotateState.getBoxes().find((b) => b.id === ids[0]);
+    AnnotateState.setBoxAttrByIds(ids, key, !(first && first[key]));
+  }
+
   const SHORTCUTS = [
     { key: "v", label: "V — Select tool", handler: () => AnnotateState.setActiveTool("select") },
     { key: "b", label: "B — Draw box tool", handler: () => AnnotateState.setActiveTool("draw_box") },
@@ -1992,6 +2009,8 @@ const Keyboard = (() => {
     { key: "]", handler: () => navFrame(1) },
     { key: "a", label: "A — Run Assist", handler: () => document.getElementById("assist-run-btn").click() },
     { key: "r", label: "R — Toggle reviewed", handler: () => toggleReviewed() },
+    { key: "o", label: "O — Toggle occluded on selected box(es)", handler: () => toggleAttrOnSelection("occluded") },
+    { key: "t", label: "T — Toggle truncated on selected box(es)", handler: () => toggleAttrOnSelection("truncated") },
     { key: "Enter", label: "Enter — Save & Next (or close polygon while drawing)", handler: () => {
         const tool = Tools[AnnotateState.getActiveTool()];
         if (tool && tool.onEnter && tool.onEnter()) return; // tool consumed Enter (e.g. closed a polygon)
@@ -2176,6 +2195,24 @@ document.getElementById("annotate-filmstrip-search").addEventListener("input", (
 
 // ── PropertyPanel: per-box detection list (class dropdown + confidence badge + click-to-highlight) ──
 
+function attrToggle(b, key, glyph, title) {
+  const label = document.createElement("label");
+  label.className = "attr-toggle" + (b[key] ? " on" : "");
+  label.title = title;
+  const cb = document.createElement("input");
+  cb.type = "checkbox";
+  cb.checked = !!b[key];
+  cb.addEventListener("change", () => {
+    AnnotateState.setBoxAttrByIds([b.id], key, cb.checked);
+    // Keyboard.isTextInput() treats any focused <input> as a text field and swallows every
+    // shortcut while it has focus, so hand focus back after the toggle.
+    cb.blur();
+  });
+  label.appendChild(cb);
+  label.appendChild(document.createTextNode(glyph));
+  return label;
+}
+
 function renderDetectionList() {
   const list = document.getElementById("annotate-detection-list");
   list.innerHTML = "";
@@ -2194,7 +2231,10 @@ function renderDetectionList() {
     const li = document.createElement("li");
     li.className = AnnotateState.isSelected(b.id) ? "selected" : "";
     li.addEventListener("click", (e) => {
-      if (e.target.tagName === "SELECT" || e.target.tagName === "BUTTON") return;
+      // Superset of the old SELECT/BUTTON check: the attribute toggles are an <input> inside a
+      // <label>, and without those two a toggle click would also switch the active tool and
+      // collapse a multi-selection down to this one box.
+      if (e.target.closest("select, button, label, input")) return;
       AnnotateState.setActiveTool("select");
       AnnotateState.selectBox(b.id);
     });
@@ -2241,6 +2281,15 @@ function renderDetectionList() {
     li.appendChild(badge);
     if (angleBadge) li.appendChild(angleBadge);
     li.appendChild(del);
+
+    // Own full-width row below the class picker: at 240px the sidebar has no room for the toggles
+    // beside a select that already truncates "needle_holder".
+    const attrs = document.createElement("div");
+    attrs.className = "attr-row";
+    attrs.appendChild(attrToggle(b, "occluded", "occluded", "Occluded — partly hidden behind another object (O)"));
+    attrs.appendChild(attrToggle(b, "truncated", "truncated", "Truncated — runs off the edge of the frame (T)"));
+    li.appendChild(attrs);
+
     list.appendChild(li);
   });
 }
@@ -2369,6 +2418,10 @@ async function saveCurrentFrame() {
     source: d.source || (d._pending ? "model" : "manual"),
     points: d.points || null,
     keypoints: d.keypoints || null,
+    // `!!` is load-bearing: boxes from a tool commit have no such key, and an explicit
+    // undefined/null would 422 against the server's `bool` field.
+    occluded: !!d.occluded,
+    truncated: !!d.truncated,
   }));
 
   const res = await Api.putDetections(frame.id, cleanBoxes, frame.rev);

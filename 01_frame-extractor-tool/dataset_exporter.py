@@ -8,6 +8,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+# Per-instance annotation attributes carried in attributes.json alongside the dataset. Kept in sync
+# with the same-named fields on detector.Detection; a YOLO label line has no column for them.
+ATTRIBUTE_NAMES = ("occluded", "truncated")
+
+
 def _label_line(d: dict, task: str, n_kpts: int = 0) -> str:
     """One YOLO label line for a single detection dict (Detection.to_dict()-shaped)."""
     if task == "segment":
@@ -120,6 +125,9 @@ def export_dataset_pipeline(
     train_count = 0
     val_count = 0
     test_count = 0
+    # Per-instance annotation attributes, keyed "<split>/<stem>" so an entry maps onto exactly one
+    # labels/<split>/<stem>.txt. Written out as attributes.json below, and only if anything is set.
+    attributes_index: dict[str, dict] = {}
 
     for split_name, items in split_data.items():
         if not items: continue
@@ -152,10 +160,22 @@ def export_dataset_pipeline(
             save_name = src.stem + "_0"
             cv2.imwrite(str(img_dir / f"{save_name}.jpg"), img)
             
+            inst_attrs = {}
             with open(lbl_dir / f"{save_name}.txt", "w") as f:
-                for d in item.get("detections", []):
+                for i, d in enumerate(item.get("detections", [])):
                     f.write(_label_line(d, task, n_kpts) + "\n")
-            
+                    # Line i of this .txt is instance i — that index is the only handle a consumer
+                    # has for tying an attribute back to a label the YOLO format can't carry it on.
+                    flags = {k: True for k in ATTRIBUTE_NAMES if d.get(k)}
+                    if flags:
+                        inst_attrs[str(i)] = flags
+            if inst_attrs:
+                attributes_index[f"{split_name}/{save_name}"] = {
+                    "split": split_name,
+                    "source_image": src.name,
+                    "instances": inst_attrs,
+                }
+
             total_exported += 1
             if split_name == "train": train_count += 1
             elif split_name == "val": val_count += 1
@@ -165,6 +185,11 @@ def export_dataset_pipeline(
             if progress_callback: progress_callback(done, total_ops)
             
             # Augmentations (Only for Train)
+            # NOTE: augmented copies are deliberately absent from attributes.json. Albumentations
+            # drops and reorders boxes whose geometry leaves the crop, so an augmented .txt's
+            # instance indices do NOT correspond to the base image's — carrying attributes across
+            # would be actively wrong, not merely incomplete. (This path already loses
+            # points/keypoints for the same reason.)
             if split_name == "train" and do_augment and transform:
                 for i in range(1, multiplier):
                     try:
@@ -197,10 +222,34 @@ def export_dataset_pipeline(
         "class_names":     class_names,
         "task":            task,
         "kpt_shape":       [n_kpts, 3] if task == "pose" else None,
+        "has_attributes":  bool(attributes_index),
     }
     (out / "export_summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+
+    # Must be written before the as_zip block below — make_archive zips `out` as it stands.
+    if attributes_index:
+        (out / "attributes.json").write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "note": (
+                        "Per-instance annotation attributes the YOLO label format cannot carry. "
+                        'Keys under "images" are "<split>/<stem>", i.e. exactly '
+                        "labels/<split>/<stem>.txt and images/<split>/<stem>.jpg. \"instances\" is "
+                        "keyed by the 0-based line number within that .txt. Sparse: only instances "
+                        "with at least one attribute set are listed, anything absent is false. "
+                        "Augmented training copies are intentionally not covered."
+                    ),
+                    "attribute_names": list(ATTRIBUTE_NAMES),
+                    "images": attributes_index,
+                },
+                indent=2,
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
 
     if as_zip:
         archive = shutil.make_archive(str(out), "zip", str(out.parent), out.name)

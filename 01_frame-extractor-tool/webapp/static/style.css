@@ -421,6 +421,7 @@ main.wide {
 .detection-list li {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px;
   border-radius: 8px;
@@ -469,6 +470,34 @@ main.wide {
   font-size: 14px;
   flex-shrink: 0;
   padding: 0 4px;
+}
+
+/* Occluded/truncated toggles sit on their own full-width line below the class picker, so line 1 of
+   the row is byte-for-byte the layout it had before and the select keeps its full width. */
+.detection-list .attr-row {
+  flex-basis: 100%;
+  display: flex;
+  gap: 12px;
+}
+
+.detection-list .attr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.detection-list .attr-toggle input {
+  margin: 0;
+  accent-color: var(--highlight);
+}
+
+.detection-list .attr-toggle.on {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .detection-list-empty {

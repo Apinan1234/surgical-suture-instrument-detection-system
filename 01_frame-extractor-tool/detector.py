@@ -77,6 +77,11 @@ class Detection:
     source:     str = "model"   # "model" (raw detector output) | "manual" (human-drawn/edited at save time)
     points:     list[list[float]] | None = None  # normalized [[x,y], ...] polygon vertices; None = plain bbox
     keypoints:  list[list[float]] | None = None  # normalized [[x,y,v], ...] pose keypoints; v: 0=unlabeled,1=occluded,2=visible
+    # Human-only annotation attributes. The YOLO label line has nowhere to put them, so they never
+    # reach a .txt — dataset_exporter writes them to a separate attributes.json instead. A model
+    # cannot know either of these, so the detectors leave them at their defaults.
+    occluded:   bool = False  # partly hidden behind another object
+    truncated:  bool = False  # runs off the edge of the frame
 
     def __post_init__(self):
         # Server is authoritative: whenever a real polygon/keypoint set is present, the bbox fields are
@@ -136,6 +141,8 @@ class Detection:
             "source":     self.source,
             "points":     [[round(x, 6), round(y, 6)] for x, y in self.points] if self.points else None,
             "keypoints":  [[round(x, 6), round(y, 6), int(v)] for x, y, v in self.keypoints] if self.keypoints else None,
+            "occluded":   bool(self.occluded),
+            "truncated":  bool(self.truncated),
         }
 
 
