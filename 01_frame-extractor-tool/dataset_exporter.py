@@ -151,9 +151,12 @@ def export_dataset_pipeline(
                 bboxes.append([d["x_center"], d["y_center"], d["width"], d["height"]])
                 labels.append(d["class_id"])
                 
-            # Preprocess (Resize)
-            if do_resize and split_name != "train" or (split_name == "train" and not do_augment):
-                # If we just resize without augment
+            # Preprocess (Resize). The augmented branch below does its own resizing, so the base
+            # image is only resized here when augmentation is not going to run for this split.
+            # `and` binds tighter than `or`, so the do_resize guard has to wrap the whole condition —
+            # without the outer parens the train split resized even with resize turned off, and
+            # resize_size is None in that case.
+            if do_resize and (split_name != "train" or not do_augment):
                 img = cv2.resize(img, (resize_size, resize_size))
                 
             # Base save
