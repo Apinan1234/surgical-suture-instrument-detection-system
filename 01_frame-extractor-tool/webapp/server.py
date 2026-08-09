@@ -64,7 +64,7 @@ SNAPSHOT_KEEP = 10
 # ────────────────────────────── State (S-0) ──────────────────────────────
 
 _state_lock = threading.Lock()
-_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "export_jobs": {}, "assist_log": []}
+_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "export_jobs": {}, "ocr_jobs": {}, "assist_log": []}
 _last_snapshot_time = 0.0
 
 
@@ -73,7 +73,7 @@ def load_state():
     if STATE_PATH.exists():
         with open(STATE_PATH, "r", encoding="utf-8") as f:
             _state = json.load(f)
-    for key in ("videos", "extract_jobs", "frames", "detect_jobs", "export_jobs"):
+    for key in ("videos", "extract_jobs", "frames", "detect_jobs", "export_jobs", "ocr_jobs"):
         _state.setdefault(key, {})
     _state.setdefault("assist_log", [])
 
@@ -220,7 +220,7 @@ _running_jobs = 0
 
 
 def _acquire_job_slot() -> bool:
-    """Admission control for extract_jobs/detect_jobs — caps how many run at once
+    """Admission control for extract_jobs/detect_jobs/ocr_jobs — caps how many run at once
     (MAX_CONCURRENT_JOBS) so one operator can't exhaust CPU/GPU by starting many jobs back-to-back."""
     global _running_jobs
     with _running_jobs_lock:
@@ -877,6 +877,130 @@ def ocr_frame(frame_id: str):
     save_state()
 
     return {"frame_id": frame_id, "ocr_text": text}
+
+
+class OcrBody(BaseModel):
+    frame_ids: list[str]
+    skip_existing: bool = True
+
+
+def _run_ocr_job(job_id: str, body: OcrBody):
+    """Batch OCR across a frame set — same job/progress/log/stop shape as _run_detect_job, so the
+    frontend polls it identically. Writes straight to record["ocr_text"], matching the single-frame
+    route: OCR has no accept/reject step, so it's settled metadata, not a pending suggestion."""
+    job = _state["ocr_jobs"][job_id]
+    text_found_total = 0
+    skipped_total = 0
+
+    try:
+        # Resolve the binary once up front. Doing it per frame would repeat the same "not installed"
+        # failure for every frame in the job instead of failing fast with one actionable message.
+        _resolve_tesseract_cmd()
+    except Exception as e:
+        job["log"].append(f"[error] {e}")
+        job["status"] = "stopped"
+        _job_stop_flags.pop(job_id, None)
+        save_state()
+        return
+
+    total = len(body.frame_ids)
+    for idx, frame_id in enumerate(body.frame_ids):
+        if _job_stop_flags.get(job_id):
+            break
+
+        record = _state["frames"].get(frame_id)
+        if not record:
+            job["log"].append(f"[error] unknown frame id {frame_id}")
+            continue
+
+        if body.skip_existing and record.get("ocr_text") is not None:
+            skipped_total += 1
+            job["log"].append(f"[skip] {Path(record['path']).name}: already has OCR text")
+            job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
+            if len(job["log"]) > 500:
+                del job["log"][: len(job["log"]) - 500]
+            continue
+
+        try:
+            img = cv2.imread(record["path"])
+            if img is None:
+                job["log"].append(f"[error] cannot read {record['path']}")
+                continue
+            text = run_ocr(img)
+            record["ocr_text"] = text
+            if text:
+                text_found_total += 1
+            preview = text.replace("\n", " ")[:60]
+            job["log"].append(
+                f"[text] {Path(record['path']).name}: {preview}" if text
+                else f"[empty] {Path(record['path']).name}: no text"
+            )
+        except Exception as e:
+            job["log"].append(f"[error] {record['path']}: {e}")
+
+        job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
+        if len(job["log"]) > 500:
+            del job["log"][: len(job["log"]) - 500]
+
+    job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
+    if job["status"] == "done":
+        job["progress"] = 100
+    job["frame_ids"] = body.frame_ids
+    # text_found_total counts only frames OCR'd by THIS run; skipped_total is reported separately so
+    # a fully-skipped re-run doesn't read as "0 frames with text" when they all already have some.
+    job["text_found_total"] = text_found_total
+    job["skipped_total"] = skipped_total
+    _job_stop_flags.pop(job_id, None)
+    save_state()
+
+
+@app.post("/api/ocr")
+def start_ocr(body: OcrBody):
+    for frame_id in body.frame_ids:
+        if frame_id not in _state["frames"]:
+            raise HTTPException(status_code=404, detail=f"Unknown frame id: {frame_id}")
+
+    if not _acquire_job_slot():
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many jobs running (max {MAX_CONCURRENT_JOBS}); wait for one to finish",
+        )
+
+    job_id = uuid.uuid4().hex
+    _state["ocr_jobs"][job_id] = {
+        "id": job_id,
+        "status": "running",
+        "progress": 0,
+        "log": [],
+        "frame_ids": [],
+        "text_found_total": 0,
+        "skipped_total": 0,
+        "skip_existing": body.skip_existing,
+        "created_at": datetime.now().isoformat(),
+    }
+    _job_stop_flags[job_id] = False
+    threading.Thread(target=_run_job_and_release, args=(_run_ocr_job, job_id, body), daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/ocr/{job_id}")
+def ocr_status(job_id: str):
+    job = _state["ocr_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.post("/api/ocr/{job_id}/stop")
+def stop_ocr(job_id: str):
+    if job_id not in _state["ocr_jobs"]:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _job_stop_flags[job_id] = True
+    return {"stopping": True}
+
+
+# The batch results need no dedicated GET route — ocr_text rides through _public() on the existing
+# GET /api/detect/{job_id}/frames, which the Annotate frontend already fetches.
 
 
 # ────────────────────────────── S-7 Models ──────────────────────────────

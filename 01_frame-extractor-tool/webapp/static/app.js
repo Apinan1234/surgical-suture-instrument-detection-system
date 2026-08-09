@@ -699,6 +699,19 @@ const Api = {
   postOcr(frameId) {
     return apiFetch(`/api/frames/${frameId}/ocr`, { method: "POST" });
   },
+  startOcrJob(frameIds, skipExisting) {
+    return apiFetch("/api/ocr", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ frame_ids: frameIds, skip_existing: !!skipExisting }),
+    });
+  },
+  ocrJobStatus(jobId) {
+    return apiFetch(`/api/ocr/${jobId}`);
+  },
+  stopOcrJob(jobId) {
+    return apiFetch(`/api/ocr/${jobId}/stop`, { method: "POST" });
+  },
   imageUrl(frameId) {
     return `/api/frames/${frameId}/image.jpg?t=${Date.now()}`;
   },
@@ -2066,14 +2079,22 @@ const Filmstrip = (() => {
     });
   }, { root: document.querySelector(".annotate-filmstrip"), rootMargin: "200px" });
 
-  function frameBadge(frame) {
-    if (frame.reviewed) return "✅";
-    return (frame.detections || []).length ? "🏷" : "🔴";
+  function hasOcrText(frame) {
+    return !!(frame.ocr_text && frame.ocr_text.trim());
   }
 
-  function passesFilter(frame, filter) {
-    if (filter === "unreviewed") return !frame.reviewed;
-    if (filter === "reviewed") return !!frame.reviewed;
+  function frameBadge(frame) {
+    const base = frame.reviewed ? "✅" : (frame.detections || []).length ? "🏷" : "🔴";
+    return hasOcrText(frame) ? base + "📄" : base;
+  }
+
+  function passesFilter(frame, filter, query) {
+    if (filter === "unreviewed" && frame.reviewed) return false;
+    if (filter === "reviewed" && !frame.reviewed) return false;
+    if (filter === "has_ocr" && !hasOcrText(frame)) return false;
+    if (filter === "no_ocr" && hasOcrText(frame)) return false;
+    // Free-text search ANDs with the dropdown. Frames with no OCR text never match a non-empty query.
+    if (query && !(frame.ocr_text || "").toLowerCase().includes(query)) return false;
     return true;
   }
 
@@ -2107,14 +2128,20 @@ const Filmstrip = (() => {
     const frames = AnnotateState.getFrames();
     const idx = AnnotateState.getFrameIdx();
     const filter = document.getElementById("annotate-filmstrip-filter").value;
+    const query = document.getElementById("annotate-filmstrip-search").value.trim().toLowerCase();
+    let shown = 0;
     Array.from(list.children).forEach((li, i) => {
       const frame = frames[i];
       if (!frame) return;
       li.className = i === idx ? "selected" : "";
-      if (!passesFilter(frame, filter)) li.classList.add("hidden-by-filter");
+      if (passesFilter(frame, filter, query)) shown++;
+      else li.classList.add("hidden-by-filter");
       const label = li.querySelector(".filmstrip-label");
       label.textContent = `${frameBadge(frame)} ${frame.filename}`;
     });
+    const countEl = document.getElementById("annotate-filmstrip-match-count");
+    countEl.textContent =
+      query || filter !== "all" ? `${shown} / ${frames.length} shown` : "";
   }
 
   function render() {
@@ -2131,6 +2158,9 @@ const Filmstrip = (() => {
 })();
 
 document.getElementById("annotate-filmstrip-filter").addEventListener("change", () => Filmstrip.render());
+// Frame count is unchanged while typing, so render() takes the cheap patch() path and never tears
+// down the <img> elements — rebuilding here would re-trigger every S-9 thumbnail fetch on each keystroke.
+document.getElementById("annotate-filmstrip-search").addEventListener("input", () => Filmstrip.render());
 
 // ── PropertyPanel: per-box detection list (class dropdown + confidence badge + click-to-highlight) ──
 
@@ -2490,6 +2520,78 @@ async function runOcr() {
 }
 
 document.getElementById("ocr-run-btn").addEventListener("click", runOcr);
+
+let ocrBatchJobId = null;
+let ocrBatchPollTimer = null;
+
+async function runBatchOcr() {
+  const frames = AnnotateState.getFrames();
+  if (!frames.length) return;
+  const batchBtn = document.getElementById("ocr-batch-btn");
+  if (batchBtn.disabled) return;
+
+  const statusEl = document.getElementById("ocr-batch-status");
+  batchBtn.disabled = true;
+  statusEl.textContent = "Starting…";
+
+  const res = await Api.startOcrJob(frames.map((f) => f.id), true);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    statusEl.textContent = errBody.detail || "Failed to start batch OCR";
+    batchBtn.disabled = false;
+    return;
+  }
+  ocrBatchJobId = (await res.json()).job_id;
+  document.getElementById("ocr-batch-stop-btn").classList.remove("hidden");
+  startOcrBatchPolling();
+}
+
+function startOcrBatchPolling() {
+  const statusEl = document.getElementById("ocr-batch-status");
+  ocrBatchPollTimer = setInterval(async () => {
+    const res = await Api.ocrJobStatus(ocrBatchJobId);
+    if (!res.ok) return;
+    const job = await res.json();
+    statusEl.textContent = `${job.status} — ${job.progress}%`;
+
+    if (job.status === "done" || job.status === "stopped") {
+      clearInterval(ocrBatchPollTimer);
+      ocrBatchPollTimer = null;
+      document.getElementById("ocr-batch-btn").disabled = false;
+      document.getElementById("ocr-batch-stop-btn").classList.add("hidden");
+      const lastErr = (job.log || []).filter((l) => l.startsWith("[error]")).pop();
+      const skipped = job.skipped_total ? `, ${job.skipped_total} skipped` : "";
+      statusEl.textContent = lastErr
+        ? lastErr
+        : `${job.status} — ${job.text_found_total} / ${job.frame_ids.length} frames with text${skipped}`;
+      await mergeOcrTextFromServer();
+    }
+  }, 1000);
+}
+
+// Pull the freshly-OCR'd text back in WITHOUT re-initialising AnnotateState. Calling
+// loadDetectFrames()/initAnnotateFrames() here would rebuild the whole frame list and throw away any
+// unsaved box edits the user has on the current frame, so only ocr_text is merged, matched by id.
+async function mergeOcrTextFromServer() {
+  if (!currentDetectJobId) return;
+  const res = await apiFetch(`/api/detect/${currentDetectJobId}/frames`);
+  if (!res.ok) return;
+  const data = await res.json();
+  const textById = new Map(data.frames.map((f) => [f.id, f.ocr_text]));
+  AnnotateState.getFrames().forEach((frame, idx) => {
+    if (textById.has(frame.id)) AnnotateState.setFrameOcrText(idx, textById.get(frame.id));
+  });
+  renderOcrPanel(AnnotateState.currentFrame());
+  Filmstrip.render();
+}
+
+document.getElementById("ocr-batch-btn").addEventListener("click", runBatchOcr);
+
+document.getElementById("ocr-batch-stop-btn").addEventListener("click", async () => {
+  if (!ocrBatchJobId) return;
+  await Api.stopOcrJob(ocrBatchJobId);
+  document.getElementById("ocr-batch-status").textContent = "Stopping…";
+});
 
 document.getElementById("annotate-clear-btn").addEventListener("click", () => {
   if (!AnnotateState.currentFrame() || !AnnotateState.getBoxes().length) return;

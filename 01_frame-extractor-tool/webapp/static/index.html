@@ -262,11 +262,16 @@
 
     <div id="annotate-workspace" class="card hidden annotate-layout">
       <div class="annotate-filmstrip">
-        <select class="input" id="annotate-filmstrip-filter" style="margin-bottom:8px; padding:6px 10px; font-size:12px;">
+        <input type="search" class="input" id="annotate-filmstrip-search" placeholder="Search OCR text…"
+               style="margin-bottom:6px; padding:6px 10px; font-size:12px;">
+        <select class="input" id="annotate-filmstrip-filter" style="margin-bottom:4px; padding:6px 10px; font-size:12px;">
           <option value="all">All</option>
           <option value="unreviewed">Needs Review</option>
           <option value="reviewed">Reviewed</option>
+          <option value="has_ocr">Has OCR text</option>
+          <option value="no_ocr">No OCR text</option>
         </select>
+        <div id="annotate-filmstrip-match-count" style="font-size:11px; color:var(--muted); margin-bottom:8px;"></div>
         <ul id="annotate-filmstrip-list" class="filmstrip-list"></ul>
       </div>
       <div class="annotate-canvas-wrap">
@@ -325,6 +330,9 @@
         <div class="section-label">OCR (burned-in text)</div>
         <button id="ocr-run-btn" class="btn-primary" style="width:100%;">Run OCR</button>
         <pre id="ocr-result" class="log-panel" style="margin-top:8px; max-height:120px; white-space:pre-wrap; word-break:break-word;">Not run yet.</pre>
+        <button id="ocr-batch-btn" class="btn-download" style="margin-top:8px; width:100%;">Run OCR on all frames</button>
+        <button id="ocr-batch-stop-btn" class="btn-stop hidden" style="margin-top:4px; width:100%;">Stop</button>
+        <div id="ocr-batch-status" style="font-size:11px; color:var(--muted); margin-top:4px;"></div>
 
         <label for="annotate-class-select">New Class</label>
         <select class="input" id="annotate-class-select"></select>
