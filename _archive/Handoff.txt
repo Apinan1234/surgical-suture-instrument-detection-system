@@ -1,18 +1,21 @@
-Handoff written to:
+Handoff อัปเดตแล้วที่ไฟล์เดิม:
 
-C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\f07fec7b-6655-4798-a65c-8fd0b7448c39\scratchpad\handoff-videoframeextractor-ocr-shipped-2026-08-09.md
+C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-interpolation-2026-08-10.md
 
-Key points captured:
-- OCR (burned-in overlay text) shipped, verified end-to-end, committed as 880e857
-- Local main is 1 commit ahead of origin/main — deliberately not pushed, per your explicit choice, not a failure
-- Points to the plan file and the newly-updated project memory section rather than duplicating the design/verification detail
-- Current dev-machine state: Tesseract binary + pytesseract now permanently installed; all test artifacts cleaned; no stray processes
-- Updated open-items list (7 remain, OCR's search/filter sub-scope noted separately since you deferred just that piece)
-- Suggested skills, including a couple of small gotchas worth remembering (loadDetectFrames needs an explicit frameIds arg; prefer find→ref clicks over raw coordinates in this app)
+ผมเลือกเขียนทับไฟล์เดิมแทนสร้างไฟล์ใหม่ เพราะยังเป็นเซสชันเดียวกันและสถานะเดิม — ถ้าสร้างใหม่จะเหลือไฟล์ handoff ที่เกือบเหมือนกัน 2 อันใน temp แล้วเซสชันหน้าต้องมานั่งเดาว่าอันไหนใหม่กว่า
 
-No task is in progress — next session should just re-surface the open-items list, per this project's established pattern.
+ยืนยันสถานะก่อนเขียนแล้ว ไม่ได้เชื่อจากบทสนทนาอย่างเดียว: main นำอยู่ 5 commits, HEAD = 3130a7b, working tree เหลือแค่ไฟล์ dataset ที่ตั้งใจไม่ track, ไม่มี python.exe ค้าง
 
-✻ Baked for 1m 1s
+ที่เพิ่มจากรอบแรก:
+
+- Frontmatter บอกด้วยว่ามีการคุยเรื่องฟีเจอร์วัดระยะแล้วพักไว้ และไม่มีโค้ดค้างที่ยังไม่ commit
+- "What happened this session" เพิ่มข้อ 4 — ระบุชัดว่าหลัง 3130a7b ไม่มีการแก้โค้ดอีกเลย เป็นการคุยออกแบบล้วนๆ
+- หัวข้อ Parked ideas แยกจาก open items ชัดเจน พร้อมคำสั่งตรงๆ ว่าห้ามเอาไปเสนอเป็นงานถัดไป และห้ามใส่รวมตอนไล่ open items ให้คุณเลือก
+- เพิ่ม gotcha เล็กๆ ที่เพิ่งเจอ — เขียนเอกสารยาวๆ ผ่าน bash heredoc พังเรื่อง quoting ให้ใช้เครื่องมือเขียนไฟล์แทน
+
+ส่วนที่ยังชี้ไปที่อื่นเหมือนเดิม ไม่เขียนซ้ำ: design detail อยู่ในไฟล์แผน, เหตุผล/tradeoff/รายการ verify อยู่ใน git show 3130a7b, เหตุผลเรื่องฟีเจอร์วัดระยะอยู่ใน memory
+
+✻ Brewed for 2m 44s
 
 
 
