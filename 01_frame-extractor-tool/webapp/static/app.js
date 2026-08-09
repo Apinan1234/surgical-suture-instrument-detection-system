@@ -410,16 +410,23 @@ function startDetectPolling() {
 
 async function loadDetectFrames(frameIds) {
   if (!frameIds || !frameIds.length || !currentDetectJobId) return;
-  const res = await apiFetch(`/api/detect/${currentDetectJobId}/frames`);
-  if (!res.ok) return;
-  const data = await res.json();
-  detectFrames = data.frames;
+  const label = document.getElementById("detect-progress-label");
+  // startDetectPolling() writes the run summary immediately before awaiting this, so borrow the
+  // label for loading progress and put the summary back rather than leaving a stale "loading…".
+  const summaryText = label.textContent;
+  const frames = await fetchAllJobFrames(currentDetectJobId, (loaded, total) => {
+    if (total > FRAMES_PAGE_SIZE) label.textContent = `loading frames — ${loaded} / ${total}`;
+  });
+  label.textContent = summaryText;
+  if (!frames) return;
+
+  detectFrames = frames;
   detectPreviewIdx = 0;
   if (detectFrames.length) {
     document.getElementById("detect-preview-wrap").classList.remove("hidden");
     showDetectPreview(0);
   }
-  initAnnotateFrames(data.frames);
+  initAnnotateFrames(frames);
   refreshExportPreview();
 }
 
@@ -724,6 +731,32 @@ const Api = {
     return `/api/frames/${frameId}/thumbnail.jpg?max=${max || 160}`;
   },
 };
+
+const FRAMES_PAGE_SIZE = 500;
+
+// Fetch a detect job's whole frame list in bounded chunks.
+//
+// What this buys: bounded RESPONSE size and per-request server encode work. A 20k-frame job goes
+// from one multi-MB response (ocr_text and detections ride along per frame) to ~40 small ones.
+// What it does NOT buy: client memory. Every page is concatenated, AnnotateState keeps all of them,
+// and the filmstrip still builds one <li> + <img> per frame — that, not payload size, is the real
+// ceiling on very large jobs. Windowing the filmstrip is deliberately out of scope.
+async function fetchAllJobFrames(jobId, onProgress) {
+  const all = [];
+  let offset = 0;
+  for (;;) {
+    const res = await apiFetch(`/api/detect/${jobId}/frames?limit=${FRAMES_PAGE_SIZE}&offset=${offset}`);
+    // Never return a truncated list: a short frame list would make Save & Next stop early and
+    // silently drop frames from the filmstrip, which is worse than loading nothing.
+    if (!res.ok) return null;
+    const data = await res.json();
+    all.push(...data.frames);
+    if (onProgress) onProgress(all.length, data.total);
+    if (!data.frames.length || all.length >= data.total) break;
+    offset += data.frames.length; // advance by what arrived, never by the requested limit
+  }
+  return all;
+}
 
 // ── UndoManager: capped whole-array snapshot stack ──
 
@@ -2662,10 +2695,9 @@ function startOcrBatchPolling() {
 // unsaved box edits the user has on the current frame, so only ocr_text is merged, matched by id.
 async function mergeOcrTextFromServer() {
   if (!currentDetectJobId) return;
-  const res = await apiFetch(`/api/detect/${currentDetectJobId}/frames`);
-  if (!res.ok) return;
-  const data = await res.json();
-  const textById = new Map(data.frames.map((f) => [f.id, f.ocr_text]));
+  const frames = await fetchAllJobFrames(currentDetectJobId);
+  if (!frames) return;
+  const textById = new Map(frames.map((f) => [f.id, f.ocr_text]));
   AnnotateState.getFrames().forEach((frame, idx) => {
     if (textById.has(frame.id)) AnnotateState.setFrameOcrText(idx, textById.get(frame.id));
   });

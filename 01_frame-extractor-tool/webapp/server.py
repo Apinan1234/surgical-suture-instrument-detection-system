@@ -433,14 +433,35 @@ def extract_status(job_id: str):
         return _job_snapshot(job)
 
 
+def _paged_frames(job: dict, limit: int | None, offset: int) -> dict:
+    """Frame-list payload for a job, optionally windowed. Shared by the extract and detect routes.
+
+    Omitting `limit` returns every frame, which is the pre-paging behaviour and what any existing
+    client still expects. Takes _state_lock itself."""
+    with _state_lock:
+        ids = [fid for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+        window = ids[offset: offset + limit] if limit is not None else ids[offset:]
+        return {
+            "frames": [_public(_state["frames"][fid]) for fid in window],
+            # Counted AFTER the existence filter, so a client paging until it has `total` always
+            # terminates — len(job["frame_ids"]) could exceed what the route can ever return.
+            "total": len(ids),
+            "offset": offset,
+            "limit": limit,
+        }
+
+
 @app.get("/api/extract/{job_id}/frames")
-def extract_frames_list(job_id: str):
+def extract_frames_list(
+    job_id: str,
+    limit: int | None = Query(None, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+):
     with _state_lock:
         job = _state["extract_jobs"].get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
-        return {"frames": [_public(f) for f in frames]}
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _paged_frames(job, limit, offset)
 
 
 @app.post("/api/extract/{job_id}/stop")
@@ -705,13 +726,16 @@ def detect_status(job_id: str):
 
 
 @app.get("/api/detect/{job_id}/frames")
-def detect_frames_list(job_id: str):
+def detect_frames_list(
+    job_id: str,
+    limit: int | None = Query(None, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+):
     with _state_lock:
         job = _state["detect_jobs"].get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
-        return {"frames": [_public(f) for f in frames]}
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _paged_frames(job, limit, offset)
 
 
 @app.post("/api/detect/{job_id}/stop")
