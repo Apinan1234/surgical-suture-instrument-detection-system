@@ -1,16 +1,41 @@
-Handoff document saved to:
+Handoff written to:
 
-C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\afd3ac14-25f9-46c4-9913-52241df16558\scratchpad\handoff-videoframeextractor-experiment-tracking-2026-08-08.md
+C:\Users\USER\AppData\Local\Temp\claude\C--Users-USER-OneDrive-Documents-BEAM-VideoFrameExtractor\f07fec7b-6655-4798-a65c-8fd0b7448c39\scratchpad\handoff-videoframeextractor-ocr-shipped-2026-08-09.md
 
-Summary: working tree is NOT clean this time (unlike previous handoffs) — a real destructive bug was found
-and fixed (dataset balancing was deleting real files from the user's manually-downloaded Roboflow dataset;
-now non-destructive with a runtime safety assertion, hash-verified), and a full Jupyter experiment-tracking
-notebook (train_yolo_experiment.ipynb + experiment_tracking.py) was built and verified twice against real
-data per a detailed user spec. A real 100-epoch training run was authorized, started, then explicitly
-paused mid-run (user is adding more data first) — all processes killed cleanly, partial artifacts removed,
-original dataset confirmed untouched. A small real 10-epoch test model already exists separately and is in
-active use for web testing, unaffected by any of this. Several files are uncommitted pending the user's
-go-ahead. Next web-app task is undecided — user was mid-review of an options list when this handoff was
-requested; resume that question rather than re-deriving it.
+Key points captured:
+- OCR (burned-in overlay text) shipped, verified end-to-end, committed as 880e857
+- Local main is 1 commit ahead of origin/main — deliberately not pushed, per your explicit choice, not a failure
+- Points to the plan file and the newly-updated project memory section rather than duplicating the design/verification detail
+- Current dev-machine state: Tesseract binary + pytesseract now permanently installed; all test artifacts cleaned; no stray processes
+- Updated open-items list (7 remain, OCR's search/filter sub-scope noted separately since you deferred just that piece)
+- Suggested skills, including a couple of small gotchas worth remembering (loadDetectFrames needs an explicit frameIds arg; prefer find→ref clicks over raw coordinates in this app)
 
-Note (not committed as of this pointer update — this file itself is part of the pending uncommitted work).
+No task is in progress — next session should just re-surface the open-items list, per this project's established pattern.
+
+✻ Baked for 1m 1s
+
+
+
+
+Handoff เขียนแล้วที่:
+
+C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-diagrams-2026-08-09.md
+
+สิ่งที่บันทึกไว้
+
+อ้างอิงแทนการเขียนซ้ำ — ชี้ไปที่ลิงก์ artifact, ไฟล์ใน 05_reports/, ไฟล์แผน, ไฟล์ความจำ และ commit SHA แทนที่จะคัดลอกเนื้อหามาใส่
+
+สถานะ git ที่ต้องระวังที่สุด — main นำหน้า origin/main 2 commit และทั้งคู่ตั้งใจไม่ push เขียนย้ำไว้ว่าห้าม push โดยไม่ถาม พร้อมบันทึกผล git prune และของที่ไม่ได้แตะ
+
+สิ่งที่ยังไม่ได้ตรวจ — รูปที่ 6–9 ไม่เคยมีใครยืนยันเรื่องเลย์เอาต์ พร้อมเหตุผลว่าทำไมผมตรวจเองไม่ได้ (iframe คนละ origin + เบราว์เซอร์ค้าง) และกำชับว่าอย่าไปเคลมว่าตรวจแล้ว
+
+บทเรียนที่ยังไม่ได้จดที่อื่น 6 ข้อ — เช่น กฎว่าถ้าต้องการคุมสีให้แน่นอนต้องใช้ inline SVG ไม่ใช่ Mermaid, ไฟล์ในเครื่องต้องมีสคริปต์ Mermaid แต่ artifact ไม่ต้อง, ตัวอักษรเพี้ยนใน console ของ Windows เป็นสัญญาณลวง, และเตือนว่า Report-WebApp-Current-State.md ล้าสมัย ห้ามใช้อ้างอิง
+
+Suggested skills — artifact-design + artifact-diagramming (บังคับก่อนแก้ artifact), run, code-review, security-review และระบุว่าให้ข้าม claude-in-chrome สำหรับหน้า artifact พวกนี้ เพราะล้มเหลวซ้ำ ๆ
+
+ไม่มีข้อมูลอ่อนไหว — ไม่มี API key, ไม่มีอีเมล, ไม่มีรหัสผ่าน
+
+---
+หมายเหตุ: โปรเจกต์นี้มีธรรมเนียมว่า _archive/Handoff.txt เป็นไฟล์ที่ track ไว้และเขียนทับทุกเซสชันให้ชี้ไปยัง handoff ฉบับเต็ม — ผมยังไม่ได้อัปเดต เพราะ skill กำหนดให้เขียนลง temp ไม่ใช่ในโปรเจกต์ ตอนนี้ไฟล์นั้นยังชี้ไปที่ handoff ของเซสชันก่อน ถ้าอยากให้รักษาธรรมเนียมไว้บอกได้ ผมอัปเดตให้ครับ
+
+✻ Brewed for 1m 43s
