@@ -675,11 +675,15 @@ function drawMarquee(ctx, start, current, scale) {
 // ── Api: one wrapper per endpoint used by Annotate ──
 
 const Api = {
-  putDetections(frameId, detections) {
+  putDetections(frameId, detections, rev) {
+    // `rev` omitted (e.g. a frame loaded before the server grew one) -> server falls back to
+    // last-writer-wins; sent -> the server compares and 409s instead of clobbering someone's edits.
+    const payload = { detections };
+    if (typeof rev === "number") payload.rev = rev;
     return apiFetch(`/api/frames/${frameId}/detections`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ detections }),
+      body: JSON.stringify(payload),
     });
   },
   postReview(frameId, reviewed) {
@@ -944,8 +948,16 @@ const AnnotateState = (() => {
     emit();
   }
 
-  function setFrameDetections(idx, detections) {
-    if (frames[idx]) frames[idx].detections = detections;
+  function setFrameDetections(idx, detections, rev) {
+    if (!frames[idx]) return;
+    frames[idx].detections = detections;
+    // frames[idx] IS the server record, so its `rev` is what the next save sends back as its
+    // precondition — keep it in step with the detections it belongs to.
+    if (typeof rev === "number") frames[idx].rev = rev;
+  }
+
+  function setFrameRev(idx, rev) {
+    if (frames[idx] && typeof rev === "number") frames[idx].rev = rev;
   }
 
   function setFrameOcrText(idx, text) {
@@ -958,7 +970,7 @@ const AnnotateState = (() => {
     reselectIfMissing, deleteBoxesByIds, deleteVertex, setKeypointVisibility, reassignClassByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
     setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
-    findNextUnreviewedIndex, markReviewedLocal, setFrameDetections, setFrameOcrText,
+    findNextUnreviewedIndex, markReviewedLocal, setFrameDetections, setFrameRev, setFrameOcrText,
   };
 })();
 
@@ -2359,14 +2371,37 @@ async function saveCurrentFrame() {
     keypoints: d.keypoints || null,
   }));
 
-  const res = await Api.putDetections(frame.id, cleanBoxes);
+  const res = await Api.putDetections(frame.id, cleanBoxes, frame.rev);
+  // 409 must be handled BEFORE the generic branch below: its `detail` is an object, and the generic
+  // handler alerts `errBody.detail` directly, which would render as "[object Object]".
+  if (res.status === 409) {
+    const conflict = (await res.json().catch(() => ({}))).detail || {};
+    const idx = AnnotateState.getFrameIdx();
+    const theirs = (conflict.detections || []).length;
+    const keepTheirs = window.confirm(
+      "Someone else saved this frame while you were editing it.\n\n" +
+        `Theirs: ${theirs} box(es)  (rev ${conflict.current_rev})\n` +
+        `Yours:  ${cleanBoxes.length} box(es)  (rev ${conflict.your_rev})\n\n` +
+        "OK = discard my edits and load their version\n" +
+        "Cancel = keep mine (the next Save overwrites theirs)"
+    );
+    if (keepTheirs) {
+      AnnotateState.setFrameDetections(idx, conflict.detections || [], conflict.current_rev);
+      AnnotateState.markReviewedLocal(!!conflict.reviewed);
+      AnnotateState.selectFrame(idx); // re-hydrates the canvas from the now-updated record
+    } else {
+      // Adopt their rev so the next Save is a deliberate overwrite rather than a second 409.
+      AnnotateState.setFrameRev(idx, conflict.current_rev);
+    }
+    return false;
+  }
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
     alert(errBody.detail || "Failed to save annotations");
     return false;
   }
   const saved = await res.json();
-  AnnotateState.setFrameDetections(AnnotateState.getFrameIdx(), saved.detections);
+  AnnotateState.setFrameDetections(AnnotateState.getFrameIdx(), saved.detections, saved.rev);
   // Save implicitly confirms any still-dashed boxes — a bookkeeping side-effect, not an undoable edit.
   // Also stamp `source` onto the live boxes so a later Save in the same session (e.g. after editing a
   // different box) doesn't recompute from a now-cleared `_pending` and lose track of which boxes were

@@ -63,9 +63,23 @@ SNAPSHOT_KEEP = 10
 
 # ────────────────────────────── State (S-0) ──────────────────────────────
 
-_state_lock = threading.Lock()
+# Guards every mutation of, and every iteration over, the _state containers. Job workers run in
+# their own threads and all non-async route handlers run in Starlette's threadpool, so both really do
+# run concurrently: without this, a worker inserting into _state["frames"] while save_state() walks
+# the same dict raises "RuntimeError: dictionary changed size during iteration".
+# RLock, not Lock: a few call sites mutate and persist inside the same `with` block, and save_state()
+# takes the lock itself — a plain Lock would self-deadlock.
+_state_lock = threading.RLock()
+# Serialises only the DISK half of save_state(). Deliberately separate so a slow copy/write/replace
+# never blocks annotation requests. Lock order is always _state_lock -> _save_io_lock, never reversed.
+_save_io_lock = threading.Lock()
 _state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "export_jobs": {}, "ocr_jobs": {}, "assist_log": []}
 _last_snapshot_time = 0.0
+# Serialising and writing are no longer one atomic step, so two concurrent saves could reach the disk
+# out of order and let an older snapshot overwrite a newer one. Stamp each payload and skip any write
+# that has already been superseded.
+_save_seq = 0
+_last_written_seq = 0
 
 
 def load_state():
@@ -76,16 +90,32 @@ def load_state():
     for key in ("videos", "extract_jobs", "frames", "detect_jobs", "export_jobs", "ocr_jobs"):
         _state.setdefault(key, {})
     _state.setdefault("assist_log", [])
+    # Frames written before optimistic locking existed carry no "rev". Backfilling here makes
+    # "every frame record has an int rev" true immediately after load, so no read path needs a default.
+    for record in _state["frames"].values():
+        record.setdefault("rev", 0)
 
 
 def save_state():
-    global _last_snapshot_time
+    global _last_snapshot_time, _save_seq, _last_written_seq
     with _state_lock:
+        # Serialise INSIDE the lock — this is the step that walks _state["frames"] and races the job
+        # workers' inserts. Do the file I/O OUTSIDE it: a 20k-frame state is several MB, and holding
+        # _state_lock across copy + write + replace would stall every concurrent annotation request.
+        _save_seq += 1
+        seq = _save_seq
+        payload = json.dumps(_state, ensure_ascii=False, indent=2)
+
+    with _save_io_lock:
+        if seq < _last_written_seq:
+            return  # a newer payload already reached disk; writing ours would roll it back
+        _last_written_seq = seq
+
         if STATE_PATH.exists():
             shutil.copy(STATE_PATH, STATE_BAK_PATH)
 
         with open(STATE_TMP_PATH, "w", encoding="utf-8") as f:
-            json.dump(_state, f, ensure_ascii=False, indent=2)
+            f.write(payload)
         os.replace(STATE_TMP_PATH, STATE_PATH)
 
         now = time.time()
@@ -119,10 +149,15 @@ def health():
 # ────────────────────────────── S-2 Videos ──────────────────────────────
 
 
+# Plain `def`, not `async def`: this handler does blocking disk writes and calls save_state(), which
+# serialises the whole state and writes several MB. On the event loop that stalls every other request
+# (including the 1 Hz job polls); on Starlette's threadpool — where every other route here already
+# runs — it doesn't.
 @app.post("/api/videos")
-async def upload_videos(files: list[UploadFile] = File(...)):
+def upload_videos(files: list[UploadFile] = File(...)):
     uploaded = []
-    current_total = sum(v.get("size_bytes", 0) for v in _state["videos"].values())
+    with _state_lock:
+        current_total = sum(v.get("size_bytes", 0) for v in _state["videos"].values())
     for f in files:
         ext = Path(f.filename).suffix.lower()
         if ext not in ALLOWED_VIDEO_EXTS:
@@ -133,7 +168,7 @@ async def upload_videos(files: list[UploadFile] = File(...)):
 
         size = 0
         with open(dest_path, "wb") as out:
-            while chunk := await f.read(1024 * 1024):
+            while chunk := f.file.read(1024 * 1024):
                 size += len(chunk)
                 if size > MAX_UPLOAD_SIZE_BYTES:
                     out.close()
@@ -153,7 +188,8 @@ async def upload_videos(files: list[UploadFile] = File(...)):
             "size_bytes": size,
             "uploaded_at": datetime.now().isoformat(),
         }
-        _state["videos"][video_id] = record
+        with _state_lock:
+            _state["videos"][video_id] = record
         uploaded.append(record)
 
     save_state()
@@ -169,19 +205,23 @@ def _public(record: dict) -> dict:
 
 @app.get("/api/videos")
 def list_videos():
-    return {"videos": [_public(r) for r in _state["videos"].values()]}
+    with _state_lock:
+        return {"videos": [_public(r) for r in _state["videos"].values()]}
 
 
 @app.delete("/api/videos/{video_id}")
 def delete_video(video_id: str):
-    record = _state["videos"].get(video_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Video not found")
+    # Whole read-modify-write under the lock, so two concurrent DELETEs of the same id can't both
+    # get past the 404 check and race on the unlink/del.
+    with _state_lock:
+        record = _state["videos"].get(video_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Video not found")
 
-    path = Path(record["path"])
-    if path.exists():
-        path.unlink()
-    del _state["videos"][video_id]
+        path = Path(record["path"])
+        if path.exists():
+            path.unlink()
+        del _state["videos"][video_id]
     save_state()
     return {"deleted": video_id}
 
@@ -240,7 +280,8 @@ def _run_job_and_release(fn, *args):
 
 
 def _run_extract_job(job_id: str, body: ExtractBody):
-    job = _state["extract_jobs"][job_id]
+    with _state_lock:
+        job = _state["extract_jobs"][job_id]
     saved_total = 0
     frame_ids: list[str] = []
 
@@ -248,7 +289,8 @@ def _run_extract_job(job_id: str, body: ExtractBody):
         if _job_stop_flags.get(job_id):
             break
 
-        record = _state["videos"].get(video_id)
+        with _state_lock:
+            record = _state["videos"].get(video_id)
         if not record:
             job["log"].append(f"[error] unknown video id {video_id}")
             continue
@@ -280,9 +322,13 @@ def _run_extract_job(job_id: str, body: ExtractBody):
                     job["progress"] = round(cur / tot * 100, 1)
 
             def log_cb(msg):
+                # No lock around the append: list.append is atomic under the GIL, and this fires per
+                # extracted frame — taking the lock that often would contend with every save_state().
+                # The trim is the one step a concurrent reader can actually be hurt by, so lock that.
                 job["log"].append(msg)
                 if len(job["log"]) > 500:
-                    del job["log"][: len(job["log"]) - 500]
+                    with _state_lock:
+                        del job["log"][: len(job["log"]) - 500]
 
             user_prefix = (body.prefix or "").strip()
             file_prefix = f"{user_prefix}_frame" if user_prefix else "frame"
@@ -315,27 +361,31 @@ def _run_extract_job(job_id: str, body: ExtractBody):
             saved_total += stats["saved"]
 
             if out_dir.exists():
-                for img_path in sorted(out_dir.iterdir()):
-                    if img_path.suffix.lower() not in IMAGE_EXTS:
-                        continue
-                    frame_id = uuid.uuid4().hex
-                    _state["frames"][frame_id] = {
-                        "id": frame_id,
-                        "video_id": video_id,
-                        "job_id": job_id,
-                        "path": str(img_path),
-                        "filename": img_path.name,
-                        "reviewed": False,
-                    }
-                    frame_ids.append(frame_id)
+                # Walk the directory OUTSIDE the lock (filesystem I/O), then take it only for the
+                # dict inserts — this is the write that used to crash a concurrent save_state().
+                img_paths = [p for p in sorted(out_dir.iterdir()) if p.suffix.lower() in IMAGE_EXTS]
+                with _state_lock:
+                    for img_path in img_paths:
+                        frame_id = uuid.uuid4().hex
+                        _state["frames"][frame_id] = {
+                            "id": frame_id,
+                            "video_id": video_id,
+                            "job_id": job_id,
+                            "path": str(img_path),
+                            "filename": img_path.name,
+                            "reviewed": False,
+                            "rev": 0,
+                        }
+                        frame_ids.append(frame_id)
         except Exception as e:
             job["log"].append(f"[error] {record['filename']}: {e}")
 
-    job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
-    if job["status"] == "done":
-        job["progress"] = 100
-    job["frame_ids"] = frame_ids
-    job["saved_total"] = saved_total
+    with _state_lock:
+        job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
+        if job["status"] == "done":
+            job["progress"] = 100
+        job["frame_ids"] = frame_ids
+        job["saved_total"] = saved_total
     _job_stop_flags.pop(job_id, None)
     save_state()
 
@@ -353,34 +403,44 @@ def start_extract(body: ExtractBody):
         )
 
     job_id = uuid.uuid4().hex
-    _state["extract_jobs"][job_id] = {
-        "id": job_id,
-        "status": "running",
-        "progress": 0,
-        "log": [],
-        "frame_ids": [],
-        "saved_total": 0,
-    }
+    with _state_lock:
+        _state["extract_jobs"][job_id] = {
+            "id": job_id,
+            "status": "running",
+            "progress": 0,
+            "log": [],
+            "frame_ids": [],
+            "saved_total": 0,
+        }
     _job_stop_flags[job_id] = False
     threading.Thread(target=_run_job_and_release, args=(_run_extract_job, job_id, body), daemon=True).start()
     return {"job_id": job_id}
 
 
+def _job_snapshot(job: dict) -> dict:
+    """Copy a job record for the response. FastAPI serialises the return value AFTER the handler
+    returns — i.e. outside any lock — so returning the live dict hands the JSON encoder something a
+    worker thread is still appending to. Caller must hold _state_lock."""
+    return {**job, "log": list(job["log"])} if "log" in job else {**job}
+
+
 @app.get("/api/extract/{job_id}")
 def extract_status(job_id: str):
-    job = _state["extract_jobs"].get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    with _state_lock:
+        job = _state["extract_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _job_snapshot(job)
 
 
 @app.get("/api/extract/{job_id}/frames")
 def extract_frames_list(job_id: str):
-    job = _state["extract_jobs"].get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
-    return {"frames": [_public(f) for f in frames]}
+    with _state_lock:
+        job = _state["extract_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+        return {"frames": [_public(f) for f in frames]}
 
 
 @app.post("/api/extract/{job_id}/stop")
@@ -393,12 +453,14 @@ def stop_extract(job_id: str):
 
 @app.get("/api/extract/{job_id}/zip")
 def download_zip(job_id: str):
-    job = _state["extract_jobs"].get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    with _state_lock:
+        job = _state["extract_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        # Snapshot the paths under the lock; the zip building below is slow I/O and must not hold it.
+        frames = [dict(_state["frames"][fid]) for fid in job.get("frame_ids", []) if fid in _state["frames"]]
 
     job_dir = FRAMES_DIR / job_id
-    frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
     if not frames:
         raise HTTPException(status_code=404, detail="No frames to download for this job")
 
@@ -523,14 +585,16 @@ def _get_cached_detector(body: DetectorConfigBody):
 
 
 def _run_detect_job(job_id: str, body: DetectBody):
-    job = _state["detect_jobs"][job_id]
+    with _state_lock:
+        job = _state["detect_jobs"][job_id]
     detected_total = 0
 
     try:
         det = _get_cached_detector(body)
     except Exception as e:
-        job["log"].append(f"[error] failed to load detector: {e}")
-        job["status"] = "stopped"
+        with _state_lock:
+            job["log"].append(f"[error] failed to load detector: {e}")
+            job["status"] = "stopped"
         _job_stop_flags.pop(job_id, None)
         save_state()
         return
@@ -540,7 +604,8 @@ def _run_detect_job(job_id: str, body: DetectBody):
         if _job_stop_flags.get(job_id):
             break
 
-        record = _state["frames"].get(frame_id)
+        with _state_lock:
+            record = _state["frames"].get(frame_id)
         if not record:
             job["log"].append(f"[error] unknown frame id {frame_id}")
             continue
@@ -549,7 +614,8 @@ def _run_detect_job(job_id: str, body: DetectBody):
             job["log"].append(f"[skip] {Path(record['path']).name}: already reviewed (skip_reviewed=true)")
             job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
             if len(job["log"]) > 500:
-                del job["log"][: len(job["log"]) - 500]
+                with _state_lock:
+                    del job["log"][: len(job["log"]) - 500]
             continue
 
         try:
@@ -558,11 +624,16 @@ def _run_detect_job(job_id: str, body: DetectBody):
                 job["log"].append(f"[error] cannot read {record['path']}")
                 continue
             dets = det.predict(img)
-            record["detections"] = [d.to_dict() for d in dets]  # Detection.source defaults to "model"
-            if record.get("reviewed"):
-                # Only reachable with the explicit skip_reviewed=false override — fresh unconfirmed
-                # model output shouldn't silently keep inheriting the frame's prior review status.
-                record["reviewed"] = False
+            with _state_lock:
+                record["detections"] = [d.to_dict() for d in dets]  # Detection.source defaults to "model"
+                if record.get("reviewed"):
+                    # Only reachable with the explicit skip_reviewed=false override — fresh unconfirmed
+                    # model output shouldn't silently keep inheriting the frame's prior review status.
+                    record["reviewed"] = False
+                # Bulk detect replaces this frame's detections wholesale, so anyone editing it in a
+                # browser is now holding a stale copy — bump so their next save gets a 409, not a
+                # silent overwrite of what the model just wrote.
+                _bump_rev(record)
             if dets:
                 detected_total += 1
             job["log"].append(f"[{'detected' if dets else 'empty'}] {Path(record['path']).name}: {len(dets)} obj")
@@ -571,13 +642,15 @@ def _run_detect_job(job_id: str, body: DetectBody):
 
         job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
         if len(job["log"]) > 500:
-            del job["log"][: len(job["log"]) - 500]
+            with _state_lock:
+                del job["log"][: len(job["log"]) - 500]
 
-    job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
-    if job["status"] == "done":
-        job["progress"] = 100
-    job["frame_ids"] = body.frame_ids
-    job["detected_total"] = detected_total
+    with _state_lock:
+        job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
+        if job["status"] == "done":
+            job["progress"] = 100
+        job["frame_ids"] = body.frame_ids
+        job["detected_total"] = detected_total
     _job_stop_flags.pop(job_id, None)
     save_state()
 
@@ -600,22 +673,23 @@ def start_detect(body: DetectBody):
         )
 
     job_id = uuid.uuid4().hex
-    _state["detect_jobs"][job_id] = {
-        "id": job_id,
-        "status": "running",
-        "progress": 0,
-        "log": [],
-        "frame_ids": [],
-        "detected_total": 0,
-        "backend": body.backend,
-        "model_path": body.model_path if body.backend == "local" else None,
-        "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
-        "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
-        "conf": body.conf,
-        "iou": body.iou,
-        "device": body.device,
-        "created_at": datetime.now().isoformat(),
-    }
+    with _state_lock:
+        _state["detect_jobs"][job_id] = {
+            "id": job_id,
+            "status": "running",
+            "progress": 0,
+            "log": [],
+            "frame_ids": [],
+            "detected_total": 0,
+            "backend": body.backend,
+            "model_path": body.model_path if body.backend == "local" else None,
+            "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
+            "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
+            "conf": body.conf,
+            "iou": body.iou,
+            "device": body.device,
+            "created_at": datetime.now().isoformat(),
+        }
     _job_stop_flags[job_id] = False
     threading.Thread(target=_run_job_and_release, args=(_run_detect_job, job_id, body), daemon=True).start()
     return {"job_id": job_id}
@@ -623,19 +697,21 @@ def start_detect(body: DetectBody):
 
 @app.get("/api/detect/{job_id}")
 def detect_status(job_id: str):
-    job = _state["detect_jobs"].get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    with _state_lock:
+        job = _state["detect_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _job_snapshot(job)
 
 
 @app.get("/api/detect/{job_id}/frames")
 def detect_frames_list(job_id: str):
-    job = _state["detect_jobs"].get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
-    return {"frames": [_public(f) for f in frames]}
+    with _state_lock:
+        job = _state["detect_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+        return {"frames": [_public(f) for f in frames]}
 
 
 @app.post("/api/detect/{job_id}/stop")
@@ -647,21 +723,38 @@ def stop_detect(job_id: str):
 
 
 def _get_frame_or_404(frame_id: str) -> dict:
+    """Returns a LIVE reference into _state["frames"] — the caller must hold _state_lock for any
+    read-modify-write on the returned record."""
     record = _state["frames"].get(frame_id)
     if not record:
         raise HTTPException(status_code=404, detail="Frame not found")
     return record
 
 
+def _bump_rev(record: dict) -> int:
+    """Version counter for a frame's DETECTIONS, used for optimistic locking on save.
+
+    Deliberately not bumped by the review or OCR writers: those touch disjoint fields, so they can
+    never cause a lost update of detections. If they bumped it, one batch-OCR run over a few hundred
+    frames would 409 every in-flight annotation save — false conflicts that teach the user to click
+    "overwrite" reflexively, which is exactly what this is meant to prevent.
+    Caller must hold _state_lock."""
+    record["rev"] = int(record.get("rev", 0)) + 1
+    return record["rev"]
+
+
 @app.get("/api/frames/{frame_id}/preview.jpg")
 def frame_preview(frame_id: str):
-    record = _get_frame_or_404(frame_id)
+    with _state_lock:
+        record = _get_frame_or_404(frame_id)
+        path = record["path"]
+        stored_dets = list(record.get("detections", []))
 
-    img = cv2.imread(record["path"])
+    img = cv2.imread(path)
     if img is None:
         raise HTTPException(status_code=404, detail="Frame image missing on disk")
 
-    dets = [Detection(**d) for d in record.get("detections", [])]
+    dets = [Detection(**d) for d in stored_dets]
     boxed = BaseDetector().draw_boxes(img, dets) if dets else img
 
     ok, buf = cv2.imencode(".jpg", boxed)
@@ -727,20 +820,49 @@ class DetectionIn(BaseModel):
 
 class FrameDetectionsBody(BaseModel):
     detections: list[DetectionIn]
+    # Present -> compare-and-swap against the frame's current rev, 409 on mismatch.
+    # Absent  -> last-writer-wins, i.e. exactly the pre-optimistic-locking behaviour. Kept so curl
+    # scripts and any other existing client keep working unchanged.
+    rev: int | None = None
 
 
 @app.get("/api/frames/{frame_id}/detections")
 def get_frame_detections(frame_id: str):
-    record = _get_frame_or_404(frame_id)
-    return {"frame_id": frame_id, "detections": record.get("detections", [])}
+    with _state_lock:
+        record = _get_frame_or_404(frame_id)
+        return {
+            "frame_id": frame_id,
+            "detections": record.get("detections", []),
+            "rev": int(record.get("rev", 0)),
+        }
 
 
 @app.put("/api/frames/{frame_id}/detections")
 def replace_frame_detections(frame_id: str, body: FrameDetectionsBody):
-    record = _get_frame_or_404(frame_id)
-    record["detections"] = [Detection(**d.model_dump()).to_dict() for d in body.detections]
+    # Built outside the lock: Detection.__post_init__ re-derives bboxes from polygons/keypoints, and
+    # there is no reason to hold up other writers while that runs.
+    new_dets = [Detection(**d.model_dump()).to_dict() for d in body.detections]
+
+    with _state_lock:
+        record = _get_frame_or_404(frame_id)
+        current_rev = int(record.get("rev", 0))
+        if body.rev is not None and body.rev != current_rev:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "stale_rev",
+                    "message": "This frame was changed by someone else since you loaded it.",
+                    "your_rev": body.rev,
+                    "current_rev": current_rev,
+                    "detections": record.get("detections", []),
+                    "reviewed": bool(record.get("reviewed")),
+                },
+            )
+        record["detections"] = new_dets
+        rev = _bump_rev(record)
+
     save_state()
-    return {"frame_id": frame_id, "detections": record["detections"]}
+    return {"frame_id": frame_id, "detections": new_dets, "rev": rev}
 
 
 class ReviewBody(BaseModel):
@@ -749,10 +871,12 @@ class ReviewBody(BaseModel):
 
 @app.post("/api/frames/{frame_id}/review")
 def mark_frame_reviewed(frame_id: str, body: ReviewBody = ReviewBody()):
-    record = _get_frame_or_404(frame_id)
-    record["reviewed"] = body.reviewed
+    with _state_lock:
+        record = _get_frame_or_404(frame_id)
+        record["reviewed"] = body.reviewed  # disjoint from detections — deliberately no rev bump
+        reviewed = record["reviewed"]
     save_state()
-    return {"frame_id": frame_id, "reviewed": record["reviewed"]}
+    return {"frame_id": frame_id, "reviewed": reviewed}
 
 
 @app.get("/api/frames/{frame_id}/image.jpg")
@@ -799,14 +923,15 @@ class AssistBody(DetectorConfigBody):
 
 @app.post("/api/frames/{frame_id}/assist")
 def assist_frame(frame_id: str, body: AssistBody):
-    record = _get_frame_or_404(frame_id)
+    with _state_lock:
+        path = _get_frame_or_404(frame_id)["path"]
 
     try:
         _validate_detect_backend(body)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    img = cv2.imread(record["path"])
+    img = cv2.imread(path)
     if img is None:
         raise HTTPException(status_code=404, detail="Frame image missing on disk")
 
@@ -816,16 +941,17 @@ def assist_frame(frame_id: str, body: AssistBody):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Assist failed: {e}")
 
-    _state["assist_log"].append({
-        "frame_id": frame_id,
-        "backend": body.backend,
+    with _state_lock:
+        _state["assist_log"].append({
+            "frame_id": frame_id,
+            "backend": body.backend,
         "model_path": body.model_path if body.backend == "local" else None,
-        "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
-        "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
-        "conf": body.conf,
-        "detected_count": len(dets),
-        "created_at": datetime.now().isoformat(),
-    })
+            "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
+            "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
+            "conf": body.conf,
+            "detected_count": len(dets),
+            "created_at": datetime.now().isoformat(),
+        })
     save_state()
 
     return {"detections": [d.to_dict() for d in dets]}
@@ -862,9 +988,11 @@ def run_ocr(img) -> str:
 
 @app.post("/api/frames/{frame_id}/ocr")
 def ocr_frame(frame_id: str):
-    record = _get_frame_or_404(frame_id)
+    with _state_lock:
+        record = _get_frame_or_404(frame_id)
+        path = record["path"]
 
-    img = cv2.imread(record["path"])
+    img = cv2.imread(path)
     if img is None:
         raise HTTPException(status_code=404, detail="Frame image missing on disk")
 
@@ -873,7 +1001,8 @@ def ocr_frame(frame_id: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"OCR failed: {e}")
 
-    record["ocr_text"] = text
+    with _state_lock:
+        record["ocr_text"] = text  # disjoint from detections — deliberately no rev bump
     save_state()
 
     return {"frame_id": frame_id, "ocr_text": text}
@@ -888,7 +1017,8 @@ def _run_ocr_job(job_id: str, body: OcrBody):
     """Batch OCR across a frame set — same job/progress/log/stop shape as _run_detect_job, so the
     frontend polls it identically. Writes straight to record["ocr_text"], matching the single-frame
     route: OCR has no accept/reject step, so it's settled metadata, not a pending suggestion."""
-    job = _state["ocr_jobs"][job_id]
+    with _state_lock:
+        job = _state["ocr_jobs"][job_id]
     text_found_total = 0
     skipped_total = 0
 
@@ -897,8 +1027,9 @@ def _run_ocr_job(job_id: str, body: OcrBody):
         # failure for every frame in the job instead of failing fast with one actionable message.
         _resolve_tesseract_cmd()
     except Exception as e:
-        job["log"].append(f"[error] {e}")
-        job["status"] = "stopped"
+        with _state_lock:
+            job["log"].append(f"[error] {e}")
+            job["status"] = "stopped"
         _job_stop_flags.pop(job_id, None)
         save_state()
         return
@@ -908,7 +1039,8 @@ def _run_ocr_job(job_id: str, body: OcrBody):
         if _job_stop_flags.get(job_id):
             break
 
-        record = _state["frames"].get(frame_id)
+        with _state_lock:
+            record = _state["frames"].get(frame_id)
         if not record:
             job["log"].append(f"[error] unknown frame id {frame_id}")
             continue
@@ -918,7 +1050,8 @@ def _run_ocr_job(job_id: str, body: OcrBody):
             job["log"].append(f"[skip] {Path(record['path']).name}: already has OCR text")
             job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
             if len(job["log"]) > 500:
-                del job["log"][: len(job["log"]) - 500]
+                with _state_lock:
+                    del job["log"][: len(job["log"]) - 500]
             continue
 
         try:
@@ -927,7 +1060,8 @@ def _run_ocr_job(job_id: str, body: OcrBody):
                 job["log"].append(f"[error] cannot read {record['path']}")
                 continue
             text = run_ocr(img)
-            record["ocr_text"] = text
+            with _state_lock:
+                record["ocr_text"] = text  # disjoint from detections — deliberately no rev bump
             if text:
                 text_found_total += 1
             preview = text.replace("\n", " ")[:60]
@@ -940,16 +1074,18 @@ def _run_ocr_job(job_id: str, body: OcrBody):
 
         job["progress"] = round((idx + 1) / total * 100, 1) if total else 100
         if len(job["log"]) > 500:
-            del job["log"][: len(job["log"]) - 500]
+            with _state_lock:
+                del job["log"][: len(job["log"]) - 500]
 
-    job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
-    if job["status"] == "done":
-        job["progress"] = 100
-    job["frame_ids"] = body.frame_ids
-    # text_found_total counts only frames OCR'd by THIS run; skipped_total is reported separately so
-    # a fully-skipped re-run doesn't read as "0 frames with text" when they all already have some.
-    job["text_found_total"] = text_found_total
-    job["skipped_total"] = skipped_total
+    with _state_lock:
+        job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
+        if job["status"] == "done":
+            job["progress"] = 100
+        job["frame_ids"] = body.frame_ids
+        # text_found_total counts only frames OCR'd by THIS run; skipped_total is reported separately
+        # so a fully-skipped re-run doesn't read as "0 frames with text" when they all already have some.
+        job["text_found_total"] = text_found_total
+        job["skipped_total"] = skipped_total
     _job_stop_flags.pop(job_id, None)
     save_state()
 
@@ -967,17 +1103,18 @@ def start_ocr(body: OcrBody):
         )
 
     job_id = uuid.uuid4().hex
-    _state["ocr_jobs"][job_id] = {
-        "id": job_id,
-        "status": "running",
-        "progress": 0,
-        "log": [],
-        "frame_ids": [],
-        "text_found_total": 0,
-        "skipped_total": 0,
-        "skip_existing": body.skip_existing,
-        "created_at": datetime.now().isoformat(),
-    }
+    with _state_lock:
+        _state["ocr_jobs"][job_id] = {
+            "id": job_id,
+            "status": "running",
+            "progress": 0,
+            "log": [],
+            "frame_ids": [],
+            "text_found_total": 0,
+            "skipped_total": 0,
+            "skip_existing": body.skip_existing,
+            "created_at": datetime.now().isoformat(),
+        }
     _job_stop_flags[job_id] = False
     threading.Thread(target=_run_job_and_release, args=(_run_ocr_job, job_id, body), daemon=True).start()
     return {"job_id": job_id}
@@ -985,10 +1122,11 @@ def start_ocr(body: OcrBody):
 
 @app.get("/api/ocr/{job_id}")
 def ocr_status(job_id: str):
-    job = _state["ocr_jobs"].get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    with _state_lock:
+        job = _state["ocr_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _job_snapshot(job)
 
 
 @app.post("/api/ocr/{job_id}/stop")
@@ -1023,7 +1161,7 @@ def list_models():
 
 
 @app.post("/api/models")
-async def upload_model(file: UploadFile = File(...)):
+def upload_model(file: UploadFile = File(...)):  # plain def: blocking writes belong on the threadpool
     ext = Path(file.filename).suffix.lower()
     if ext != ".pt":
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext or '(none)'}")
@@ -1042,7 +1180,7 @@ async def upload_model(file: UploadFile = File(...)):
 
     size = 0
     with open(dest_path, "wb") as out:
-        while chunk := await file.read(1024 * 1024):
+        while chunk := file.file.read(1024 * 1024):
             size += len(chunk)
             if size > MAX_UPLOAD_SIZE_BYTES:
                 out.close()
@@ -1064,10 +1202,15 @@ def list_classes():
 
 @app.get("/api/analytics")
 def analytics():
-    assist_log = _state.get("assist_log", [])
+    # Snapshot under the lock: this scans every frame in the app, so without it a job inserting
+    # frames mid-scan would raise "dictionary changed size during iteration".
+    with _state_lock:
+        assist_log = list(_state.get("assist_log", []))
+        frames = list(_state["frames"].values())
+        detect_jobs = list(_state["detect_jobs"].values())
+
     suggested_total = sum(int(e.get("detected_count", 0)) for e in assist_log)
 
-    frames = list(_state["frames"].values())
     accepted_total = sum(
         1
         for f in frames
@@ -1089,7 +1232,7 @@ def analytics():
             "detected_total": job.get("detected_total", 0),
             "created_at": job.get("created_at"),  # None for jobs created before this field existed
         }
-        for job in _state["detect_jobs"].values()
+        for job in detect_jobs
     ]
 
     pool = [{"has_detection": bool(f.get("detections"))} for f in frames]
@@ -1157,13 +1300,16 @@ class ExportBody(BaseModel):
 
 
 def _export_pool(detect_job_id: str, reviewed_only: bool) -> list[dict]:
-    job = _state["detect_jobs"].get(detect_job_id)
-    if job is None:
-        raise ValueError(f"Unknown detect_job_id: {detect_job_id}")
-    frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
-    if reviewed_only:
-        frames = [f for f in frames if f.get("reviewed")]
-    return [{**f, "image_path": f["path"], "has_detection": bool(f.get("detections"))} for f in frames]
+    # The {**f} spread below copies each record, so the pool the export worker then spends minutes
+    # writing to disk is a snapshot — annotations saved mid-export can't mutate it underneath.
+    with _state_lock:
+        job = _state["detect_jobs"].get(detect_job_id)
+        if job is None:
+            raise ValueError(f"Unknown detect_job_id: {detect_job_id}")
+        frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+        if reviewed_only:
+            frames = [f for f in frames if f.get("reviewed")]
+        return [{**f, "image_path": f["path"], "has_detection": bool(f.get("detections"))} for f in frames]
 
 
 @app.get("/api/export/preview")
@@ -1178,7 +1324,8 @@ def export_preview(detect_job_id: str, reviewed_only: bool = False):
 
 
 def _run_export_job(job_id: str, body: ExportBody):
-    job = _state["export_jobs"][job_id]
+    with _state_lock:
+        job = _state["export_jobs"][job_id]
     try:
         pool = _export_pool(body.detect_job_id, body.reviewed_only)
 
@@ -1201,15 +1348,18 @@ def _run_export_job(job_id: str, body: ExportBody):
             progress_callback=prog,
             task=body.task,
         )
-        job["zip_path"] = zip_path
         summary_path = out_dir / "export_summary.json"
-        if summary_path.exists():
-            job["summary"] = json.loads(summary_path.read_text(encoding="utf-8"))
-        job["status"] = "done"
-        job["progress"] = 100
+        summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else None
+        with _state_lock:
+            job["zip_path"] = zip_path
+            if summary is not None:
+                job["summary"] = summary
+            job["status"] = "done"
+            job["progress"] = 100
     except Exception as e:
-        job["status"] = "error"
-        job["error"] = str(e)
+        with _state_lock:
+            job["status"] = "error"
+            job["error"] = str(e)
     save_state()
 
 
@@ -1222,29 +1372,40 @@ def start_export(body: ExportBody):
     if not pool:
         raise HTTPException(status_code=400, detail="No frames available to export for this selection")
 
+    # Acquired only after the 404/400 checks above, so a rejected request never leaks a slot.
+    # Export was the one job family that skipped admission control; a large augmented export is as
+    # CPU-hungry as a detect run, so it belongs under the same cap.
+    if not _acquire_job_slot():
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many jobs running (max {MAX_CONCURRENT_JOBS}); wait for one to finish",
+        )
+
     job_id = uuid.uuid4().hex
-    _state["export_jobs"][job_id] = {
-        "id": job_id,
-        "status": "running",
-        "progress": 0,
-        "detect_job_id": body.detect_job_id,
-        "version_name": body.version_name,
-        "reviewed_only": body.reviewed_only,
-        "pool_size": len(pool),
-        "zip_path": None,
-        "summary": None,
-        "error": None,
-    }
-    threading.Thread(target=_run_export_job, args=(job_id, body), daemon=True).start()
+    with _state_lock:
+        _state["export_jobs"][job_id] = {
+            "id": job_id,
+            "status": "running",
+            "progress": 0,
+            "detect_job_id": body.detect_job_id,
+            "version_name": body.version_name,
+            "reviewed_only": body.reviewed_only,
+            "pool_size": len(pool),
+            "zip_path": None,
+            "summary": None,
+            "error": None,
+        }
+    threading.Thread(target=_run_job_and_release, args=(_run_export_job, job_id, body), daemon=True).start()
     return {"job_id": job_id}
 
 
 @app.get("/api/export/{job_id}")
 def export_status(job_id: str):
-    job = _state["export_jobs"].get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    with _state_lock:
+        job = _state["export_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _job_snapshot(job)
 
 
 @app.get("/api/export/{job_id}/download")
