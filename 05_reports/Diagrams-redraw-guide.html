@@ -1,3 +1,7 @@
+<!-- Needed for the local/offline copy only: opened straight from disk there is no server charset
+     header, so without this the browser falls back to windows-1252 and the Thai text renders as
+     mojibake. The Artifact runtime supplies its own <head>, where this line is simply ignored. -->
+<meta charset="utf-8">
 <title>คู่มือวาดแผนภาพใหม่ — โครงการตรวจจับเครื่องมือผ่าตัดด้วย AI</title>
 
 <style>
