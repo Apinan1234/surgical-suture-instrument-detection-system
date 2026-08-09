@@ -1,0 +1,694 @@
+<title>คู่มือวาดแผนภาพใหม่ — โครงการตรวจจับเครื่องมือผ่าตัดด้วย AI</title>
+
+<style>
+:root {
+  --ground:#f5f6fa; --panel:#ffffff; --panel-2:#eef1f7;
+  --ink:#1a1a2e; --ink-soft:#5c6b7a; --ink-faint:#7d8ea3;
+  --line:#d3dae6; --line-soft:#e4e9f2;
+  --accent:#e94560; --navy:#0f3460; --ok:#2f9e78; --warn:#c97a00;
+  --code-bg:#f4f7fc; --code-line:#dde4ef; --code-ink:#1a1a2e;
+  --font-thai:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif;
+  --font-mono:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#1a1a2e; --panel:#16213e; --panel-2:#1e2a4a;
+    --ink:#eaeaea; --ink-soft:#8899aa; --ink-faint:#6b7c91;
+    --line:#2c3b5e; --line-soft:#223052;
+    --navy:#5b8dd6; --ok:#4ecca3; --warn:#f5a623;
+    --code-bg:#0f1830; --code-line:#2c3b5e; --code-ink:#d7e0ef;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#1a1a2e; --panel:#16213e; --panel-2:#1e2a4a;
+  --ink:#eaeaea; --ink-soft:#8899aa; --ink-faint:#6b7c91;
+  --line:#2c3b5e; --line-soft:#223052;
+  --navy:#5b8dd6; --ok:#4ecca3; --warn:#f5a623;
+  --code-bg:#0f1830; --code-line:#2c3b5e; --code-ink:#d7e0ef;
+}
+
+*{box-sizing:border-box}
+body{margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--font-thai); font-size:16px; line-height:1.75; -webkit-font-smoothing:antialiased}
+.wrap{max-width:940px; margin:0 auto; padding:0 24px 96px}
+
+.masthead{padding:56px 0 30px; border-bottom:2px solid var(--ink); margin-bottom:44px}
+.eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 14px; font-weight:600}
+h1{font-size:clamp(26px,3.6vw,36px); line-height:1.28; margin:0 0 16px; font-weight:700; text-wrap:balance; letter-spacing:-.01em}
+.lede{font-size:17px; color:var(--ink-soft); max-width:64ch; margin:0}
+
+.step{margin-bottom:60px; scroll-margin-top:20px}
+.step > h2{font-size:22px; margin:0 0 6px; font-weight:700; letter-spacing:-.005em; text-wrap:balance}
+.step > h2 .n{font-family:var(--font-mono); color:var(--accent); font-size:14px; margin-right:10px;
+  font-weight:600; letter-spacing:.04em}
+.step > .cap{color:var(--ink-soft); font-size:14.5px; margin:0 0 22px; max-width:66ch}
+
+h3{font-size:16.5px; margin:30px 0 10px; font-weight:700}
+p{margin:0 0 14px; max-width:68ch}
+code{font-family:var(--font-mono); font-size:.875em; background:var(--panel-2); padding:1px 5px;
+  border-radius:2px; color:var(--ink); white-space:nowrap}
+
+ul.plain{margin:0 0 16px; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px; max-width:70ch}
+ul.plain li{padding-left:17px; position:relative; font-size:14.5px; line-height:1.65}
+ul.plain li::before{content:""; position:absolute; left:0; top:.72em; width:7px; height:1.5px; background:var(--ink-faint)}
+
+ol.steps{margin:0 0 18px; padding:0; list-style:none; counter-reset:s; display:flex; flex-direction:column; gap:12px}
+ol.steps li{counter-increment:s; padding-left:36px; position:relative; font-size:14.5px; line-height:1.68; max-width:68ch}
+ol.steps li::before{content:counter(s); position:absolute; left:0; top:1px; width:23px; height:23px;
+  border:1px solid var(--line); border-radius:50%; display:grid; place-items:center;
+  font-family:var(--font-mono); font-size:11.5px; color:var(--accent); font-weight:600; background:var(--panel)}
+
+.tw{overflow-x:auto; margin:0 0 22px; border:1px solid var(--line); border-radius:3px}
+table{border-collapse:collapse; width:100%; font-size:13.5px; background:var(--panel)}
+th,td{text-align:left; padding:9px 13px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+th{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:600; background:var(--panel-2); white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.nowrap{white-space:nowrap}
+td b{font-weight:700}
+
+.shape{display:inline-flex; align-items:center; gap:8px}
+.shape svg{flex:none}
+
+.box{border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:0 3px 3px 0;
+  background:var(--panel); padding:16px 20px; margin:0 0 22px}
+.box.warn{border-left-color:var(--warn)}
+.box.ok{border-left-color:var(--ok)}
+.box > h4{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 10px; font-weight:600}
+.box.warn > h4{color:var(--warn)} .box.ok > h4{color:var(--ok)}
+.box ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px}
+.box li{font-size:14px; line-height:1.65; padding-left:16px; position:relative}
+.box li::before{content:"·"; position:absolute; left:4px; color:var(--accent); font-weight:700}
+.box.warn li::before{color:var(--warn)} .box.ok li::before{color:var(--ok)}
+.box p{margin:0; font-size:14px}
+
+/* code blocks */
+.src{margin:0 0 26px; border:1px solid var(--code-line); border-radius:4px; background:var(--code-bg); overflow:hidden}
+.src header{display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:9px 14px; border-bottom:1px solid var(--code-line); background:var(--panel-2)}
+.src header b{font-size:13px; font-weight:700; color:var(--ink)}
+.src header em{font-style:normal; font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint)}
+.copy{font-family:var(--font-mono); font-size:11px; letter-spacing:.04em; cursor:pointer;
+  border:1px solid var(--line); background:var(--panel); color:var(--ink-soft);
+  padding:4px 11px; border-radius:3px; flex:none}
+.copy:hover{border-color:var(--accent); color:var(--accent)}
+.copy:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+.src pre{margin:0; padding:15px 16px; overflow-x:auto}
+.src code{font-family:var(--font-mono); font-size:12px; line-height:1.62; white-space:pre;
+  background:none; padding:0; color:var(--code-ink); display:block}
+
+hr.div{border:none; border-top:1px solid var(--line); margin:0 0 52px}
+a{color:var(--accent)}
+@media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important} }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">คู่มือประกอบ · ใช้คู่กับแคตตาล็อกแผนภาพ 11 รูป</p>
+  <h1>วาดแผนภาพใหม่ในโปรแกรมอื่น และแก้ไขข้อความให้ถูกหลัก</h1>
+  <p class="lede">
+    6 ใน 11 รูปมีซอร์สโค้ดที่แก้ข้อความได้โดยตรงแล้วนำเข้าโปรแกรมวาดเป็นรูปทรงที่แก้ไขได้ทันที
+    ส่วนอีก 5 รูปเป็นภาพเวกเตอร์ที่เปิดแก้ในโปรแกรมวาดได้เลย คู่มือนี้ให้ทั้งซอร์สโค้ด
+    ตารางรูปทรงที่ถูกต้อง และกฎว่าข้อความส่วนไหนแก้ได้ ส่วนไหนห้ามแตะ
+  </p>
+  <p style="margin:20px 0 0;font-size:14px">
+    → <a href="https://claude.ai/code/artifact/a3356776-7e44-4a40-b30e-7b9e27f98cd7">เปิดหน้าแคตตาล็อกแผนภาพทั้ง 11 รูป</a>
+  </p>
+</header>
+
+<section class="step" id="s1">
+  <h2><span class="n">ขั้นที่ 1</span>เลือกเครื่องมือ</h2>
+  <p class="cap">แนะนำ draw.io เป็นหลัก เพราะฟรี ใช้ออฟไลน์ได้ มีชุดรูปทรง UML/DFD/Flowchart ครบ และนำเข้าโค้ด Mermaid ได้โดยตรง</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>โปรแกรม</th><th>เหมาะกับ</th><th>ข้อควรรู้</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="nowrap"><b>draw.io</b><br><span style="font-size:12px;color:var(--ink-faint)">(diagrams.net)</span></td>
+          <td>ทุกรูปในชุดนี้ — เป็นตัวเลือกหลัก</td>
+          <td>ฟรีเต็มรูปแบบ มีทั้งเว็บและโปรแกรมติดตั้ง · นำเข้าโค้ด Mermaid แล้วแตกเป็นรูปทรงแก้ไขได้ · ส่งออก SVG/PNG/PDF ใส่ Word ได้</td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>Mermaid Live Editor</b></td>
+          <td>แค่อยากแก้ข้อความเร็ว ๆ ไม่ย้ายตำแหน่งกล่อง</td>
+          <td>วางโค้ดแล้วเห็นผลทันที แต่จัดตำแหน่งเองไม่ได้ ระบบจัดวางให้อัตโนมัติ</td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>Microsoft Visio</b></td>
+          <td>ถ้ามหาวิทยาลัยมีสิทธิ์ใช้อยู่แล้ว</td>
+          <td>ชุดรูปทรงมาตรฐานครบและถูกต้อง แต่นำเข้า Mermaid ไม่ได้ ต้องวาดใหม่ทั้งหมด</td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>Figma / Illustrator</b></td>
+          <td>ตกแต่งไฟล์ SVG ที่มีอยู่แล้ว</td>
+          <td>เปิดไฟล์ SVG มาแก้สี/ข้อความได้ แต่ไม่มีชุดรูปทรง UML ให้ ต้องรู้หลักสัญลักษณ์เอง</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="box ok">
+    <h4>เปิดชุดรูปทรงก่อนเริ่มวาดใน draw.io</h4>
+    <p>
+      กด <b>More Shapes</b> ที่มุมล่างซ้าย แล้วติ๊กเปิดหมวด <b>UML</b>, <b>Flowchart</b> และ
+      <b>Entity Relation</b> — ถ้าไม่เปิด จะหารูปทรงอย่างวงรียูสเคส กล่องสามมิติ หรือสัญลักษณ์ตีนกาไม่เจอ
+      แล้วจะเผลอวาดด้วยสี่เหลี่ยมธรรมดาทั้งหมด ซึ่งผิดหลักทันที
+    </p>
+  </div>
+</section>
+
+<hr class="div">
+
+<section class="step" id="s2">
+  <h2><span class="n">ขั้นที่ 2</span>เส้นทางเร็วที่สุด — แก้ข้อความแล้วนำเข้า draw.io</h2>
+  <p class="cap">ใช้ได้กับรูปที่ 6, 7, 8, 9 และ 10 ซึ่งเขียนด้วย Mermaid ไม่ต้องวาดใหม่จากศูนย์</p>
+
+  <ol class="steps">
+    <li>คัดลอกซอร์สโค้ดของรูปที่ต้องการจาก <b>ขั้นที่ 3</b> ด้านล่าง</li>
+    <li>แก้เฉพาะ <b>ข้อความในเครื่องหมายคำพูด</b> และ <b>ข้อความหลังเครื่องหมาย <code>:</code> หรือระหว่าง <code>|…|</code></b> — อย่าแตะเครื่องหมายลูกศรหรือวงเล็บ เพราะเป็นตัวกำหนดรูปทรง</li>
+    <li>ตรวจผลที่ <b>mermaid.live</b> ก่อน ว่าไม่ขึ้นข้อความ Syntax error และข้อความไม่ล้นกล่อง</li>
+    <li>เปิด draw.io → เมนู <b>Extras → Edit Diagram</b> หรือ <b>Arrange → Insert → Advanced → Mermaid</b> แล้ววางโค้ด</li>
+    <li>กด Insert — ได้กล่องและเส้นที่ <b>คลิกแก้ไขได้ทีละชิ้น</b> ย้ายตำแหน่ง เปลี่ยนสี เปลี่ยนฟอนต์ได้ตามต้องการ</li>
+    <li>ตรวจอีกครั้งว่ารูปทรงที่แปลงออกมาตรงกับตารางในขั้นที่ 4 — บางครั้งการนำเข้าอัตโนมัติแปลงสี่เหลี่ยมมุมมนเป็นสี่เหลี่ยมธรรมดา ต้องแก้เอง</li>
+  </ol>
+
+  <div class="box warn">
+    <h4>ข้อควรระวังเรื่องฟอนต์ไทย</h4>
+    <p>
+      ถ้าข้อความไทยขึ้นเป็นกล่องสี่เหลี่ยมหรือสระลอย ให้เลือกทุกวัตถุ (<code>Ctrl+A</code>) แล้วเปลี่ยนฟอนต์เป็น
+      <b>Sarabun</b>, <b>Leelawadee UI</b> หรือ <b>TH Sarabun New</b> ซึ่งเป็นฟอนต์ที่รองรับวรรณยุกต์ไทยครบ
+      โดยเฉพาะ TH Sarabun New ที่เป็นฟอนต์มาตรฐานของเอกสารราชการไทยและวิทยานิพนธ์หลายสถาบัน
+    </p>
+  </div>
+</section>
+
+<hr class="div">
+
+<section class="step" id="s3">
+  <h2><span class="n">ขั้นที่ 3</span>ซอร์สโค้ดพร้อมคัดลอก</h2>
+  <p class="cap">
+    ตัดส่วนกำหนดสีออกแล้ว เหลือเฉพาะเนื้อแผนภาพ เพื่อให้นำไปใช้ที่ไหนก็ได้
+    ตัวเลขและชื่อทางเทคนิคในโค้ดนี้ตรงกับซอร์สโค้ดจริงของระบบ — ดูกฎการแก้ในขั้นที่ 5 ก่อนเปลี่ยน
+  </p>
+
+  <div class="src">
+    <header><b>รูปที่ 8 — ผังงานอัลกอริทึมการสกัดเฟรม</b><em>flowchart</em><button class="copy" type="button">คัดลอก</button></header>
+<pre><code>flowchart TD
+  A(["เริ่ม"]) --&gt; B[/"รับไฟล์วิดีโอ และพารามิเตอร์ที่ผู้ใช้ตั้งค่า"/]
+  B --&gt; C["คำนวณระยะห่างเฟรม frame_step&lt;br/&gt;กำหนด slot = ลำดับเฟรม ÷ frame_step"]
+  C --&gt; D{"ยังมีเฟรมเหลือ&lt;br/&gt;ในวิดีโอหรือไม่"}
+  D --&gt;|ไม่มีแล้ว| Y[/"เขียนสรุปลง extraction_log.json"/]
+  Y --&gt; Z(["จบ"])
+  D --&gt;|ยังมี| E["อ่านเฟรมถัดไป"]
+  E --&gt; F{"เข้าสู่ slot ใหม่หรือไม่"}
+  F --&gt;|ใช่| G["รีเซ็ตตัวนับของ slot&lt;br/&gt;slot_filled = false และ slot_attempts = 0"]
+  F --&gt;|ไม่ใช่| H{"slot นี้บันทึกไปแล้ว&lt;br/&gt;หรือลองครบ 5 ครั้งแล้วหรือยัง"}
+  G --&gt; H
+  H --&gt;|ใช่ ข้ามไปทั้ง slot| D
+  H --&gt;|ยังไม่| I["เพิ่มค่า slot_attempts อีก 1"]
+  I --&gt; J{"ภาพเบลอหรือไม่&lt;br/&gt;ค่า Laplacian variance ต่ำกว่าเกณฑ์"}
+  J --&gt;|เบลอ ลองเฟรมถัดไปใน slot เดิม| D
+  J --&gt;|ไม่เบลอ| K{"คล้ายกับภาพที่บันทึกไว้แล้วหรือไม่&lt;br/&gt;motion IoU หรือ frame diff หรือ pHash"}
+  K --&gt;|คล้าย ลองเฟรมถัดไปใน slot เดิม| D
+  K --&gt;|ไม่คล้าย| L["บันทึกไฟล์ภาพลงดิสก์&lt;br/&gt;ตั้ง slot_filled = true"]
+  L --&gt; D</code></pre>
+  </div>
+
+  <div class="box">
+    <h4>อ่านโค้ดผังงานให้ออก — สัญลักษณ์ไหนสร้างรูปทรงอะไร</h4>
+    <ul>
+      <li><code>A(["ข้อความ"])</code> → <b>วงรีมน</b> = จุดเริ่มต้น/สิ้นสุด</li>
+      <li><code>B[/"ข้อความ"/]</code> → <b>สี่เหลี่ยมด้านขนาน</b> = ข้อมูลเข้า/ออก</li>
+      <li><code>C["ข้อความ"]</code> → <b>สี่เหลี่ยมผืนผ้า</b> = การประมวลผล</li>
+      <li><code>D{"ข้อความ"}</code> → <b>ข้าวหลามตัด</b> = การตัดสินใจ</li>
+      <li><code>--&gt;|ข้อความ|</code> → <b>ลูกศรพร้อมป้ายเงื่อนไข</b> · <code>&lt;br/&gt;</code> = ขึ้นบรรทัดใหม่ในกล่อง</li>
+    </ul>
+  </div>
+
+  <div class="src">
+    <header><b>รูปที่ 9 — แผนภาพกิจกรรม วงจรกำกับข้อมูลโดยมี AI ช่วย</b><em>activity</em><button class="copy" type="button">คัดลอก</button></header>
+<pre><code>flowchart TD
+  S(("เริ่ม")) --&gt; A["กำกับข้อมูลชุดเริ่มต้นด้วยมือ&lt;br/&gt;ปริมาณไม่มาก เพื่อให้มีของไปเทรนรอบแรก"]
+  A --&gt; B["ส่งออกชุดข้อมูล&lt;br/&gt;เลือกเฉพาะเฟรมที่รีวิวแล้ว"]
+  B --&gt; C["เทรนโมเดลนอกระบบ&lt;br/&gt;train_roboflow_yolo.py"]
+  C --&gt; D["อัปโหลดไฟล์ .pt กลับเข้าระบบ"]
+  D --&gt; E["ตรวจจับแบบกลุ่มกับเฟรมที่ยังไม่กำกับ&lt;br/&gt;ตั้งค่าให้ข้ามเฟรมที่รีวิวไปแล้ว"]
+  E --&gt; F["รีวิวผลในหน้ากำกับข้อมูล&lt;br/&gt;แก้ไข ยอมรับทั้งหมด หรือปฏิเสธทั้งหมด"]
+  F --&gt; G{"คุณภาพโมเดลถึงเกณฑ์&lt;br/&gt;ที่ตั้งไว้หรือยัง"}
+  G --&gt;|ยังไม่ถึง วนรอบใหม่| B
+  G --&gt;|ถึงเกณฑ์แล้ว| H["ส่งออกชุดข้อมูลรุ่นสุดท้าย&lt;br/&gt;ไปใช้งานจริง"]
+  H --&gt; T(("สิ้นสุด"))</code></pre>
+  </div>
+
+  <div class="box warn">
+    <h4>ต้องแก้ด้วยมือหลังนำเข้า draw.io</h4>
+    <p>
+      Mermaid วาดจุดเริ่ม/สิ้นสุดเป็นวงกลมมีข้อความ แต่มาตรฐาน UML กำหนดให้จุดเริ่มต้นเป็น
+      <b>วงกลมทึบ ●</b> และจุดสิ้นสุดเป็น <b>วงกลมทึบมีวงแหวนล้อม ◉</b> ไม่มีข้อความข้างใน
+      เมื่อนำเข้า draw.io แล้วให้เปลี่ยนสองโหนดนี้เป็นรูปทรง <b>Initial Node</b> และ <b>Final Node</b>
+      จากชุด UML แล้วลบข้อความออก จึงจะถูกหลัก
+    </p>
+  </div>
+
+  <div class="src">
+    <header><b>รูปที่ 10.1 — แผนภาพสถานะของงานเบื้องหลัง</b><em>state</em><button class="copy" type="button">คัดลอก</button></header>
+<pre><code>stateDiagram-v2
+  direction LR
+  [*] --&gt; running: เริ่มงานผ่าน POST /api/extract หรือ /api/detect หรือ /api/export
+  running --&gt; done: ประมวลผลครบทุกเฟรม
+  running --&gt; stopped: ผู้ใช้สั่งหยุดกลางคัน
+  running --&gt; error: เกิดข้อผิดพลาดระหว่างทำงาน
+  done --&gt; [*]
+  stopped --&gt; [*]
+  error --&gt; [*]</code></pre>
+  </div>
+
+  <div class="src">
+    <header><b>รูปที่ 10.2 — แผนภาพสถานะของเฟรม</b><em>state</em><button class="copy" type="button">คัดลอก</button></header>
+<pre><code>stateDiagram-v2
+  direction LR
+  state "ยังไม่มีผลตรวจจับ" as A
+  state "มีผลจาก AI รอการยืนยัน" as B
+  state "กำกับและรีวิวแล้ว" as C
+  [*] --&gt; A: สกัดเฟรมสำเร็จ
+  A --&gt; B: ตรวจจับแบบกลุ่ม หรือ Label Assist
+  A --&gt; C: วาดกรอบด้วยมือแล้วบันทึก
+  B --&gt; C: กดยืนยันการรีวิว
+  B --&gt; B: แก้ไขกรอบ หรือปฏิเสธทั้งหมด
+  C --&gt; B: รันตรวจจับซ้ำโดยไม่ข้ามเฟรมที่รีวิวแล้ว
+  C --&gt; [*]: ถูกนำไปส่งออกเป็นชุดข้อมูล</code></pre>
+  </div>
+
+  <div class="box warn">
+    <h4>หมายเหตุสำหรับรูปที่ 11</h4>
+    <p>
+      ในหน้าแคตตาล็อก รูปนี้ <b>วาดด้วย SVG ไม่ใช่ Mermaid</b> (เปลี่ยนมาเพราะ Mermaid คำนวณสีพื้นช่องเองแล้ว
+      ออกมาทึบจนอ่านไม่ออก) — โค้ดด้านล่างจึงให้ไว้เป็น <b>ทางเลือกสำหรับสร้างรูปนี้ใหม่ในโปรแกรมอื่น</b>
+      ถ้าอยากได้ผังที่จัดวางอัตโนมัติ ส่วนถ้าจะแก้รูปเดิม ให้ใช้วิธีบันทึกไฟล์ SVG ในขั้นที่ 6 แทน
+    </p>
+  </div>
+
+  <div class="src">
+    <header><b>รูปที่ 11 — แผนภาพโครงสร้างข้อมูล</b><em>entity relationship</em><button class="copy" type="button">คัดลอก</button></header>
+<pre><code>erDiagram
+  VIDEO ||--o{ EXTRACT_JOB : "ถูกใช้ใน"
+  EXTRACT_JOB ||--o{ FRAME : "สร้าง"
+  FRAME ||--o{ DETECTION : "มี"
+  DETECT_JOB ||--o{ FRAME : "เขียนผลลงบน"
+  MODEL ||--o{ DETECT_JOB : "ถูกใช้โดย"
+  DETECT_JOB ||--o{ EXPORT_JOB : "เป็นแหล่งข้อมูลของ"
+
+  VIDEO {
+    string video_id PK
+    string filename
+    int size_bytes
+  }
+  EXTRACT_JOB {
+    string job_id PK
+    string video_id FK
+    string status
+    int progress
+    list frame_ids
+  }
+  FRAME {
+    string frame_id PK
+    string path
+    bool reviewed
+    list detections
+  }
+  DETECTION {
+    string class_name
+    float confidence
+    list bbox
+    list polygon
+    list keypoints
+    string source
+  }
+  DETECT_JOB {
+    string job_id PK
+    string model
+    string backend
+    float conf
+    bool skip_reviewed
+  }
+  MODEL {
+    string name PK
+    string path
+  }
+  EXPORT_JOB {
+    string job_id PK
+    string detect_job_id FK
+    float train_ratio
+    bool reviewed_only
+  }</code></pre>
+  </div>
+
+  <div class="src">
+    <header><b>รูปที่ 6 — แผนภาพลำดับ งานสกัดเฟรม</b><em>sequence</em><button class="copy" type="button">คัดลอก</button></header>
+<pre><code>sequenceDiagram
+  autonumber
+  actor U as ผู้ใช้งาน
+  participant B as เบราว์เซอร์ · app.js
+  participant S as FastAPI · server.py
+  participant T as Worker Thread
+  participant F as frame_extractor.py
+  participant D as ดิสก์ · data/frames
+
+  U-&gt;&gt;B: เลือกวิดีโอ ตั้งค่า แล้วกดเริ่มทำงาน
+  B-&gt;&gt;S: POST /api/extract
+  S-&gt;&gt;T: threading.Thread(...).start()
+  S--&gt;&gt;B: ตอบกลับทันที พร้อมหมายเลขงาน job_id
+  Note over S,T: HTTP ไม่รอให้งานเสร็จ จึงไม่เกิด timeout แม้วิดีโอจะยาว
+
+  par งานเบื้องหลัง
+    T-&gt;&gt;F: extract_frames(...)
+    loop ทุกเฟรมที่พิจารณา
+      F-&gt;&gt;F: ตรวจภาพเบลอ แล้วตรวจความคล้าย
+      F-&gt;&gt;D: บันทึกเฉพาะเฟรมที่ผ่านเกณฑ์
+    end
+    F--&gt;&gt;T: สรุปผล และเขียน extraction_log.json
+    T-&gt;&gt;S: ปรับสถานะงานเป็น done
+  and การติดตามจากฝั่งผู้ใช้
+    loop ทุก 1 วินาที จนกว่าสถานะจะไม่ใช่ running
+      B-&gt;&gt;S: GET /api/extract/job_id
+      S--&gt;&gt;B: สถานะ · ความคืบหน้า · บันทึกการทำงาน
+      B--&gt;&gt;U: อัปเดตแถบความคืบหน้าบนหน้าจอ
+    end
+  end
+
+  U-&gt;&gt;B: กดปุ่มดาวน์โหลด ZIP
+  B-&gt;&gt;S: GET /api/extract/job_id/zip
+  S-&gt;&gt;D: อ่านไฟล์เฟรมทั้งหมดของงานนี้
+  S--&gt;&gt;B: ไฟล์ .zip
+  B--&gt;&gt;U: บันทึกลงเครื่อง</code></pre>
+  </div>
+
+  <div class="src">
+    <header><b>รูปที่ 7 — แผนภาพลำดับ การขอให้ AI ช่วยกำกับ</b><em>sequence</em><button class="copy" type="button">คัดลอก</button></header>
+<pre><code>sequenceDiagram
+  autonumber
+  actor U as ผู้ใช้งาน
+  participant B as เบราว์เซอร์ · app.js
+  participant S as FastAPI · server.py
+  participant DET as detector.py
+  participant R as Roboflow Cloud API
+
+  U-&gt;&gt;B: กดปุ่ม Label Assist ที่เฟรมปัจจุบัน
+  alt เลือกประมวลผลผ่าน Roboflow
+    B-&gt;&gt;U: ขอคำยืนยันก่อน เพราะมีค่าใช้จ่ายเป็นเครดิต
+    U--&gt;&gt;B: กดยืนยัน
+  end
+  B-&gt;&gt;S: POST /api/frames/frame_id/assist
+  S-&gt;&gt;DET: สร้างตัวตรวจจับตาม backend ที่เลือก
+  alt backend เป็น local
+    DET-&gt;&gt;DET: YOLOv11Detector ประมวลผลบนเครื่องด้วย CPU
+  else backend เป็น roboflow
+    DET-&gt;&gt;R: ส่งภาพเฟรมพร้อม api_key ผ่าน HTTPS
+    R--&gt;&gt;DET: ผลตรวจจับกลับมา
+  end
+  DET--&gt;&gt;S: รายการ Detection
+  S--&gt;&gt;B: กรอบวัตถุ · คลาส · ค่าความเชื่อมั่น
+  Note over B,S: ตอบกลับในคำขอเดียว เพราะประมวลผลเฟรมเดียวใช้เวลาไม่นาน
+  B--&gt;&gt;U: วาดกรอบเส้นประ พร้อมป้ายค่าความเชื่อมั่น
+  U-&gt;&gt;B: แก้ไขกรอบ หรือกดยอมรับทั้งหมด / ปฏิเสธทั้งหมด
+  B-&gt;&gt;S: PUT /api/frames/frame_id/detections
+  S-&gt;&gt;S: บันทึกลง state.json แบบ atomic แล้วสำรองเป็น .bak
+  S--&gt;&gt;B: บันทึกสำเร็จ</code></pre>
+  </div>
+</section>
+
+<hr class="div">
+
+<section class="step" id="s4">
+  <h2><span class="n">ขั้นที่ 4</span>ตารางอ้างอิงรูปทรง — ใช้ตรวจก่อนส่ง</h2>
+  <p class="cap">
+    รูปทรงคือความหมาย ไม่ใช่การตกแต่ง เลือกผิดคือสื่อสารผิด
+    ช่องขวาสุดคือข้อความที่พิมพ์ใน draw.io ผ่านเมนู <b>Edit → Edit Style</b> เพื่อให้ได้หัวลูกศรถูกแบบ
+  </p>
+
+  <h3>ผังงาน (Flowchart — มาตรฐาน ANSI/ISO 5807)</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>รูปทรง</th><th>ความหมาย</th><th>ข้อผิดพลาดที่พบบ่อย</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><span class="shape"><svg width="48" height="22"><rect x="1" y="3" width="46" height="16" rx="8" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span> วงรีมน</td><td>จุดเริ่มต้น / จุดสิ้นสุด</td><td>ผังงานที่ไม่มีจุดสิ้นสุด = ลูปไม่รู้จบ</td></tr>
+        <tr><td class="nowrap"><span class="shape"><svg width="48" height="22"><rect x="1" y="3" width="46" height="16" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span> สี่เหลี่ยมผืนผ้า</td><td>การประมวลผล</td><td>ใช้แทนการตัดสินใจ — ผิด ต้องใช้ข้าวหลามตัด</td></tr>
+        <tr><td class="nowrap"><span class="shape"><svg width="48" height="22"><polygon points="24,2 46,11 24,20 2,11" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span> ข้าวหลามตัด</td><td>การตัดสินใจ</td><td>มีทางออกทางเดียว หรือไม่กำกับเงื่อนไขบนเส้น</td></tr>
+        <tr><td class="nowrap"><span class="shape"><svg width="48" height="22"><polygon points="10,3 47,3 38,19 1,19" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span> สี่เหลี่ยมด้านขนาน</td><td>ข้อมูลเข้า / ออก</td><td>ใช้สี่เหลี่ยมธรรมดาแทน ทำให้แยกไม่ออกว่าอันไหนรับข้อมูล</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>แผนภาพกระแสข้อมูล (DFD — Gane–Sarson)</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>รูปทรง</th><th>ความหมาย</th><th>กฎที่ห้ามผิด</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap"><span class="shape"><svg width="48" height="22"><rect x="1" y="3" width="46" height="16" rx="4" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="1" y1="9" x2="47" y2="9" stroke="currentColor" stroke-width="1"/></svg></span> สี่เหลี่ยมมุมมน มีแถบเลข</td><td>โพรเซส</td><td>ชื่อต้องเป็น “กริยา + กรรม” และต้องมีทั้งข้อมูลเข้าและออก</td></tr>
+        <tr><td class="nowrap"><span class="shape"><svg width="48" height="22"><path d="M47 5 H3 V17 H47" fill="none" stroke="currentColor" stroke-width="1.4"/><line x1="12" y1="5" x2="12" y2="17" stroke="currentColor" stroke-width="1"/></svg></span> สี่เหลี่ยมเปิดด้านขวา</td><td>แหล่งจัดเก็บข้อมูล</td><td>ห้ามลากเส้นตรงจากแหล่งจัดเก็บหนึ่งไปอีกแหล่งหนึ่ง</td></tr>
+        <tr><td class="nowrap"><span class="shape"><svg width="48" height="22"><rect x="1" y="3" width="46" height="16" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span> สี่เหลี่ยมทึบ</td><td>ตัวแทนภายนอก</td><td>ห้ามลากเส้นระหว่างตัวแทนภายนอกด้วยกันเอง</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>ยูสเคส (UML Use Case) — จุดที่พลาดกันมากที่สุด</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>เส้น</th><th>ความหมาย</th><th class="nowrap">Edit Style ใน draw.io</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap">เส้นทึบ ไม่มีหัวลูกศร</td><td>Association — เชื่อมตัวแสดงกับยูสเคส</td><td><code>endArrow=none;html=1;</code></td></tr>
+        <tr><td class="nowrap">เส้นประ หัวลูกศรโปร่ง</td><td><code>«include»</code> ชี้จากยูสเคสหลักไปยังยูสเคสที่ถูกเรียกใช้เสมอ</td><td><code>endArrow=open;dashed=1;html=1;</code></td></tr>
+        <tr><td class="nowrap">เส้นประ หัวลูกศรโปร่ง</td><td><code>«extend»</code> ชี้จากยูสเคสเสริมมายังยูสเคสหลัก — <b>ทิศตรงข้ามกับ include</b></td><td><code>endArrow=open;dashed=1;html=1;</code></td></tr>
+        <tr><td class="nowrap">เส้นทึบ สามเหลี่ยมโปร่ง</td><td>Generalization — ชี้จากตัวย่อยไปตัวหลัก</td><td><code>endArrow=block;endFill=0;html=1;</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="box warn">
+    <h4>สามข้อผิดพลาดที่กรรมการจับได้ทันที</h4>
+    <ul>
+      <li><b>ใส่หัวลูกศรบนเส้น Association</b> แล้วเขียนกำกับว่า “ส่งข้อมูล” — เป็นการเอาแนวคิด DFD มาปนกับ UML เส้นนี้บอกแค่ว่า “ใครใช้อะไร” ไม่ได้บอกทิศทางข้อมูล</li>
+      <li><b>จำทิศ include กับ extend สลับกัน</b> — <code>«include»</code> ออกจากตัวหลัก แต่ <code>«extend»</code> เข้าหาตัวหลัก</li>
+      <li><b>ทำขั้นตอนย่อยให้เป็นยูสเคส</b> เช่น “กดปุ่มบันทึก” หรือ “ตรวจสอบฟอร์ม” — ยูสเคสต้องเป็นเป้าหมายที่ผู้ใช้ได้คุณค่า</li>
+    </ul>
+  </div>
+
+  <h3>แผนภาพลำดับ · สถานะ · การติดตั้ง (UML อื่น ๆ)</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>สัญลักษณ์</th><th>ความหมาย</th><th class="nowrap">Edit Style ใน draw.io</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap">ลูกศรเส้นทึบ หัวทึบ</td><td>เรียกใช้แบบรอผล (Sequence)</td><td><code>endArrow=block;endFill=1;html=1;</code></td></tr>
+        <tr><td class="nowrap">ลูกศรเส้นประ หัวโปร่ง</td><td>การตอบกลับ (Sequence)</td><td><code>endArrow=open;dashed=1;html=1;</code></td></tr>
+        <tr><td class="nowrap">แท่งสี่เหลี่ยมบนเส้นชีวิต</td><td>ช่วงที่กำลังทำงาน (Activation)</td><td>ใช้รูปทรง <b>Activation</b> จากชุด UML</td></tr>
+        <tr><td class="nowrap">กรอบมุมพับ มีป้ายมุมซ้าย</td><td>Combined Fragment — <code>alt</code> / <code>loop</code> / <code>par</code></td><td>ใช้รูปทรง <b>Combined Fragment</b></td></tr>
+        <tr><td class="nowrap">วงกลมทึบ ●</td><td>จุดเริ่มต้น (State / Activity)</td><td>รูปทรง <b>Initial Node</b> ห้ามใส่ข้อความข้างใน</td></tr>
+        <tr><td class="nowrap">วงกลมทึบมีวงแหวน ◉</td><td>จุดสิ้นสุด (State / Activity)</td><td>รูปทรง <b>Final Node</b></td></tr>
+        <tr><td class="nowrap">กล่องสามมิติ</td><td>โหนด (Deployment)</td><td>รูปทรง <b>Node</b> หรือ <b>3D Box</b> — สี่เหลี่ยมแบนหมายถึงคลาส ใช้แทนกันไม่ได้</td></tr>
+        <tr><td class="nowrap">ตีนกา (Crow’s Foot)</td><td>ความสัมพันธ์หนึ่งต่อกลุ่ม (ER)</td><td>ชุด <b>Entity Relation</b> — <code>||--o{</code> คือ “หนึ่งต่อศูนย์หรือมากกว่า”</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="div">
+
+<section class="step" id="s5">
+  <h2><span class="n">ขั้นที่ 5</span>กฎการแก้ข้อความ</h2>
+  <p class="cap">
+    ข้อความในแผนภาพมีสองประเภทปนกัน — ประเภทที่เป็นคำอธิบาย (แก้ได้) กับประเภทที่เป็นข้อเท็จจริงจากซอร์สโค้ด
+    (แก้แล้วรายงานจะไม่ตรงกับระบบจริง)
+  </p>
+
+  <div class="box warn">
+    <h4>ห้ามแก้ — ผูกกับซอร์สโค้ดจริง</h4>
+    <ul>
+      <li><b>ชื่อและจำนวน endpoint</b> — 29 รายการ และเส้นทางอย่าง <code>/api/extract</code>, <code>/api/frames/…/assist</code></li>
+      <li><b>ชื่อสถานะงาน</b> — <code>running</code>, <code>done</code>, <code>stopped</code>, <code>error</code> (ไม่มี <code>queued</code>)</li>
+      <li><b>ชื่อไฟล์และคลาส</b> — <code>server.py</code>, <code>frame_extractor.py</code>, <code>detector.py</code>, <code>dataset_exporter.py</code>, <code>app.py</code>, <code>train_roboflow_yolo.py</code>, <code>YOLOv11Detector</code>, <code>RoboflowDetector</code></li>
+      <li><b>คีย์ใน state.json</b> — <code>videos</code>, <code>extract_jobs</code>, <code>frames</code>, <code>detect_jobs</code>, <code>export_jobs</code>, <code>assist_log</code></li>
+      <li><b>ชื่อคลาสวัตถุ 5 ประเภท</b> — <code>needle</code>, <code>finger</code>, <code>needle_holder</code>, <code>wound</code>, <code>forcep</code></li>
+      <li><b>เลข 5 ครั้ง</b> ในผังงาน — มาจากค่า <code>max_attempts_per_slot</code> ในโค้ดจริง</li>
+      <li><b>ตัวเลขผลการทดลอง</b> — mAP@50 68.1% · Precision 80.5% · Recall 73.1% (มาจากรายงานระยะที่ 1)</li>
+    </ul>
+  </div>
+
+  <div class="box ok">
+    <h4>แก้ได้อิสระ</h4>
+    <ul>
+      <li>คำบรรยายภาษาไทยทุกจุด รวมถึงป้ายเงื่อนไขบนเส้น เช่น “เบลอ ลองเฟรมถัดไปใน slot เดิม”</li>
+      <li>ชื่อโพรเซสใน DFD — แต่ต้องคงรูปแบบ <b>กริยา + กรรม</b> เช่น “สกัดเฟรมจากวิดีโอ” ไม่ใช่ “การสกัดเฟรม”</li>
+      <li>ชื่อยูสเคส — แต่ต้องยังเป็นเป้าหมายที่ผู้ใช้ได้คุณค่า ไม่ใช่ขั้นตอนย่อย</li>
+      <li>ชื่อตัวแสดง เช่น เปลี่ยน “ผู้ใช้งานระบบ” เป็น “นักศึกษาสัตวแพทย์” ถ้าตรงกับกลุ่มเป้าหมายจริงมากกว่า</li>
+      <li>สี ฟอนต์ ขนาด ตำแหน่งกล่อง — ไม่กระทบความถูกต้องเชิงสัญลักษณ์</li>
+    </ul>
+  </div>
+
+  <div class="box">
+    <h4>แก้ที่หนึ่ง ต้องตามไปแก้อีกที่เสมอ</h4>
+    <ul>
+      <li><b>เปลี่ยนกระแสข้อมูลในรูปที่ 4</b> → ต้องกลับไปตรวจรูปที่ 3 ให้สมดุลกัน (กฎ Balancing) ข้อมูลเข้า-ออกสองรูปต้องตรงกัน</li>
+      <li><b>เพิ่มหรือลบยูสเคสในรูปที่ 5</b> → ต้องตรวจว่ายังมีตัวแสดงเชื่อมอยู่ ยูสเคสลอยไม่มีใครเชื่อมคือความผิดพลาด</li>
+      <li><b>เปลี่ยนสถานะในรูปที่ 10</b> → ต้องตรงกับข้อความในรูปที่ 6 และ 7 ซึ่งอ้างถึงสถานะเดียวกัน</li>
+      <li><b>เปลี่ยนชื่อโมดูลในรูปที่ 1</b> → ต้องตามไปแก้ในรูปที่ 2, 6 และ 7 ที่อ้างชื่อไฟล์เดียวกัน</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<section class="step" id="s6">
+  <h2><span class="n">ขั้นที่ 6</span>หกรูปที่วาดด้วย SVG — สูตรประกอบ</h2>
+  <p class="cap">
+    รูปที่ 1–5 และ 11 ไม่ได้เขียนด้วย Mermaid จึงไม่มีโค้ดให้นำเข้าโดยตรง ด้านล่างคือรายการองค์ประกอบที่ต้องมี
+    ถ้าจะวาดใหม่ — แต่ถ้าแค่อยากแก้ข้อความหรือสี ให้ใช้ทางลัดท้ายหัวข้อนี้ เร็วกว่ามาก
+  </p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th class="nowrap">รูป</th><th>องค์ประกอบที่ต้องมี</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="nowrap"><b>1</b><br><span style="font-size:12px;color:var(--ink-faint)">สถาปัตยกรรม</span></td>
+          <td>
+            แถบแนวนอน 4 ชั้นจากบนลงล่าง — <b>ชั้นผู้ใช้</b> (2 กล่อง: โปรแกรมเดสก์ท็อป, เว็บแอป) ·
+            <b>ชั้นแอปพลิเคชัน</b> (1 กล่องยาว: <code>server.py</code> พร้อมป้ายกลุ่ม endpoint 7 กลุ่ม) ·
+            <b>ชั้นโมดูลแกนกลาง</b> (3 กล่อง) · <b>ชั้นจัดเก็บข้อมูล</b> (3 กล่อง)
+            และคอลัมน์ด้านขวาแยกต่างหากสำหรับบริการภายนอก 3 อย่าง + สคริปต์เทรน (กล่องเส้นประ)
+            <br><b>เส้นที่ห้ามลืม:</b> เส้นจากโปรแกรมเดสก์ท็อป <b>ข้ามชั้นแอปพลิเคชัน</b> ลงไปที่โมดูลแกนกลางโดยตรง
+            กำกับว่า “import ตรง” — เป็นสาระสำคัญทั้งหมดของรูปนี้
+          </td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>2</b><br><span style="font-size:12px;color:var(--ink-faint)">การติดตั้ง</span></td>
+          <td>
+            กล่องสามมิติใหญ่ 1 ใบ (<code>«device»</code> เครื่องผู้ใช้) ข้างในมีกล่องสามมิติเล็ก 2 ใบ
+            (<code>«executionEnvironment»</code> เบราว์เซอร์ และ Python + Uvicorn) แต่ละใบมีกล่อง
+            <code>«artifact»</code> ระบุชื่อไฟล์จริง · กล่องสามมิติแยกอีกใบคือ Roboflow Cloud
+            เชื่อมด้วยเส้นกำกับ <code>«HTTPS»</code>
+          </td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>3</b><br><span style="font-size:12px;color:var(--ink-faint)">Context</span></td>
+          <td>
+            วงกลม 1 วงตรงกลาง หมายเลข 0 · สี่เหลี่ยมตัวแทนภายนอก 2 ใบ (ผู้ใช้งานซ้าย, Roboflow ขวา) ·
+            ลูกศร 4 เส้นพร้อมชื่อข้อมูล · <b>ห้ามมีแหล่งจัดเก็บข้อมูลในรูปนี้เด็ดขาด</b>
+          </td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>4</b><br><span style="font-size:12px;color:var(--ink-faint)">DFD ระดับ 1</span></td>
+          <td>
+            ตัวแทนภายนอกทรงสูงด้านซ้าย · โพรเซส 6 ใบเรียงเป็นคอลัมน์กลาง (จัดการวิดีโอ, สกัดเฟรม, ตรวจจับวัตถุ,
+            กำกับข้อมูลภาพ, จัดการโมเดล, ส่งออกชุดข้อมูล) · แหล่งจัดเก็บข้อมูล 5 ใบคอลัมน์ขวา วางตรงกับโพรเซสที่ใช้ ·
+            Roboflow วางแถวเดียวกับโพรเซสตรวจจับ
+          </td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>5</b><br><span style="font-size:12px;color:var(--ink-faint)">Use Case</span></td>
+          <td>
+            กรอบระบบพร้อมชื่อ · ตัวแสดงหลักซ้าย 1 ตัว · ตัวแสดงระบบภายนอกขวา 2 ตัว ·
+            วงรียูสเคสหลัก 8 วงคอลัมน์ซ้าย และยูสเคสประกอบ 6 วงคอลัมน์ขวา ·
+            ต้องมีครบทั้ง <code>«include»</code>, <code>«extend»</code> และเส้น Generalization
+          </td>
+        </tr>
+        <tr>
+          <td class="nowrap"><b>11</b><br><span style="font-size:12px;color:var(--ink-faint)">โครงสร้างข้อมูล</span></td>
+          <td>
+            ตาราง 7 กลุ่มข้อมูล จัดเป็น 3 คอลัมน์ให้เส้นตัดกันน้อยที่สุด —
+            <b>แถวบน:</b> VIDEO → EXTRACT_JOB → FRAME ·
+            <b>แถวกลาง:</b> MODEL → DETECT_JOB → DETECTION ·
+            <b>แถวล่าง:</b> EXPORT_JOB (ใต้ DETECT_JOB)
+            <br>แต่ละตารางมีแถบหัวใส่ชื่อกลุ่มข้อมูล แล้วไล่แถวฟิลด์ลงมา แต่ละแถวมี ชนิดข้อมูล · ชื่อฟิลด์ · ป้าย PK/FK
+            <br><b>เส้นความสัมพันธ์ทั้ง 6 เส้นเป็นแบบ “หนึ่งต่อศูนย์หรือมากกว่า”</b> —
+            ฝั่งหนึ่งใช้ขีดขวางสองขีด ฝั่งมากใช้วงกลมตามด้วยตีนกาสามแฉก
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="box ok">
+    <h4>ทางลัด — ไม่ต้องวาดใหม่ก็ได้</h4>
+    <p>
+      ทั้ง 6 รูปนี้เป็น SVG อยู่แล้ว ถ้าแค่อยากแก้ข้อความหรือสี ให้คลิกขวาที่รูปในหน้าแคตตาล็อก →
+      <b>Save image as…</b> เพื่อบันทึกเป็นไฟล์ <code>.svg</code> แล้วเปิดใน draw.io
+      (<b>File → Import</b>) หรือ Figma / Illustrator / Inkscape ซึ่งจะได้กล่องและข้อความที่คลิกแก้ไขได้ทีละชิ้น
+      เร็วกว่าวาดใหม่ทั้งรูปมาก
+    </p>
+  </div>
+</section>
+
+<hr class="div">
+
+<section class="step" id="s7">
+  <h2><span class="n">ขั้นที่ 7</span>ส่งออกใส่รายงาน</h2>
+  <p class="cap">แผนภาพในรายงานที่พิมพ์ออกมาแล้วเบลอ เป็นจุดที่ถูกหักคะแนนได้ทั้งที่เนื้อหาถูกต้อง</p>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>ปลายทาง</th><th>รูปแบบที่ควรใช้</th><th>เหตุผล</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap">Word / PDF</td><td><b>SVG</b> หรือ <b>PDF</b></td><td>เป็นภาพเวกเตอร์ ขยายเท่าไรก็คมชัด พิมพ์ออกมาไม่แตก</td></tr>
+        <tr><td class="nowrap">Word เวอร์ชันเก่า</td><td><b>PNG ที่ 300 DPI</b></td><td>ถ้าแทรก SVG แล้วเพี้ยน ให้ใช้ PNG แต่ต้องตั้ง 300 DPI ไม่ใช่ค่าเริ่มต้น 96</td></tr>
+        <tr><td class="nowrap">PowerPoint นำเสนอ</td><td><b>PNG</b> หรือวางเป็นวัตถุ</td><td>ฉายบนจอ ความละเอียดหน้าจอเพียงพอ</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="box">
+    <h4>ตั้งค่าตอนส่งออกจาก draw.io</h4>
+    <ul>
+      <li><b>File → Export as → PNG</b> แล้วตั้ง <b>Zoom 300%</b> หรือ <b>DPI 300</b></li>
+      <li>ติ๊ก <b>Transparent Background</b> ออก ถ้าจะวางบนพื้นขาวของรายงาน จะได้ไม่มีขอบโปร่งแปลก ๆ</li>
+      <li>ติ๊ก <b>Crop</b> เพื่อตัดขอบว่างรอบรูปออก ไม่ให้เหลือช่องว่างเกินในหน้ารายงาน</li>
+      <li>ตั้ง <b>Border Width</b> ประมาณ 10 เพื่อให้มีระยะหายใจรอบรูปเล็กน้อย</li>
+    </ul>
+  </div>
+
+  <div class="box warn">
+    <h4>อย่าลืมคำบรรยายใต้รูป</h4>
+    <p>
+      ทุกรูปในรายงานต้องมีเลขที่และคำบรรยาย เช่น <b>“รูปที่ 3.2 แผนภาพกระแสข้อมูลระดับที่ 1”</b>
+      วางไว้ <b>ใต้รูป</b> (ต่างจากตารางที่คำบรรยายอยู่ด้านบน) และต้องอ้างถึงในเนื้อความอย่างน้อยหนึ่งครั้ง
+      รูปที่ไม่มีข้อความอ้างถึงเลยถือว่าไม่ควรอยู่ในรายงาน
+    </p>
+  </div>
+</section>
+
+</div>
+
+<script>
+document.addEventListener('click', function (e) {
+  var btn = e.target.closest('.copy');
+  if (!btn) return;
+  var code = btn.closest('.src').querySelector('code');
+  var done = function () {
+    var old = btn.textContent;
+    btn.textContent = 'คัดลอกแล้ว';
+    setTimeout(function () { btn.textContent = old; }, 1600);
+  };
+  try {
+    navigator.clipboard.writeText(code.innerText).then(done, function () { selectCode(code, btn); });
+  } catch (err) {
+    selectCode(code, btn);
+  }
+});
+function selectCode(code, btn) {
+  var r = document.createRange();
+  r.selectNodeContents(code);
+  var s = window.getSelection();
+  s.removeAllRanges();
+  s.addRange(r);
+  btn.textContent = 'เลือกแล้ว กด Ctrl+C';
+  setTimeout(function () { btn.textContent = 'คัดลอก'; }, 2600);
+}
+</script>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
+</script>

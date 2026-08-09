@@ -1,0 +1,1787 @@
+<title>แผนภาพระบบ — โครงการตรวจจับเครื่องมือผ่าตัดด้วย AI</title>
+
+<style>
+:root {
+  --ground:#f5f6fa; --panel:#ffffff; --panel-2:#eef1f7;
+  --ink:#1a1a2e; --ink-soft:#5c6b7a; --ink-faint:#8492a6;
+  --line:#d3dae6; --line-soft:#e4e9f2;
+  --accent:#e94560; --navy:#0f3460; --ok:#2f9e78; --warn:#c97a00;
+  --plate:#fbfcfe; --plate-line:#dde4ef; --plate-ink:#1a1a2e; --plate-soft:#5c6b7a;
+  --c-needle:#FFE032; --c-finger:#FF6B48; --c-holder:#A8E6A0; --c-wound:#F064A0; --c-forcep:#4ECDC4;
+  --font-thai:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif;
+  --font-mono:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#1a1a2e; --panel:#16213e; --panel-2:#1e2a4a;
+    --ink:#eaeaea; --ink-soft:#8899aa; --ink-faint:#6b7c91;
+    --line:#2c3b5e; --line-soft:#223052;
+    --navy:#5b8dd6; --ok:#4ecca3; --warn:#f5a623;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#1a1a2e; --panel:#16213e; --panel-2:#1e2a4a;
+  --ink:#eaeaea; --ink-soft:#8899aa; --ink-faint:#6b7c91;
+  --line:#2c3b5e; --line-soft:#223052;
+  --navy:#5b8dd6; --ok:#4ecca3; --warn:#f5a623;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--font-thai); font-size:16px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px; margin:0 auto; padding:0 24px 96px;
+  display:grid; grid-template-columns:236px minmax(0,1fr); gap:48px; align-items:start}
+@media (max-width:980px){ .wrap{grid-template-columns:1fr; gap:0} }
+
+/* ─── masthead ─── */
+.masthead{grid-column:1/-1; padding:56px 0 32px; border-bottom:2px solid var(--ink); margin-bottom:40px}
+.eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 14px; font-weight:600}
+h1{font-size:clamp(28px,4vw,40px); line-height:1.25; margin:0 0 16px; font-weight:700; text-wrap:balance; letter-spacing:-.01em}
+.lede{font-size:17px; color:var(--ink-soft); max-width:62ch; margin:0 0 22px}
+.meta{display:flex; flex-wrap:wrap; gap:8px 10px; font-family:var(--font-mono); font-size:11.5px}
+.meta span{border:1px solid var(--line); border-radius:2px; padding:4px 9px; color:var(--ink-soft); background:var(--panel)}
+
+/* ─── nav ─── */
+nav{position:sticky; top:20px}
+@media (max-width:980px){ nav{position:static; margin-bottom:48px} }
+nav h2{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-faint); margin:0 0 14px; font-weight:600}
+nav ol{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px}
+nav .grp{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.09em; color:var(--accent);
+  margin:16px 0 5px; font-weight:600}
+nav .grp:first-child{margin-top:0}
+nav a{display:flex; gap:9px; text-decoration:none; color:var(--ink-soft); font-size:13.5px;
+  padding:4px 8px; border-radius:3px; line-height:1.45}
+nav a:hover{background:var(--panel-2); color:var(--ink)}
+nav a:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+nav a b{font-family:var(--font-mono); font-weight:600; color:var(--ink-faint); flex:none; font-size:12px}
+
+/* ─── sections ─── */
+section{scroll-margin-top:20px; margin-bottom:64px}
+.grp-head{margin:0 0 34px; padding-top:8px}
+.grp-head .k{font-family:var(--font-mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; display:block; margin-bottom:6px}
+.grp-head h2{font-size:23px; margin:0; font-weight:700; letter-spacing:-.005em}
+.grp-head p{color:var(--ink-soft); font-size:14.5px; margin:8px 0 0; max-width:64ch}
+
+h3{font-size:20px; margin:0 0 6px; font-weight:700; text-wrap:balance; letter-spacing:-.005em}
+h3 .num{font-family:var(--font-mono); color:var(--accent); font-size:15px; margin-right:9px; font-weight:600}
+.sub{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-faint); margin:0 0 20px; letter-spacing:.02em}
+p{margin:0 0 14px; max-width:66ch}
+.block{margin:0 0 22px}
+.block > h4{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-faint); margin:0 0 8px; font-weight:600}
+
+code{font-family:var(--font-mono); font-size:.875em; background:var(--panel-2); padding:1px 5px;
+  border-radius:2px; color:var(--ink); white-space:nowrap}
+
+ul.plain{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px; max-width:70ch}
+ul.plain li{padding-left:16px; position:relative; font-size:14.5px; line-height:1.65}
+ul.plain li::before{content:""; position:absolute; left:0; top:.7em; width:6px; height:1.5px; background:var(--ink-faint)}
+ul.plain li b{font-weight:700}
+
+/* ─── figure plate ─── */
+figure{margin:0 0 22px; background:var(--plate); border:1px solid var(--plate-line); border-radius:4px;
+  padding:22px; color:var(--plate-ink); overflow-x:auto}
+figure svg{display:block; max-width:100%; height:auto; margin:0 auto}
+figure svg text{font-family:var(--font-thai)}
+figure .mermaid{display:flex; justify-content:center; min-width:min-content}
+
+/* ── บังคับสีของแผนภาพสถานะ (รูปที่ 10) ──
+   รูปนี้ไม่ได้กำหนดสีรายโหนดในตัวแผนภาพ จึงต้องคุมจาก CSS ให้ครบทุกรูปทรง
+   ไม่งั้น Mermaid จะคำนวณสีเองแล้วได้พื้นทึบจนอ่านไม่ออก
+   ใช้เฉพาะรูปนี้ ไม่แตะรูปที่ 6-9 ซึ่งตั้งใจให้บางกล่องเป็นพื้นเข้มตัวอักษรขาว
+   (รูปที่ 11 เลิกใช้ Mermaid แล้ว เปลี่ยนไปวาดเป็น SVG ที่คุมสีได้เองทุกจุด) */
+
+/* 1. ทุกสี่เหลี่ยม = พื้นขาว ขอบเทาอมน้ำเงิน (ค่าเริ่มต้น) */
+figure.fig-lite .mermaid svg rect{
+  fill:#ffffff !important; stroke:#9fb0c9 !important; stroke-width:1px !important;
+}
+
+/* 2. กล่องสถานะ และกล่องโหนด = เทาอ่อน ขอบเข้ม ให้เห็นกรอบชัด */
+figure.fig-lite .mermaid svg .node rect,
+figure.fig-lite .mermaid svg .statediagram-state rect,
+figure.fig-lite .mermaid svg rect.label-container,
+figure.fig-lite .mermaid svg .cluster rect{
+  fill:#eef1f7 !important; stroke:#0f3460 !important; stroke-width:1.4px !important;
+}
+
+/* 3. พื้นหลังป้ายบนเส้น ไม่ต้องมีขอบ */
+figure.fig-lite .mermaid svg .edgeLabel rect,
+figure.fig-lite .mermaid svg .labelBkg,
+figure.fig-lite .mermaid svg rect.labelBox{
+  fill:#fbfcfe !important; stroke:none !important; opacity:1 !important;
+}
+
+/* 4. ตัวอักษรทั้งหมดต้องเข้ม (ครอบคลุมทั้งแบบ text และแบบ HTML ใน foreignObject) */
+figure.fig-lite .mermaid svg text,
+figure.fig-lite .mermaid svg tspan,
+figure.fig-lite .mermaid svg .nodeLabel,
+figure.fig-lite .mermaid svg .edgeLabel,
+figure.fig-lite .mermaid svg .stateLabel,
+figure.fig-lite .mermaid svg foreignObject div,
+figure.fig-lite .mermaid svg foreignObject span,
+figure.fig-lite .mermaid svg foreignObject p{
+  fill:#1a1a2e !important; color:#1a1a2e !important; background:transparent !important;
+}
+
+/* 5. จุดเริ่มต้น/สิ้นสุดของแผนภาพสถานะ ต้องเป็นวงกลมทึบตามมาตรฐาน UML */
+figure.fig-lite .mermaid svg .node circle,
+figure.fig-lite .mermaid svg .statediagram circle{
+  fill:#0f3460 !important; stroke:#0f3460 !important;
+}
+
+/* 6. เส้นเชื่อม */
+figure.fig-lite .mermaid svg .edgePath path,
+figure.fig-lite .mermaid svg path.transition{
+  stroke:#5c6b7a !important; fill:none !important;
+}
+figcaption{margin-top:16px; padding-top:12px; border-top:1px solid var(--plate-line);
+  font-size:12.5px; color:var(--plate-soft); line-height:1.6; font-family:var(--font-thai)}
+figcaption b{color:var(--plate-ink); font-weight:700}
+
+/* ─── legend ─── */
+.legend{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:7px 20px;
+  border-left:2px solid var(--line); padding:2px 0 2px 15px; margin:0 0 22px}
+.legend div{font-size:13.5px; color:var(--ink-soft); line-height:1.6}
+.legend b{color:var(--ink); font-family:var(--font-mono); font-size:12px; font-weight:600}
+
+/* ─── rule box ─── */
+.rule{border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:0 3px 3px 0;
+  background:var(--panel); padding:16px 20px; margin:0 0 8px}
+.rule > h4{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 10px; font-weight:600}
+.rule ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px}
+.rule li{font-size:14px; line-height:1.65; padding-left:16px; position:relative}
+.rule li::before{content:"·"; position:absolute; left:4px; color:var(--accent); font-weight:700}
+.rule li b{font-weight:700}
+
+/* ─── tables ─── */
+.tw{overflow-x:auto; margin:0 0 22px; border:1px solid var(--line); border-radius:3px}
+table{border-collapse:collapse; width:100%; font-size:13.5px; background:var(--panel)}
+th,td{text-align:left; padding:9px 13px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+th{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:600; background:var(--panel-2); white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code{white-space:nowrap}
+.nowrap{white-space:nowrap}
+
+/* ─── class swatches ─── */
+.classes{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 22px}
+.classes span{display:inline-flex; align-items:center; gap:7px; font-size:13px; border:1px solid var(--line);
+  background:var(--panel); border-radius:2px; padding:5px 11px 5px 8px}
+.classes i{width:11px; height:11px; border-radius:2px; flex:none; border:1px solid rgba(0,0,0,.22)}
+.classes em{font-style:normal; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft)}
+
+hr.div{border:none; border-top:1px solid var(--line); margin:56px 0}
+
+@media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important} }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">เอกสารประกอบรายงาน · ระยะที่ 2</p>
+  <h1>แผนภาพระบบของโครงการพัฒนาระบบตรวจจับเครื่องมือผ่าตัดและบริเวณแผลด้วยปัญญาประดิษฐ์</h1>
+  <p class="lede">
+    ชุดแผนภาพ 11 รูป ครอบคลุมทั้งโปรเจกต์ — ตั้งแต่สถาปัตยกรรมซอฟต์แวร์ การไหลของข้อมูล มุมมองผู้ใช้
+    ไปจนถึงอัลกอริทึมและโครงสร้างข้อมูล ทุกรูปเขียนตามหลักสัญลักษณ์มาตรฐาน (UML / DFD / Flowchart)
+    และอ้างอิงจากซอร์สโค้ดจริงในระบบ ไม่ใช่การออกแบบบนกระดาษ
+  </p>
+  <div class="meta">
+    <span>11 แผนภาพ</span>
+    <span>6 หมวด</span>
+    <span>อ้างอิงโค้ดจริง ณ ส.ค. 2569</span>
+    <span>YOLOv11 · FastAPI · 29 endpoints</span>
+  </div>
+</header>
+
+<nav aria-label="สารบัญแผนภาพ">
+  <h2>สารบัญ</h2>
+  <ol>
+    <li class="grp">ก · ภาพรวมระบบ</li>
+    <li><a href="#d1"><b>1</b><span>สถาปัตยกรรมระบบ</span></a></li>
+    <li><a href="#d2"><b>2</b><span>การติดตั้งใช้งาน</span></a></li>
+    <li class="grp">ข · การไหลของข้อมูล</li>
+    <li><a href="#d3"><b>3</b><span>Context Diagram</span></a></li>
+    <li><a href="#d4"><b>4</b><span>DFD ระดับที่ 1</span></a></li>
+    <li class="grp">ค · มุมมองผู้ใช้</li>
+    <li><a href="#d5"><b>5</b><span>Use Case Diagram</span></a></li>
+    <li class="grp">ง · พฤติกรรมเชิงเวลา</li>
+    <li><a href="#d6"><b>6</b><span>ลำดับงานสกัดเฟรม</span></a></li>
+    <li><a href="#d7"><b>7</b><span>ลำดับงาน Label Assist</span></a></li>
+    <li class="grp">จ · อัลกอริทึม</li>
+    <li><a href="#d8"><b>8</b><span>ผังงานสกัดเฟรม</span></a></li>
+    <li><a href="#d9"><b>9</b><span>วงจรกำกับข้อมูล</span></a></li>
+    <li class="grp">ฉ · ข้อมูลและสถานะ</li>
+    <li><a href="#d10"><b>10</b><span>แผนภาพสถานะ</span></a></li>
+    <li><a href="#d11"><b>11</b><span>โครงสร้างข้อมูล</span></a></li>
+    <li class="grp">ภาคผนวก</li>
+    <li><a href="#map"><b>—</b><span>ใช้รูปไหนในบทใด</span></a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="intro">
+  <p>
+    รายงานผลการดำเนินงานระยะที่ 1 อธิบายโครงการนี้ในฐานะ <b>งานวิจัยโมเดล</b> คือ เตรียมข้อมูลจากวิดีโอ 12 คลิป
+    สกัดได้ 120 เฟรม กำกับข้อมูลครบทุกภาพ แล้วเทรน YOLOv11 จนได้ mAP@50 68.1% / Precision 80.5% / Recall 73.1%
+  </p>
+  <p>
+    แต่ปัจจุบันโครงการได้พัฒนา <b>เครื่องมือเว็บแอปพลิเคชัน</b> ขึ้นมารองรับกระบวนการทั้งหมด สถานะของงานจึง
+    เปลี่ยนจาก “งานวิจัยโมเดล” เป็น <b>“ระบบซอฟต์แวร์ที่มีปัญญาประดิษฐ์เป็นส่วนประกอบ”</b> ซึ่งต้องใช้แผนภาพ
+    คนละชุดในการอธิบาย — แผนภาพสายข้อมูล/โมเดลอย่างเดียวไม่เพียงพอ ต้องมีแผนภาพระดับระบบ
+    (สถาปัตยกรรม, Use Case, Sequence) เพิ่มเข้ามาด้วย เอกสารนี้จึงรวบรวมแผนภาพทั้งสองด้านไว้ครบในชุดเดียว
+  </p>
+
+  <div class="block">
+    <h4>วัตถุเป้าหมาย 5 ประเภท</h4>
+    <div class="classes">
+      <span><i style="background:var(--c-needle)"></i>เข็มเย็บแผล <em>needle</em></span>
+      <span><i style="background:var(--c-finger)"></i>นิ้วมือผู้ปฏิบัติงาน <em>finger</em></span>
+      <span><i style="background:var(--c-holder)"></i>คีมจับเข็ม <em>needle_holder</em></span>
+      <span><i style="background:var(--c-wound)"></i>บริเวณแผล <em>wound</em></span>
+      <span><i style="background:var(--c-forcep)"></i>ปากคีบ <em>forcep</em></span>
+    </div>
+  </div>
+
+  <div class="rule">
+    <h4>หลักการเลือกแผนภาพให้เหมาะกับงาน</h4>
+    <ul>
+      <li><b>อย่าวาดทุกแบบเพราะเห็นในตำรา</b> — แผนภาพแต่ละชนิดตอบคำถามคนละข้อ ถ้าไม่มีคำถามนั้นในรายงาน
+        ก็ไม่ต้องมีรูปนั้น ทุกรูปในเอกสารนี้จึงระบุไว้ชัดว่า “ตอบคำถามอะไร” และ “ใช้ในบทไหน”</li>
+      <li><b>ระบบนี้ไม่มีฐานข้อมูลเชิงสัมพันธ์</b> — จึงไม่มี ER Diagram ในความหมายของ schema ฐานข้อมูล
+        แต่มีรูปที่ 11 อธิบายโครงสร้างข้อมูล JSON แทน พร้อมเหตุผลของการตัดสินใจนี้</li>
+      <li><b>ความซับซ้อนของรูปต้องเท่ากับความซับซ้อนของระบบจริง</b> — ระบบนี้ออกแบบให้ใช้เครื่องมือน้อยที่สุด
+        (ไม่มี DB, ไม่มี job queue, ไม่มี framework ฝั่งหน้าเว็บ) แผนภาพจึงต้องสื่อความเรียบง่ายนั้นตรง ๆ
+        ไม่ใช่วาดให้ดูใหญ่โตเกินของจริง</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ก</span>
+  <h2>ภาพรวมระบบ</h2>
+  <p>ระบบประกอบด้วยอะไรบ้าง ส่วนไหนคุยกับส่วนไหน และรันอยู่บนเครื่องอะไร — สองรูปนี้คือรูปเปิดของบทสถาปัตยกรรม</p>
+</div>
+
+<section id="d1">
+  <h3><span class="num">รูปที่ 1</span>แผนภาพสถาปัตยกรรมระบบ (System Architecture Diagram)</h3>
+  <p class="sub">แบบแบ่งชั้น (Layered) · วาดด้วย SVG · ครอบคลุมทั้งโปรเจกต์</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      ระบบแบ่งเป็นกี่ชั้น แต่ละชั้นมีอะไร และ <b>ทำไมโปรแกรมเดสก์ท็อปเดิมกับเว็บแอปใหม่ถึงอยู่ร่วมกันได้
+      โดยไม่ต้องเขียนตรรกะซ้ำสองชุด</b> — นี่คือข้อความหลักที่รูปนี้ต้องสื่อ
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>กล่องทึบ</b> ส่วนประกอบที่เป็นโค้ดของโครงการเอง</div>
+    <div><b>กล่องเส้นประ</b> กระบวนการนอกระบบ ทำด้วยมือเป็นครั้งคราว</div>
+    <div><b>ลูกศรทึบ</b> การเรียกใช้งานโดยตรง</div>
+    <div><b>ลูกศรเส้นประ</b> การส่งไฟล์เข้าระบบด้วยมือ</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 592" role="img" aria-label="แผนภาพสถาปัตยกรรมแบบแบ่งชั้น 4 ชั้นของระบบ พร้อมคอลัมน์บริการภายนอกด้านขวา แสดงว่าโปรแกรมเดสก์ท็อปและเว็บแอปใช้โมดูลแกนกลางชุดเดียวกัน">
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+        </marker>
+        <marker id="a1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="#e94560"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.4">
+
+        <!-- band labels -->
+        <g font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" letter-spacing="1.4" fill="#5c6b7a" stroke="none">
+          <text x="135" y="33">1 · ชั้นผู้ใช้ (CLIENT)</text>
+          <text x="135" y="165">2 · ชั้นแอปพลิเคชัน (APPLICATION)</text>
+          <text x="135" y="315">3 · ชั้นโมดูลแกนกลาง (CORE)</text>
+          <text x="135" y="447">4 · ชั้นจัดเก็บข้อมูล (STORAGE)</text>
+          <text x="775" y="165">ภายนอก / นอกระบบ</text>
+        </g>
+
+        <!-- band backgrounds -->
+        <g fill="#eef1f7" stroke="#dde4ef" stroke-width="1">
+          <rect x="135" y="40"  width="620" height="100" rx="4"/>
+          <rect x="135" y="172" width="620" height="118" rx="4"/>
+          <rect x="135" y="322" width="620" height="100" rx="4"/>
+          <rect x="135" y="454" width="620" height="100" rx="4"/>
+          <rect x="775" y="172" width="210" height="382" rx="4"/>
+        </g>
+
+        <!-- band 1 : clients -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="145" y="52" width="288" height="76" rx="3"/>
+          <rect x="457" y="52" width="288" height="76" rx="3"/>
+        </g>
+        <g stroke="none" fill="#1a1a2e" text-anchor="middle">
+          <text x="289" y="80" font-size="13.5" font-weight="700">โปรแกรมเดสก์ท็อป (เดิม)</text>
+          <text x="289" y="101" font-size="11" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">app.py — Tkinter</text>
+          <text x="601" y="80" font-size="13.5" font-weight="700">เว็บแอปพลิเคชัน (ใหม่)</text>
+          <text x="601" y="101" font-size="11" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">index.html · style.css · app.js</text>
+          <text x="601" y="118" font-size="10" fill="#586778">ไม่ใช้ framework / ไม่มีขั้นตอน build</text>
+        </g>
+
+        <!-- band 2 : application -->
+        <rect x="145" y="184" width="600" height="94" rx="3" fill="#ffffff" stroke="#0f3460" stroke-width="1.6"/>
+        <text x="445" y="207" font-size="13.5" font-weight="700" fill="#1a1a2e" stroke="none" text-anchor="middle">webapp/server.py — FastAPI + Uvicorn</text>
+        <g fill="#e7ebf5" stroke="#b9c6dd" stroke-width="1">
+          <rect x="157" y="220" width="80" height="24" rx="12"/>
+          <rect x="243" y="220" width="80" height="24" rx="12"/>
+          <rect x="329" y="220" width="80" height="24" rx="12"/>
+          <rect x="415" y="220" width="80" height="24" rx="12"/>
+          <rect x="501" y="220" width="80" height="24" rx="12"/>
+          <rect x="587" y="220" width="80" height="24" rx="12"/>
+          <rect x="673" y="220" width="60" height="24" rx="12"/>
+        </g>
+        <g stroke="none" fill="#0f3460" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5">
+          <text x="197" y="236">/health·1</text>
+          <text x="283" y="236">/videos·3</text>
+          <text x="369" y="236">/extract·5</text>
+          <text x="455" y="236">/detect·4</text>
+          <text x="541" y="236">/frames·8</text>
+          <text x="627" y="236">/models*·4</text>
+          <text x="703" y="236">/export·4</text>
+        </g>
+        <text x="445" y="266" font-size="10.5" fill="#586778" stroke="none" text-anchor="middle">รวม 29 endpoint · งานหนักรันด้วย threading.Thread · ติดตามผลด้วย HTTP polling</text>
+
+        <!-- band 3 : core modules -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="145" y="334" width="186" height="76" rx="3"/>
+          <rect x="352" y="334" width="186" height="76" rx="3"/>
+          <rect x="559" y="334" width="186" height="76" rx="3"/>
+        </g>
+        <g stroke="none" text-anchor="middle">
+          <text x="238" y="362" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">frame_extractor.py</text>
+          <text x="238" y="383" font-size="11" fill="#5c6b7a">สกัดเฟรม + กรองซ้ำ/เบลอ</text>
+          <text x="445" y="362" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">detector.py</text>
+          <text x="445" y="383" font-size="11" fill="#5c6b7a">ตรวจจับวัตถุ 2 backend</text>
+          <text x="652" y="362" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">dataset_exporter.py</text>
+          <text x="652" y="383" font-size="11" fill="#5c6b7a">ส่งออก + แบ่งชุดข้อมูล</text>
+        </g>
+
+        <!-- band 4 : storage -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="145" y="466" width="186" height="76" rx="3"/>
+          <rect x="352" y="466" width="186" height="76" rx="3"/>
+          <rect x="559" y="466" width="186" height="76" rx="3"/>
+        </g>
+        <g stroke="none" text-anchor="middle">
+          <text x="238" y="494" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">state.json</text>
+          <text x="238" y="513" font-size="10.5" fill="#5c6b7a">+ .bak + backups/</text>
+          <text x="238" y="530" font-size="10" fill="#586778">ไม่มีฐานข้อมูล</text>
+          <text x="445" y="494" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">data/</text>
+          <text x="445" y="513" font-size="10.5" fill="#5c6b7a">videos · frames · exports</text>
+          <text x="652" y="494" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">models/*.pt</text>
+          <text x="652" y="513" font-size="10.5" fill="#5c6b7a">ไฟล์น้ำหนักโมเดล</text>
+        </g>
+
+        <!-- right column : external -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="790" y="210" width="180" height="68" rx="3"/>
+          <rect x="790" y="292" width="180" height="68" rx="3"/>
+          <rect x="790" y="374" width="180" height="68" rx="3"/>
+        </g>
+        <rect x="790" y="456" width="180" height="76" rx="3" fill="#ffffff" stroke="#e94560" stroke-width="1.4" stroke-dasharray="5 3"/>
+        <g stroke="none" text-anchor="middle">
+          <text x="880" y="238" font-size="12" font-weight="700" fill="#1a1a2e">Tesseract OCR</text>
+          <text x="880" y="257" font-size="10.5" fill="#5c6b7a">อ่านข้อความบนภาพ</text>
+          <text x="880" y="320" font-size="12" font-weight="700" fill="#1a1a2e">Ultralytics YOLOv11</text>
+          <text x="880" y="339" font-size="10.5" fill="#5c6b7a">ประมวลผลบนเครื่อง (CPU)</text>
+          <text x="880" y="402" font-size="12" font-weight="700" fill="#1a1a2e">Roboflow Cloud API</text>
+          <text x="880" y="421" font-size="10.5" fill="#5c6b7a">ประมวลผลบนคลาวด์</text>
+          <text x="880" y="482" font-size="11" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#e94560">train_roboflow_yolo.py</text>
+          <text x="880" y="500" font-size="10.5" fill="#5c6b7a">เทรนโมเดลนอกระบบ</text>
+          <text x="880" y="517" font-size="10" fill="#586778">--task detect/segment/pose</text>
+        </g>
+
+        <!-- arrows -->
+        <path d="M601 128 V166" marker-end="url(#a1)"/>
+        <text x="611" y="152" font-size="10" fill="#5c6b7a" stroke="none">HTTP / JSON</text>
+
+        <path d="M289 128 V148 H88 V372 H131" marker-end="url(#a1r)" stroke="#e94560" stroke-dasharray="0"/>
+        <text x="188" y="142" font-size="10" fill="#e94560" stroke="none" text-anchor="middle">import ตรง (ไม่ผ่าน HTTP)</text>
+
+        <path d="M445 278 V318" marker-end="url(#a1)"/>
+        <text x="455" y="303" font-size="10" fill="#5c6b7a" stroke="none">import ตรง</text>
+
+        <path d="M445 422 V450" marker-end="url(#a1)"/>
+        <text x="455" y="441" font-size="10" fill="#5c6b7a" stroke="none">อ่าน / เขียนไฟล์</text>
+
+        <path d="M745 236 H786" marker-end="url(#a1)"/>
+        <text x="765" y="229" font-size="9.5" fill="#5c6b7a" stroke="none" text-anchor="middle">OCR</text>
+
+        <path d="M510 410 V438 H762 V326 H786" marker-end="url(#a1)"/>
+        <path d="M762 408 H786" marker-end="url(#a1)"/>
+        <text x="632" y="432" font-size="10" fill="#5c6b7a" stroke="none" text-anchor="middle">เรียกโมเดล (inference)</text>
+
+        <path d="M786 504 H749" marker-end="url(#a1r)" stroke="#e94560" stroke-dasharray="5 3"/>
+        <rect x="734" y="484" width="68" height="13" fill="#fbfcfe" stroke="none"/>
+        <text x="768" y="494" font-size="9.5" fill="#e94560" stroke="none" text-anchor="middle">อัปโหลด .pt</text>
+      </g>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> โปรแกรมเดสก์ท็อปเดิมและเว็บแอปใหม่เป็น “ผู้ใช้งาน” คนละตัวของ
+      <b>โมดูลแกนกลางชุดเดียวกัน</b> — เดสก์ท็อป <code>import</code> โมดูลตรง ส่วนเว็บเรียกผ่าน HTTP มาที่
+      <code>server.py</code> ซึ่ง <code>import</code> โมดูลชุดเดิม จึงไม่มีตรรกะการสกัดเฟรม/ตรวจจับ/ส่งออก
+      เขียนซ้ำสองชุด · เครื่องหมาย <code>*</code> ที่ <code>/models</code> รวม <code>/classes</code> และ
+      <code>/analytics</code> ไว้ด้วย · การเทรนโมเดลอยู่ <b>นอกระบบ</b> (กล่องเส้นประ) ผลลัพธ์เข้าระบบผ่านการอัปโหลดไฟล์ <code>.pt</code>
+    </figcaption>
+  </figure>
+
+  <div class="block">
+    <h4>คำอธิบายส่วนประกอบ</h4>
+    <ul class="plain">
+      <li><b>ชั้นที่ 1 ผู้ใช้</b> — <code>app.py</code> คือโปรแกรม Tkinter เดิมที่ยังใช้งานคู่ขนานอยู่
+        ส่วนเว็บแอปเป็นไฟล์ HTML/CSS/JS อย่างละไฟล์ ไม่ใช้ framework และไม่มีขั้นตอน build</li>
+      <li><b>ชั้นที่ 2 แอปพลิเคชัน</b> — <code>webapp/server.py</code> ไฟล์เดียว รวม 29 endpoint แบ่งเป็น 7 กลุ่ม
+        งานที่ใช้เวลานาน (สกัดเฟรม ตรวจจับ ส่งออก) แยกไปรันใน <code>threading.Thread</code> แล้วให้หน้าเว็บ
+        ถามความคืบหน้าเป็นระยะ (polling) แทนการใช้ WebSocket</li>
+      <li><b>ชั้นที่ 3 โมดูลแกนกลาง</b> — สามไฟล์ที่บรรจุตรรกะจริงทั้งหมด ถูกเรียกใช้ร่วมกันจากทั้งสอง client</li>
+      <li><b>ชั้นที่ 4 จัดเก็บข้อมูล</b> — ไม่มีระบบฐานข้อมูล ใช้ <code>state.json</code> ไฟล์เดียวเก็บสถานะทั้งหมด
+        เขียนแบบ atomic (เขียนไฟล์ <code>.tmp</code> แล้วสลับชื่อ) มีสำเนาสำรอง <code>.bak</code> และ
+        snapshot ตามเวลาในโฟลเดอร์ <code>backups/</code></li>
+      <li><b>คอลัมน์ขวา</b> — บริการที่ระบบเรียกใช้แต่ไม่ได้เขียนเอง และสคริปต์เทรนโมเดลซึ่งทำงานนอกระบบ</li>
+    </ul>
+  </div>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>แบ่งชั้นตามทิศทางการพึ่งพา</b> — ชั้นบนเรียกชั้นล่างได้ แต่ชั้นล่างต้องไม่รู้จักชั้นบน
+        รูปนี้จึงวางลูกศรจากบนลงล่างเสมอ ถ้าพบลูกศรย้อนขึ้นแปลว่าการออกแบบมีปัญหา</li>
+      <li><b>ลูกศรต้องมีป้ายกำกับ</b> — “ลูกศรเปล่า” บอกได้แค่ว่า “เกี่ยวข้องกัน” แต่ <code>import ตรง</code>
+        กับ <code>HTTP / JSON</code> บอกกลไกที่ต่างกันชัดเจน ซึ่งคือสาระสำคัญของรูปนี้พอดี</li>
+      <li><b>สิ่งที่อยู่นอกขอบเขตระบบต้องแยกให้เห็น</b> — ใช้เส้นประกับ <code>train_roboflow_yolo.py</code>
+        เพื่อไม่ให้ผู้อ่านเข้าใจผิดว่าเว็บแอปเทรนโมเดลได้เอง (ซึ่งไม่จริง)</li>
+      <li><b>อย่าวาดกล่องที่ไม่มีในระบบจริง</b> — ไม่มี load balancer, message queue, หรือ database server
+        ในรูปนี้ เพราะระบบจริงไม่มี การใส่เข้ามาให้ดูสมบูรณ์คือการรายงานเท็จ</li>
+    </ul>
+  </div>
+</section>
+
+<section id="d2">
+  <h3><span class="num">รูปที่ 2</span>แผนภาพการติดตั้งใช้งาน (Deployment Diagram)</h3>
+  <p class="sub">UML 2.x · วาดด้วย SVG · แสดงว่าซอฟต์แวร์ถูกติดตั้งและรันอยู่บนฮาร์ดแวร์ใด</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      รูปที่ 1 บอกว่าระบบ <i>ประกอบด้วย</i> อะไร รูปนี้บอกว่าของเหล่านั้น <i>ไปรันอยู่ที่ไหน</i> —
+      คำถามที่กรรมการมักถามคือ “ต้องใช้เซิร์ฟเวอร์กี่เครื่อง ต้องใช้ GPU ไหม”
+      รูปนี้ตอบว่า <b>เครื่องเดียว ใช้ซีพียูอย่างเดียว</b>
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>กล่องสามมิติ</b> โหนด (Node) — อุปกรณ์หรือสภาพแวดล้อมที่รันซอฟต์แวร์ได้</div>
+    <div><b>«device»</b> อุปกรณ์ทางกายภาพ</div>
+    <div><b>«executionEnvironment»</b> สภาพแวดล้อมการทำงานที่อยู่ในอุปกรณ์</div>
+    <div><b>«artifact»</b> ไฟล์จริงที่ถูกติดตั้งลงไป</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 980 400" role="img" aria-label="แผนภาพการติดตั้งใช้งานแบบ UML แสดงเครื่องคอมพิวเตอร์ผู้ใช้เครื่องเดียวที่มีเว็บเบราว์เซอร์และ Python Uvicorn รันอยู่ และเชื่อมต่อออกไปยัง Roboflow Cloud ผ่าน HTTPS">
+      <defs>
+        <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- device 1 : user machine -->
+      <g stroke="#0f3460" stroke-width="1.5">
+        <polygon points="40,76 54,62 634,62 620,76" fill="#e7ebf5"/>
+        <polygon points="620,76 634,62 634,352 620,366" fill="#dce3f0"/>
+        <rect x="40" y="76" width="580" height="290" fill="#f4f7fc"/>
+      </g>
+      <text x="54" y="98" font-size="11" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«device»</text>
+      <text x="54" y="117" font-size="14" font-weight="700" fill="#1a1a2e">เครื่องคอมพิวเตอร์ของผู้ใช้ — CPU เท่านั้น (ไม่ต้องใช้ GPU)</text>
+
+      <!-- exec env 1 : browser -->
+      <g stroke="#0f3460" stroke-width="1.3">
+        <polygon points="64,128 74,118 322,118 312,128" fill="#e7ebf5"/>
+        <polygon points="312,128 322,118 322,222 312,232" fill="#dce3f0"/>
+        <rect x="64" y="128" width="248" height="104" fill="#ffffff"/>
+      </g>
+      <text x="76" y="147" font-size="10" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«executionEnvironment»</text>
+      <text x="76" y="165" font-size="12.5" font-weight="700" fill="#1a1a2e">เว็บเบราว์เซอร์</text>
+      <rect x="78" y="176" width="220" height="42" fill="#f4f7fc" stroke="#b9c6dd" stroke-width="1"/>
+      <text x="86" y="192" font-size="9.5" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«artifact»</text>
+      <text x="86" y="208" font-size="10.5" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">index.html · style.css · app.js</text>
+
+      <!-- exec env 2 : python -->
+      <g stroke="#0f3460" stroke-width="1.3">
+        <polygon points="336,128 346,118 598,118 588,128" fill="#e7ebf5"/>
+        <polygon points="588,128 598,118 598,336 588,346" fill="#dce3f0"/>
+        <rect x="336" y="128" width="252" height="218" fill="#ffffff"/>
+      </g>
+      <text x="348" y="147" font-size="10" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«executionEnvironment»</text>
+      <text x="348" y="165" font-size="12.5" font-weight="700" fill="#1a1a2e">Python 3.11 + Uvicorn</text>
+      <g fill="#f4f7fc" stroke="#b9c6dd" stroke-width="1">
+        <rect x="350" y="176" width="224" height="30"/>
+        <rect x="350" y="212" width="224" height="30"/>
+        <rect x="350" y="248" width="224" height="30"/>
+        <rect x="350" y="284" width="224" height="30"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">
+        <text x="360" y="195">server.py (FastAPI)</text>
+        <text x="360" y="231">frame_extractor · detector · exporter</text>
+        <text x="360" y="267">state.json · state.json.bak</text>
+        <text x="360" y="303">data/ · models/</text>
+      </g>
+
+      <!-- device 2 : roboflow -->
+      <g stroke="#0f3460" stroke-width="1.5">
+        <polygon points="780,150 792,138 962,138 950,150" fill="#e7ebf5"/>
+        <polygon points="950,150 962,138 962,248 950,260" fill="#dce3f0"/>
+        <rect x="780" y="150" width="170" height="110" fill="#f4f7fc"/>
+      </g>
+      <text x="792" y="172" font-size="11" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«device»</text>
+      <text x="792" y="192" font-size="13" font-weight="700" fill="#1a1a2e">Roboflow Cloud</text>
+      <text x="792" y="212" font-size="10.5" fill="#5c6b7a">บริการภายนอก</text>
+      <text x="792" y="230" font-size="10" fill="#586778">(ทางเลือก ไม่บังคับ)</text>
+
+      <!-- connections -->
+      <g fill="none" stroke="currentColor" stroke-width="1.4">
+        <path d="M188 232 V262 H332" marker-end="url(#a2)"/>
+        <path d="M588 200 H778" marker-end="url(#a2)"/>
+      </g>
+      <text x="256" y="255" font-size="10.5" fill="#5c6b7a" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace">«HTTP» localhost:8000</text>
+      <text x="683" y="192" font-size="10.5" fill="#5c6b7a" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace">«HTTPS»</text>
+      <text x="683" y="220" font-size="10.5" fill="#5c6b7a" text-anchor="middle">ใช้เฉพาะเมื่อเลือก backend = roboflow</text>
+
+      <text x="54" y="392" font-size="11" fill="#5c6b7a">ไม่มี database server · ไม่มี load balancer · ไม่มี message queue · ไม่มี container — ทั้งระบบรันเป็นโปรเซสเดียวบนเครื่องเดียว</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ทั้งระบบติดตั้งบนเครื่องเดียว เบราว์เซอร์กับเซิร์ฟเวอร์อยู่ในเครื่องเดียวกัน
+      สื่อสารผ่าน <code>localhost</code> การเชื่อมออกอินเทอร์เน็ตมีเพียงเส้นเดียวคือไป Roboflow Cloud
+      และเป็น <b>ทางเลือก</b> เท่านั้น — ถ้าเลือกประมวลผลด้วย YOLOv11 บนเครื่อง ระบบทำงานได้โดยไม่ต้องต่ออินเทอร์เน็ตเลย
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>โหนดต้องวาดเป็นกล่องสามมิติ</b> ไม่ใช่สี่เหลี่ยมแบน — ในภาษา UML สี่เหลี่ยมแบนหมายถึงคลาสหรือ
+        คอมโพเนนต์ ส่วนกล่องสามมิติสงวนไว้สำหรับโหนดโดยเฉพาะ</li>
+      <li><b>ต้องระบุ stereotype ในเครื่องหมาย «guillemets»</b> เพื่อแยกว่าโหนดนั้นเป็นอุปกรณ์ทางกายภาพ
+        (<code>«device»</code>) หรือสภาพแวดล้อมซอฟต์แวร์ (<code>«executionEnvironment»</code>)
+        การเขียนแค่ชื่อเฉย ๆ ทำให้ผู้อ่านแยกไม่ออก</li>
+      <li><b>เส้นเชื่อมระหว่างโหนดคือ communication path</b> ต้องกำกับโพรโทคอลเสมอ
+        (<code>«HTTP»</code>, <code>«HTTPS»</code>) เพราะสาระของแผนภาพนี้อยู่ที่ “คุยกันด้วยอะไร”</li>
+      <li><b>Artifact คือไฟล์ ไม่ใช่แนวคิด</b> — ต้องเขียนชื่อไฟล์จริงอย่าง <code>server.py</code>,
+        <code>state.json</code> ไม่ใช่คำอย่าง “ระบบหลังบ้าน” ซึ่งเป็นระดับคอมโพเนนต์ ไม่ใช่ระดับ deployment</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ข</span>
+  <h2>การไหลของข้อมูล</h2>
+  <p>
+    วิเคราะห์ระบบด้วยวิธีเชิงโครงสร้าง (Structured Analysis) — เริ่มจากมองระบบเป็นกล่องดำหนึ่งใบ
+    แล้วค่อยเปิดออกดูข้างในทีละระดับ เป็นรูปแบบที่รายงานโครงการสายวิศวกรรมซอฟต์แวร์ในไทยใช้กันมากที่สุด
+  </p>
+</div>
+
+<section id="d3">
+  <h3><span class="num">รูปที่ 3</span>แผนภาพบริบท (Context Diagram / DFD Level 0)</h3>
+  <p class="sub">สัญลักษณ์แบบ Yourdon–DeMarco · วาดด้วย SVG</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      <b>ขอบเขตของระบบอยู่ตรงไหน</b> — อะไรอยู่ในระบบ อะไรอยู่นอกระบบ และมีข้อมูลอะไรไหลข้ามเส้นแบ่งนั้นบ้าง
+      รูปนี้ต้องมี <b>โพรเซสเดียวเท่านั้น</b> คือตัวระบบทั้งระบบ
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>วงกลม</b> โพรเซส (Process) — ในระดับนี้มีได้เพียงวงเดียว หมายเลข 0</div>
+    <div><b>สี่เหลี่ยม</b> ตัวแทนภายนอก (External Entity) — คนหรือระบบที่อยู่นอกขอบเขต</div>
+    <div><b>ลูกศร</b> กระแสข้อมูล (Data Flow) — ต้องกำกับชื่อข้อมูลเสมอ</div>
+    <div><b>ไม่มีแหล่งจัดเก็บข้อมูล</b> ในระดับนี้ — จะปรากฏในระดับที่ 1 เท่านั้น</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 960 400" role="img" aria-label="แผนภาพบริบทแสดงระบบเป็นวงกลมเดียวตรงกลาง มีตัวแทนภายนอกสองตัวคือผู้ใช้งานระบบทางซ้ายและ Roboflow Cloud Service ทางขวา พร้อมกระแสข้อมูลเข้าออก">
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- process 0 -->
+      <circle cx="480" cy="220" r="110" fill="#ffffff" stroke="#0f3460" stroke-width="2"/>
+      <line x1="381" y1="176" x2="579" y2="176" stroke="#0f3460" stroke-width="1.2"/>
+      <text x="480" y="167" text-anchor="middle" font-size="16" font-weight="700" fill="#e94560" font-family="Cascadia Mono, Consolas, monospace">0</text>
+      <text x="480" y="203" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ระบบตรวจจับเครื่องมือผ่าตัด</text>
+      <text x="480" y="222" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">และบริเวณแผล</text>
+      <text x="480" y="241" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ด้วยปัญญาประดิษฐ์</text>
+      <text x="480" y="266" text-anchor="middle" font-size="10.5" fill="#586778">(เว็บแอปพลิเคชัน + โมดูลแกนกลาง)</text>
+
+      <!-- external entities -->
+      <rect x="40" y="160" width="182" height="112" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="131" y="205" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a1a2e">ผู้ใช้งานระบบ</text>
+      <text x="131" y="228" text-anchor="middle" font-size="11" fill="#5c6b7a">นักวิจัย / ผู้กำกับข้อมูล</text>
+      <text x="131" y="247" text-anchor="middle" font-size="11" fill="#5c6b7a">/ นักศึกษาสัตวแพทย์</text>
+
+      <rect x="738" y="160" width="182" height="112" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="829" y="205" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a1a2e">Roboflow</text>
+      <text x="829" y="226" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a1a2e">Cloud Service</text>
+      <text x="829" y="248" text-anchor="middle" font-size="11" fill="#5c6b7a">บริการตรวจจับภายนอก</text>
+
+      <!-- flows -->
+      <g fill="none" stroke="currentColor" stroke-width="1.4">
+        <path d="M224 200 H368" marker-end="url(#a3)"/>
+        <path d="M372 252 H226" marker-end="url(#a3)"/>
+        <path d="M590 200 H736" marker-end="url(#a3)"/>
+        <path d="M736 252 H590" marker-end="url(#a3)"/>
+      </g>
+      <g font-size="10" fill="#5c6b7a" text-anchor="middle">
+        <text x="296" y="158">ไฟล์วิดีโอการผ่าตัด</text>
+        <text x="296" y="172">พารามิเตอร์การสกัด / ตรวจจับ</text>
+        <text x="296" y="186">ข้อมูลกำกับที่แก้ไข · ไฟล์โมเดล .pt</text>
+
+        <text x="299" y="274">ภาพเฟรมพร้อมกรอบวัตถุ</text>
+        <text x="299" y="288">ความคืบหน้างาน · สถิติชุดข้อมูล</text>
+        <text x="299" y="302">ไฟล์ ZIP ชุดข้อมูลที่ส่งออก</text>
+
+        <text x="663" y="185">ภาพเฟรม + API key</text>
+        <text x="663" y="276">ผลตรวจจับ</text>
+        <text x="663" y="290">(คลาส · พิกัด · ค่าความเชื่อมั่น)</text>
+      </g>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ระบบมีตัวแทนภายนอกเพียง 2 ตัว — ผู้ใช้งาน และ Roboflow Cloud
+      สังเกตว่า <b>Tesseract OCR และ Ultralytics YOLOv11 ไม่ใช่ตัวแทนภายนอก</b> เพราะเป็นไลบรารีที่ติดตั้ง
+      และรันอยู่ในระบบเอง ไม่ได้อยู่คนละขอบเขต ต่างจาก Roboflow ที่เป็นบริการบนเครือข่ายจริง ๆ
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>ต้องมีโพรเซสเดียวเท่านั้น</b> และใช้หมายเลข 0 เสมอ — ถ้าวาดหลายวงในระดับนี้แสดงว่าสับสน
+        กับ DFD ระดับที่ 1</li>
+      <li><b>ห้ามมีแหล่งจัดเก็บข้อมูล (Data Store)</b> ในแผนภาพบริบท เพราะแหล่งจัดเก็บข้อมูลอยู่ <i>ภายใน</i>
+        ระบบ ซึ่งระดับนี้ยังถือว่าเป็นกล่องดำอยู่ นี่คือข้อผิดพลาดที่พบบ่อยที่สุดในรายงานนักศึกษา</li>
+      <li><b>ห้ามลากเส้นระหว่างตัวแทนภายนอกด้วยกันเอง</b> — ถ้าผู้ใช้กับ Roboflow คุยกันเองโดยไม่ผ่านระบบ
+        เรื่องนั้นอยู่นอกขอบเขต ไม่ต้องวาด</li>
+      <li><b>กระแสข้อมูลต้องเป็นคำนาม</b> (“ไฟล์วิดีโอ”, “ผลตรวจจับ”) ไม่ใช่คำกริยา (“อัปโหลด”, “ประมวลผล”)
+        เพราะสิ่งที่ไหลบนเส้นคือ <i>ข้อมูล</i> ไม่ใช่ <i>การกระทำ</i></li>
+      <li><b>ต้องสมดุลกับระดับถัดไป (Balancing)</b> — กระแสข้อมูลเข้า-ออกในรูปที่ 3 ต้องปรากฏครบ
+        ในรูปที่ 4 ห้ามมีข้อมูลโผล่มาใหม่หรือหายไปเฉย ๆ</li>
+    </ul>
+  </div>
+</section>
+
+<section id="d4">
+  <h3><span class="num">รูปที่ 4</span>แผนภาพกระแสข้อมูลระดับที่ 1 (Data Flow Diagram — Level 1)</h3>
+  <p class="sub">สัญลักษณ์แบบ Gane–Sarson · วาดด้วย SVG · 6 โพรเซส · 5 แหล่งจัดเก็บข้อมูล</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      เปิดกล่องดำในรูปที่ 3 ออกมาดูข้างใน — <b>ระบบทำงานย่อยอะไรบ้าง แต่ละงานอ่าน/เขียนข้อมูลจากที่ไหน</b>
+      รูปนี้คือหัวใจของบทวิเคราะห์และออกแบบระบบ และเป็นรูปที่กรรมการมักซักถามมากที่สุด
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>สี่เหลี่ยมมุมมน</b> โพรเซส — มีหมายเลขกำกับ (1–6)</div>
+    <div><b>สี่เหลี่ยมเปิดด้านขวา</b> แหล่งจัดเก็บข้อมูล — มีรหัส D1–D5</div>
+    <div><b>สี่เหลี่ยมทึบ</b> ตัวแทนภายนอก</div>
+    <div><b>ลูกศร</b> กระแสข้อมูล พร้อมชื่อข้อมูลกำกับ</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 950 640" role="img" aria-label="แผนภาพกระแสข้อมูลระดับที่ 1 แสดง 6 โพรเซสได้แก่ จัดการวิดีโอ สกัดเฟรม ตรวจจับวัตถุ กำกับข้อมูล จัดการโมเดล และส่งออกชุดข้อมูล พร้อมแหล่งจัดเก็บข้อมูล 5 แหล่ง">
+      <defs>
+        <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- external entity : user -->
+      <rect x="24" y="50" width="112" height="544" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="80" y="305" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ผู้ใช้งาน</text>
+      <text x="80" y="325" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ระบบ</text>
+      <text x="80" y="347" text-anchor="middle" font-size="10" fill="#5c6b7a">นักวิจัย /</text>
+      <text x="80" y="361" text-anchor="middle" font-size="10" fill="#5c6b7a">ผู้กำกับข้อมูล</text>
+
+      <!-- processes -->
+      <g fill="#ffffff" stroke="#0f3460" stroke-width="1.5">
+        <rect x="250" y="50"  width="240" height="64" rx="8"/>
+        <rect x="250" y="146" width="240" height="64" rx="8"/>
+        <rect x="250" y="242" width="240" height="64" rx="8"/>
+        <rect x="250" y="338" width="240" height="64" rx="8"/>
+        <rect x="250" y="434" width="240" height="64" rx="8"/>
+        <rect x="250" y="530" width="240" height="64" rx="8"/>
+      </g>
+      <g stroke="#0f3460" stroke-width="1.1">
+        <line x1="250" y1="72"  x2="490" y2="72"/>
+        <line x1="250" y1="168" x2="490" y2="168"/>
+        <line x1="250" y1="264" x2="490" y2="264"/>
+        <line x1="250" y1="360" x2="490" y2="360"/>
+        <line x1="250" y1="456" x2="490" y2="456"/>
+        <line x1="250" y1="552" x2="490" y2="552"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="11" font-weight="700" fill="#e94560">
+        <text x="261" y="67">1</text><text x="261" y="163">2</text><text x="261" y="259">3</text>
+        <text x="261" y="355">4</text><text x="261" y="451">5</text><text x="261" y="547">6</text>
+      </g>
+      <g text-anchor="middle" fill="#1a1a2e" font-size="13" font-weight="700">
+        <text x="370" y="96">จัดการวิดีโอ</text>
+        <text x="370" y="192">สกัดเฟรมจากวิดีโอ</text>
+        <text x="370" y="288">ตรวจจับวัตถุ</text>
+        <text x="370" y="384">กำกับข้อมูลภาพ</text>
+        <text x="370" y="480">จัดการโมเดล</text>
+        <text x="370" y="576">ส่งออกชุดข้อมูล</text>
+      </g>
+      <g text-anchor="middle" fill="#586778" font-size="9.5">
+        <text x="370" y="109">อัปโหลด · ลบ · แสดงรายการ</text>
+        <text x="370" y="205">กรองภาพซ้ำ / ภาพเบลอ</text>
+        <text x="370" y="301">แบบกลุ่ม และรายเฟรม</text>
+        <text x="370" y="397">bbox · polygon · keypoint · OCR</text>
+        <text x="370" y="493">อัปโหลด .pt · แสดงรายการ</text>
+        <text x="370" y="589">แบ่ง train / val / test</text>
+      </g>
+
+      <!-- data stores (Gane-Sarson : open right) -->
+      <g stroke="#0f3460" stroke-width="1.5" fill="none">
+        <path d="M870 64 H580 V100 H870"/><path d="M618 64 V100"/>
+        <path d="M870 160 H580 V196 H870"/><path d="M618 160 V196"/>
+        <path d="M870 352 H580 V388 H870"/><path d="M618 352 V388"/>
+        <path d="M870 448 H580 V484 H870"/><path d="M618 448 V484"/>
+        <path d="M870 572 H580 V608 H870"/><path d="M618 572 V608"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="11" font-weight="700" fill="#e94560" text-anchor="middle">
+        <text x="599" y="87">D1</text><text x="599" y="183">D2</text><text x="599" y="375">D3</text>
+        <text x="599" y="471">D4</text><text x="599" y="595">D5</text>
+      </g>
+      <g font-size="12" fill="#1a1a2e">
+        <text x="632" y="81">ไฟล์วิดีโอ</text><text x="632" y="95" font-size="9.5" fill="#586778">data/videos/</text>
+        <text x="632" y="177">ภาพเฟรม</text><text x="632" y="191" font-size="9.5" fill="#586778">data/frames/</text>
+        <text x="632" y="369">ข้อมูลกำกับ + สถานะงาน</text><text x="632" y="383" font-size="9.5" fill="#586778">state.json</text>
+        <text x="632" y="465">ไฟล์โมเดล</text><text x="632" y="479" font-size="9.5" fill="#586778">models/*.pt</text>
+        <text x="632" y="589">ชุดข้อมูลที่ส่งออก</text><text x="632" y="603" font-size="9.5" fill="#586778">data/exports/</text>
+      </g>
+
+      <!-- external entity : roboflow -->
+      <rect x="580" y="246" width="180" height="60" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="670" y="272" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1a2e">Roboflow</text>
+      <text x="670" y="291" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1a2e">Cloud Service</text>
+
+      <!-- flows -->
+      <g fill="none" stroke="currentColor" stroke-width="1.3">
+        <path d="M138 82 H246" marker-end="url(#a4)"/>
+        <path d="M138 172 H246" marker-end="url(#a4)"/>
+        <path d="M248 196 H140" marker-end="url(#a4)"/>
+        <path d="M138 274 H246" marker-end="url(#a4)"/>
+        <path d="M138 364 H246" marker-end="url(#a4)"/>
+        <path d="M248 388 H140" marker-end="url(#a4)"/>
+        <path d="M138 466 H246" marker-end="url(#a4)"/>
+        <path d="M138 556 H246" marker-end="url(#a4)"/>
+        <path d="M248 580 H140" marker-end="url(#a4)"/>
+
+        <path d="M492 82 H576" marker-end="url(#a4)"/>
+        <path d="M580 92 H545 V172 H494" marker-end="url(#a4)"/>
+        <path d="M492 178 H576" marker-end="url(#a4)"/>
+        <path d="M580 188 H545 V268 H494" marker-end="url(#a4)"/>
+        <path d="M492 258 H576" marker-end="url(#a4)"/>
+        <path d="M578 294 H494" marker-end="url(#a4)"/>
+        <path d="M470 308 V326 H555 V356 H576" marker-end="url(#a4)"/>
+        <path d="M492 372 H576" marker-end="url(#a4)"/>
+        <path d="M578 382 H494" marker-end="url(#a4)"/>
+        <path d="M492 466 H576" marker-end="url(#a4)"/>
+        <path d="M580 456 H530 V252 H494" marker-end="url(#a4)"/>
+        <path d="M872 190 H905 V540 H494" marker-end="url(#a4)"/>
+        <path d="M872 382 H920 V562 H494" marker-end="url(#a4)"/>
+        <path d="M492 590 H576" marker-end="url(#a4)"/>
+      </g>
+
+      <g font-size="8.5" fill="#5c6b7a" text-anchor="middle">
+        <text x="192" y="75">ไฟล์วิดีโอ</text>
+        <text x="192" y="165">พารามิเตอร์การสกัด</text>
+        <text x="192" y="211">ความคืบหน้า · log</text>
+        <text x="192" y="267">โมเดล + ค่า conf / iou</text>
+        <text x="192" y="357">กรอบที่แก้ไข</text>
+        <text x="192" y="403">ภาพเฟรม + กรอบ</text>
+        <text x="192" y="459">ไฟล์โมเดล .pt</text>
+        <text x="192" y="549">สัดส่วน train / val / test</text>
+        <text x="192" y="595">ไฟล์ ZIP</text>
+
+        <text x="534" y="75">บันทึกวิดีโอ</text>
+        <text x="519" y="166">อ่านวิดีโอ</text>
+        <text x="534" y="171">ภาพเฟรม</text>
+        <text x="519" y="262">อ่านภาพเฟรม</text>
+        <text x="534" y="251">ภาพ + API key</text>
+        <text x="536" y="311">ผลตรวจจับ</text>
+        <text x="512" y="320">ผลตรวจจับ</text>
+        <text x="534" y="365">บันทึกกรอบ</text>
+        <text x="536" y="399">อ่านกรอบเดิม</text>
+        <text x="534" y="459">บันทึก .pt</text>
+        <text x="566" y="246">โมเดล .pt</text>
+        <text x="700" y="534">ภาพเฟรม</text>
+        <text x="716" y="556">ข้อมูลกำกับที่รีวิวแล้ว</text>
+        <text x="534" y="583">ชุดข้อมูล YOLO</text>
+      </g>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> <code>state.json</code> (D3) คือศูนย์กลางของระบบ — โพรเซส 3 (ตรวจจับ),
+      4 (กำกับข้อมูล) และ 6 (ส่งออก) ล้วนอ่าน/เขียนที่เดียวกัน นี่คือเหตุผลที่ไฟล์เดียวนี้ต้องมีระบบสำรองข้อมูล
+      ในเมื่อไม่มีฐานข้อมูลมาช่วย · สังเกตว่า <b>ไม่มีลูกศรตรงระหว่างแหล่งจัดเก็บข้อมูลสองแหล่ง</b>
+      ทุกการเคลื่อนย้ายข้อมูลต้องผ่านโพรเซสเสมอ
+    </figcaption>
+  </figure>
+
+  <div class="block">
+    <h4>ตรวจสอบความสมดุล (Balancing) กับรูปที่ 3</h4>
+    <div class="tw">
+      <table>
+        <thead><tr><th class="nowrap">กระแสข้อมูลในรูปที่ 3</th><th>ปรากฏที่ใดในรูปที่ 4</th></tr></thead>
+        <tbody>
+          <tr><td>ไฟล์วิดีโอการผ่าตัด</td><td>ผู้ใช้งาน → โพรเซส 1</td></tr>
+          <tr><td>พารามิเตอร์การสกัด / ตรวจจับ</td><td>ผู้ใช้งาน → โพรเซส 2 และ โพรเซส 3</td></tr>
+          <tr><td>ข้อมูลกำกับที่แก้ไข</td><td>ผู้ใช้งาน → โพรเซส 4</td></tr>
+          <tr><td>ไฟล์โมเดล .pt</td><td>ผู้ใช้งาน → โพรเซส 5</td></tr>
+          <tr><td>ภาพเฟรมพร้อมกรอบวัตถุ</td><td>โพรเซส 4 → ผู้ใช้งาน</td></tr>
+          <tr><td>ความคืบหน้างาน</td><td>โพรเซส 2 → ผู้ใช้งาน</td></tr>
+          <tr><td>ไฟล์ ZIP ชุดข้อมูลที่ส่งออก</td><td>โพรเซส 6 → ผู้ใช้งาน</td></tr>
+          <tr><td>ภาพเฟรม + API key ↔ ผลตรวจจับ</td><td>โพรเซส 3 ↔ Roboflow Cloud Service</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:13.5px;color:var(--ink-soft)">
+      ทุกกระแสข้อมูลในรูปที่ 3 ปรากฏครบในรูปที่ 4 และไม่มีกระแสข้อมูลใดโผล่มาใหม่จากภายนอก — ถือว่าสมดุล
+    </p>
+  </div>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>ห้ามลากเส้นตรงระหว่างแหล่งจัดเก็บข้อมูลสองแหล่ง</b> — ข้อมูลไม่ย้ายตัวเอง ต้องมีโพรเซสเป็นตัวอ่าน
+        แล้วเขียนเสมอ เช่นเดียวกับที่ห้ามลากเส้นตรงระหว่างตัวแทนภายนอกกับแหล่งจัดเก็บข้อมูล</li>
+      <li><b>ชื่อโพรเซสต้องเป็น “คำกริยา + กรรม”</b> เช่น “สกัดเฟรมจากวิดีโอ” ไม่ใช่คำนามลอย ๆ อย่าง
+        “การสกัดเฟรม” หรือชื่อโมดูลอย่าง <code>frame_extractor.py</code> (ชื่อไฟล์เป็นเรื่องของ
+        แผนภาพสถาปัตยกรรม ไม่ใช่ DFD)</li>
+      <li><b>ทุกโพรเซสต้องมีทั้งข้อมูลเข้าและออก</b> — โพรเซสที่มีแต่ข้อมูลเข้าเรียกว่า “หลุมดำ” (black hole)
+        มีแต่ข้อมูลออกเรียกว่า “อัศจรรย์” (miracle) ทั้งสองแบบคือความผิดพลาดของแบบจำลอง</li>
+      <li><b>เลขโพรเซสต้องสอดคล้องกับลำดับชั้น</b> — ถ้าแตกโพรเซส 2 ต่อไปเป็นระดับที่ 2 ลูกของมันต้องเป็น
+        2.1, 2.2, 2.3 เสมอ</li>
+      <li><b>ไม่ต้องแสดงลำดับเวลาหรือเงื่อนไข</b> — DFD บอกว่าข้อมูลไหลไปไหน ไม่ได้บอกว่าอะไรเกิดก่อนหลัง
+        ถ้าต้องการสื่อลำดับเวลาให้ใช้รูปที่ 6–7 (Sequence) หรือรูปที่ 8–9 (ผังงาน) แทน</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ค</span>
+  <h2>มุมมองผู้ใช้</h2>
+  <p>ระบบทำอะไรให้ผู้ใช้ได้บ้าง เมื่อมองจากภายนอกโดยไม่สนใจว่าข้างในเขียนอย่างไร</p>
+</div>
+
+<section id="d5">
+  <h3><span class="num">รูปที่ 5</span>แผนภาพยูสเคส (Use Case Diagram)</h3>
+  <p class="sub">UML 2.x · วาดด้วย SVG · 8 ยูสเคสหลัก · แสดงความสัมพันธ์ครบทั้ง 3 ชนิด</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      <b>ใครใช้ระบบได้บ้าง และใช้ทำอะไรได้บ้าง</b> — เป็นรูปที่สื่อสารกับผู้ที่ไม่ใช่โปรแกรมเมอร์ได้ดีที่สุด
+      และเป็นรูปที่บอกว่าเว็บแอปเพิ่มความสามารถอะไรให้โครงการบ้าง เมื่อเทียบกับระยะที่ 1 ที่ยังไม่มีเครื่องมือ
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>รูปคน</b> ตัวแสดง (Actor) — ผู้ใช้หลักอยู่ซ้าย ระบบภายนอกอยู่ขวา</div>
+    <div><b>วงรี</b> ยูสเคส — เป้าหมายหนึ่งอย่างที่ผู้ใช้ต้องการทำให้สำเร็จ</div>
+    <div><b>เส้นทึบไม่มีหัวลูกศร</b> ความสัมพันธ์ (Association)</div>
+    <div><b>เส้นประ «include»</b> ยูสเคสหลักเรียกใช้เสมอ</div>
+    <div><b>เส้นประ «extend»</b> พฤติกรรมเสริมที่เกิดบางกรณี</div>
+    <div><b>สามเหลี่ยมโปร่ง</b> การสืบทอด (Generalization)</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1060 760" role="img" aria-label="แผนภาพยูสเคสแสดงผู้ใช้งานระบบทางซ้ายเชื่อมกับยูสเคสหลัก 8 รายการ และมีตัวแสดงภายนอกคือ Roboflow Cloud API และ Tesseract OCR ทางขวา">
+      <defs>
+        <marker id="uOpen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        </marker>
+        <marker id="uTri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse">
+          <polygon points="0,0.5 11,6 0,11.5" fill="#fbfcfe" stroke="currentColor" stroke-width="1.2"/>
+        </marker>
+      </defs>
+
+      <!-- system boundary -->
+      <rect x="210" y="52" width="690" height="664" fill="none" stroke="#0f3460" stroke-width="1.8"/>
+      <text x="555" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#0f3460">ระบบตรวจจับเครื่องมือผ่าตัดและบริเวณแผลด้วยปัญญาประดิษฐ์ (เว็บแอปพลิเคชัน)</text>
+
+      <!-- primary actor -->
+      <g stroke="#1a1a2e" stroke-width="1.7" fill="none">
+        <circle cx="110" cy="356" r="14" fill="#ffffff"/>
+        <line x1="110" y1="370" x2="110" y2="414"/>
+        <line x1="84" y1="386" x2="136" y2="386"/>
+        <line x1="110" y1="414" x2="92" y2="444"/>
+        <line x1="110" y1="414" x2="128" y2="444"/>
+      </g>
+      <text x="110" y="466" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1a2e">ผู้ใช้งานระบบ</text>
+      <text x="110" y="484" text-anchor="middle" font-size="10" fill="#5c6b7a">นักวิจัย / ผู้กำกับข้อมูล</text>
+
+      <!-- secondary actors -->
+      <g stroke="#1a1a2e" stroke-width="1.5" fill="none">
+        <circle cx="985" cy="272" r="11" fill="#ffffff"/>
+        <line x1="985" y1="283" x2="985" y2="318"/>
+        <line x1="965" y1="296" x2="1005" y2="296"/>
+        <line x1="985" y1="318" x2="971" y2="342"/>
+        <line x1="985" y1="318" x2="999" y2="342"/>
+        <circle cx="985" cy="552" r="11" fill="#ffffff"/>
+        <line x1="985" y1="563" x2="985" y2="598"/>
+        <line x1="965" y1="576" x2="1005" y2="576"/>
+        <line x1="985" y1="598" x2="971" y2="622"/>
+        <line x1="985" y1="598" x2="999" y2="622"/>
+      </g>
+      <text x="985" y="362" text-anchor="middle" font-size="10" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«system»</text>
+      <text x="985" y="379" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">Roboflow</text>
+      <text x="985" y="395" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">Cloud API</text>
+      <text x="985" y="642" text-anchor="middle" font-size="10" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«system»</text>
+      <text x="985" y="659" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">Tesseract</text>
+      <text x="985" y="675" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">OCR</text>
+
+      <!-- column 1 : primary use cases -->
+      <g fill="#ffffff" stroke="#0f3460" stroke-width="1.5">
+        <ellipse cx="340" cy="132" rx="118" ry="28"/>
+        <ellipse cx="340" cy="210" rx="118" ry="28"/>
+        <ellipse cx="340" cy="288" rx="118" ry="28"/>
+        <ellipse cx="340" cy="366" rx="118" ry="28"/>
+        <ellipse cx="340" cy="444" rx="118" ry="28"/>
+        <ellipse cx="340" cy="522" rx="118" ry="28"/>
+        <ellipse cx="340" cy="600" rx="118" ry="28"/>
+        <ellipse cx="340" cy="678" rx="118" ry="28"/>
+      </g>
+      <g text-anchor="middle" fill="#1a1a2e" font-size="12">
+        <text x="340" y="137">อัปโหลด / จัดการวิดีโอ</text>
+        <text x="340" y="215">สกัดเฟรมจากวิดีโอ</text>
+        <text x="340" y="286">ตรวจจับวัตถุแบบกลุ่ม</text>
+        <text x="340" y="301" font-size="9.5" fill="#586778">(bulk detect)</text>
+        <text x="340" y="371">กำกับข้อมูลภาพ</text>
+        <text x="340" y="442">ขอให้ AI ช่วยกำกับ</text>
+        <text x="340" y="457" font-size="9.5" fill="#586778">(Label Assist — รายเฟรม)</text>
+        <text x="340" y="527">ส่งออกชุดข้อมูล</text>
+        <text x="340" y="598">จัดการโมเดล</text>
+        <text x="340" y="613" font-size="9.5" fill="#586778">(อัปโหลด .pt)</text>
+        <text x="340" y="683">ดูสถิติชุดข้อมูล</text>
+      </g>
+
+      <!-- column 2 : supporting use cases -->
+      <g fill="#ffffff" stroke="#0f3460" stroke-width="1.5">
+        <ellipse cx="680" cy="150" rx="112" ry="28"/>
+        <ellipse cx="680" cy="240" rx="112" ry="28"/>
+        <ellipse cx="680" cy="330" rx="112" ry="28"/>
+        <ellipse cx="680" cy="410" rx="112" ry="28"/>
+        <ellipse cx="680" cy="490" rx="112" ry="28"/>
+        <ellipse cx="680" cy="580" rx="112" ry="28"/>
+      </g>
+      <g text-anchor="middle" fill="#1a1a2e" font-size="11.5">
+        <text x="680" y="148">กรองภาพซ้ำ / ภาพเบลอ</text>
+        <text x="680" y="163" font-size="9.5" fill="#586778">(ทางเลือก)</text>
+        <text x="680" y="245">ติดตามความคืบหน้างาน</text>
+        <text x="680" y="335">กำกับด้วยกรอบสี่เหลี่ยม</text>
+        <text x="680" y="415">กำกับด้วยรูปหลายเหลี่ยม</text>
+        <text x="680" y="495">กำกับด้วยจุดสำคัญ</text>
+        <text x="680" y="578">อ่านข้อความบนภาพ</text>
+        <text x="680" y="593" font-size="9.5" fill="#586778">(OCR)</text>
+      </g>
+
+      <!-- associations : primary actor -->
+      <g stroke="#1a1a2e" stroke-width="1.3" fill="none">
+        <line x1="130" y1="378" x2="224" y2="140"/>
+        <line x1="130" y1="380" x2="224" y2="216"/>
+        <line x1="130" y1="382" x2="224" y2="292"/>
+        <line x1="132" y1="384" x2="222" y2="366"/>
+        <line x1="132" y1="392" x2="222" y2="440"/>
+        <line x1="130" y1="396" x2="224" y2="514"/>
+        <line x1="130" y1="398" x2="224" y2="590"/>
+        <line x1="130" y1="400" x2="224" y2="668"/>
+      </g>
+
+      <!-- associations : secondary actors -->
+      <g stroke="#1a1a2e" stroke-width="1.3" fill="none">
+        <line x1="458" y1="288" x2="960" y2="288"/>
+        <path d="M458 444 H820 V300 H960"/>
+        <line x1="792" y1="580" x2="960" y2="580"/>
+      </g>
+
+      <!-- include -->
+      <g stroke="currentColor" stroke-width="1.3" fill="none" stroke-dasharray="6 4">
+        <line x1="452" y1="218" x2="572" y2="234" marker-end="url(#uOpen)"/>
+        <line x1="452" y1="282" x2="572" y2="248" marker-end="url(#uOpen)"/>
+        <line x1="440" y1="497" x2="580" y2="266" marker-end="url(#uOpen)"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="9" fill="#5c6b7a" text-anchor="middle">
+        <text x="512" y="214">«include»</text>
+        <text x="512" y="278">«include»</text>
+        <text x="470" y="400">«include»</text>
+      </g>
+
+      <!-- extend -->
+      <g stroke="#e94560" stroke-width="1.3" fill="none" stroke-dasharray="6 4">
+        <line x1="572" y1="162" x2="454" y2="196" marker-end="url(#uOpen)"/>
+        <line x1="580" y1="562" x2="440" y2="390" marker-end="url(#uOpen)"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="9" fill="#e94560" text-anchor="middle">
+        <text x="513" y="171">«extend»</text>
+        <text x="530" y="486">«extend»</text>
+      </g>
+
+      <!-- generalization -->
+      <g stroke="#0f3460" stroke-width="1.3" fill="none">
+        <line x1="570" y1="326" x2="460" y2="360" marker-end="url(#uTri)"/>
+        <line x1="570" y1="404" x2="460" y2="372" marker-end="url(#uTri)"/>
+        <line x1="572" y1="478" x2="462" y2="384" marker-end="url(#uTri)"/>
+      </g>
+      <text x="520" y="424" font-size="9" fill="#0f3460" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace">generalization</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ผู้ใช้มีเป้าหมายหลัก 8 อย่าง โดย “กำกับข้อมูลภาพ” มีรูปแบบย่อย 3 ชนิด
+      (สืบทอดกัน) และมีพฤติกรรมเสริมคือ OCR · “ติดตามความคืบหน้างาน” ถูกเรียกใช้เสมอโดยยูสเคสที่เป็นงานเบื้องหลัง
+      ทั้งสาม จึงแยกออกมาเป็นยูสเคสร่วมด้วย <code>«include»</code> แทนการเขียนซ้ำสามที่
+    </figcaption>
+  </figure>
+
+  <div class="block">
+    <h4>ทำไมบางอย่างถึงไม่ได้เป็นยูสเคส</h4>
+    <ul class="plain">
+      <li><b>“ยืนยัน / ปฏิเสธผลจาก AI”</b> — เป็น <i>ขั้นตอนหนึ่ง</i> ภายในการกำกับข้อมูลภาพ ไม่ใช่เป้าหมายที่ผู้ใช้
+        เปิดระบบขึ้นมาเพื่อทำ จึงอยู่ในคำบรรยายยูสเคส (Use Case Description) ไม่ใช่วงรีของตัวเอง</li>
+      <li><b>“เข้าสู่ระบบ”</b> — เวอร์ชันปัจจุบันตัดระบบยืนยันตัวตนออกโดยตั้งใจ เพื่อให้ใช้งานภายในเครื่องได้ทันที
+        จึงไม่มียูสเคสนี้ ถ้าใส่เข้ามาจะเป็นการรายงานสิ่งที่ไม่มีจริง</li>
+      <li><b>“เทรนโมเดล”</b> — ทำด้วยสคริปต์นอกระบบ ไม่ได้ทำผ่านเว็บ จึงอยู่นอกกรอบขอบเขตระบบ
+        สิ่งที่อยู่ในระบบคือ “จัดการโมเดล” (อัปโหลดไฟล์ผลลัพธ์เข้ามา) เท่านั้น</li>
+    </ul>
+  </div>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>ยูสเคสต้องเป็นเป้าหมายที่ผู้ใช้ได้คุณค่า ไม่ใช่ขั้นตอนย่อย</b> — “ส่งออกชุดข้อมูล” เป็นยูสเคส
+        แต่ “กดปุ่มบันทึก” หรือ “ตรวจสอบความถูกต้องของฟอร์ม” ไม่ใช่</li>
+      <li><b>เส้น Association ไม่มีหัวลูกศร และไม่ใช่กระแสข้อมูล</b> — เป็นข้อผิดพลาดที่พบบ่อยมาก
+        คนมักวาดลูกศรแล้วเขียนว่า “ส่งข้อมูล” ซึ่งเป็นการเอา DFD มาปนกับ UML</li>
+      <li><b>ทิศทางของ «include» กับ «extend» ตรงข้ามกัน</b> — <code>«include»</code> ชี้ <i>จาก</i> ยูสเคสหลัก
+        <i>ไป</i> ยูสเคสที่ถูกเรียกใช้เสมอ ส่วน <code>«extend»</code> ชี้ <i>จาก</i> ยูสเคสเสริม
+        <i>ไป</i> ยูสเคสหลักที่ถูกขยาย จำผิดทิศเป็นข้อผิดพลาดที่กรรมการจับได้ทันที</li>
+      <li><b>ตัวแสดงไม่จำเป็นต้องเป็นคน</b> — ระบบภายนอกที่ระบบเราต้องคุยด้วยก็เป็นตัวแสดง (secondary actor)
+        นิยมวางไว้ด้านขวา และกำกับด้วย <code>«system»</code> เพื่อไม่ให้เข้าใจผิดว่าเป็นมนุษย์</li>
+      <li><b>กรอบระบบต้องมีจริงและมีชื่อ</b> — สิ่งที่อยู่ในกรอบคือสิ่งที่เราสร้าง สิ่งที่อยู่นอกกรอบคือสิ่งที่เราไม่ได้สร้าง</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ง</span>
+  <h2>พฤติกรรมเชิงเวลา</h2>
+  <p>
+    รูปก่อนหน้าบอกโครงสร้างและขอบเขต แต่ไม่บอกว่า “เกิดอะไรก่อนหลัง” — สองรูปนี้เจาะจงสองสถานการณ์
+    ที่ออกแบบต่างกันโดยตั้งใจ เพื่อแสดงเหตุผลของการเลือกใช้งานเบื้องหลังแบบไม่พร้อมกัน (asynchronous)
+    กับแบบรอผลทันที (synchronous)
+  </p>
+</div>
+
+<section id="d6">
+  <h3><span class="num">รูปที่ 6</span>แผนภาพลำดับ: งานสกัดเฟรม (Sequence Diagram — Asynchronous Job)</h3>
+  <p class="sub">UML 2.x · วาดด้วย Mermaid · แสดง Combined Fragment ชนิด <code>par</code> และ <code>loop</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      งานสกัดเฟรมจากวิดีโอความยาวหลายนาทีใช้เวลานานกว่าที่คำขอ HTTP หนึ่งครั้งจะรอไหว
+      รูปนี้แสดงว่าระบบแก้ปัญหานี้อย่างไร — <b>ตอบกลับทันทีพร้อมหมายเลขงาน แล้วให้หน้าเว็บถามความคืบหน้าเป็นระยะ</b>
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>เส้นประแนวตั้ง</b> เส้นชีวิต (Lifeline) ของแต่ละส่วนประกอบ</div>
+    <div><b>แท่งสี่เหลี่ยม</b> ช่วงที่กำลังทำงาน (Activation / Execution Occurrence)</div>
+    <div><b>ลูกศรเส้นทึบ</b> การเรียกใช้ · <b>ลูกศรเส้นประ</b> การตอบกลับ</div>
+    <div><b>กรอบ par / loop</b> ทำงานพร้อมกัน / ทำซ้ำ</div>
+  </div>
+
+  <figure>
+    <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#e7ebf5','primaryTextColor':'#1a1a2e','primaryBorderColor':'#0f3460','lineColor':'#5c6b7a','background':'#fbfcfe','fontFamily':'Leelawadee UI, Noto Sans Thai, Tahoma, sans-serif','fontSize':'13px','actorBkg':'#e7ebf5','actorBorder':'#0f3460','actorTextColor':'#1a1a2e','signalColor':'#5c6b7a','signalTextColor':'#1a1a2e','labelBoxBkg':'#e94560','labelBoxBorderColor':'#e94560','labelTextColor':'#ffffff','loopTextColor':'#1a1a2e','noteBkgColor':'#fff4de','noteBorderColor':'#c97a00','noteTextColor':'#1a1a2e','activationBkgColor':'#dce3f0','activationBorderColor':'#0f3460'}}}%%
+sequenceDiagram
+  autonumber
+  actor U as ผู้ใช้งาน
+  participant B as เบราว์เซอร์ · app.js
+  participant S as FastAPI · server.py
+  participant T as Worker Thread
+  participant F as frame_extractor.py
+  participant D as ดิสก์ · data/frames
+
+  U->>B: เลือกวิดีโอ ตั้งค่า แล้วกดเริ่มทำงาน
+  B->>S: POST /api/extract
+  S->>T: threading.Thread(...).start()
+  S-->>B: ตอบกลับทันที พร้อมหมายเลขงาน job_id
+  Note over S,T: HTTP ไม่รอให้งานเสร็จ จึงไม่เกิด timeout แม้วิดีโอจะยาว
+
+  par งานเบื้องหลัง
+    T->>F: extract_frames(...)
+    loop ทุกเฟรมที่พิจารณา
+      F->>F: ตรวจภาพเบลอ แล้วตรวจความคล้าย
+      F->>D: บันทึกเฉพาะเฟรมที่ผ่านเกณฑ์
+    end
+    F-->>T: สรุปผล และเขียน extraction_log.json
+    T->>S: ปรับสถานะงานเป็น done
+  and การติดตามจากฝั่งผู้ใช้
+    loop ทุก 1 วินาที จนกว่าสถานะจะไม่ใช่ running
+      B->>S: GET /api/extract/job_id
+      S-->>B: สถานะ · ความคืบหน้า · บันทึกการทำงาน
+      B-->>U: อัปเดตแถบความคืบหน้าบนหน้าจอ
+    end
+  end
+
+  U->>B: กดปุ่มดาวน์โหลด ZIP
+  B->>S: GET /api/extract/job_id/zip
+  S->>D: อ่านไฟล์เฟรมทั้งหมดของงานนี้
+  S-->>B: ไฟล์ .zip
+  B-->>U: บันทึกลงเครื่อง
+    </pre>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ข้อความที่ 4 คือหัวใจ — เซิร์ฟเวอร์ตอบกลับ <i>ก่อน</i> งานจะเสร็จ
+      ทำให้ฝั่งซ้าย (ผู้ใช้) กับฝั่งขวา (งานเบื้องหลัง) เดินคู่ขนานกันไป และเป็นเหตุผลที่ระบบเลือกใช้
+      การถามซ้ำเป็นระยะ (polling) แทน WebSocket — ได้ผลเหมือนกันในการใช้งานคนเดียว แต่ไม่ต้องดูแล
+      วงจรชีวิตของการเชื่อมต่อเลย
+    </figcaption>
+  </figure>
+</section>
+
+<section id="d7">
+  <h3><span class="num">รูปที่ 7</span>แผนภาพลำดับ: การขอให้ AI ช่วยกำกับ (Sequence Diagram — Synchronous)</h3>
+  <p class="sub">UML 2.x · วาดด้วย Mermaid · แสดง Combined Fragment ชนิด <code>alt</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      ทำไมงานตรวจจับ <b>ทีละเฟรม</b> ถึงไม่ต้องใช้กลไกงานเบื้องหลังเหมือนรูปที่ 6 และ
+      <b>ระบบเลือกใช้โมเดลบนเครื่องหรือบนคลาวด์อย่างไร</b> รวมถึงกลไกป้องกันการใช้เครดิตโดยไม่ตั้งใจ
+    </p>
+  </div>
+
+  <figure>
+    <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#e7ebf5','primaryTextColor':'#1a1a2e','primaryBorderColor':'#0f3460','lineColor':'#5c6b7a','background':'#fbfcfe','fontFamily':'Leelawadee UI, Noto Sans Thai, Tahoma, sans-serif','fontSize':'13px','actorBkg':'#e7ebf5','actorBorder':'#0f3460','actorTextColor':'#1a1a2e','signalColor':'#5c6b7a','signalTextColor':'#1a1a2e','labelBoxBkg':'#e94560','labelBoxBorderColor':'#e94560','labelTextColor':'#ffffff','loopTextColor':'#1a1a2e','noteBkgColor':'#fff4de','noteBorderColor':'#c97a00','noteTextColor':'#1a1a2e','activationBkgColor':'#dce3f0','activationBorderColor':'#0f3460'}}}%%
+sequenceDiagram
+  autonumber
+  actor U as ผู้ใช้งาน
+  participant B as เบราว์เซอร์ · app.js
+  participant S as FastAPI · server.py
+  participant DET as detector.py
+  participant R as Roboflow Cloud API
+
+  U->>B: กดปุ่ม Label Assist ที่เฟรมปัจจุบัน
+  alt เลือกประมวลผลผ่าน Roboflow
+    B->>U: ขอคำยืนยันก่อน เพราะมีค่าใช้จ่ายเป็นเครดิต
+    U-->>B: กดยืนยัน
+  end
+  B->>S: POST /api/frames/frame_id/assist
+  S->>DET: สร้างตัวตรวจจับตาม backend ที่เลือก
+  alt backend เป็น local
+    DET->>DET: YOLOv11Detector ประมวลผลบนเครื่องด้วย CPU
+  else backend เป็น roboflow
+    DET->>R: ส่งภาพเฟรมพร้อม api_key ผ่าน HTTPS
+    R-->>DET: ผลตรวจจับกลับมา
+  end
+  DET-->>S: รายการ Detection
+  S-->>B: กรอบวัตถุ · คลาส · ค่าความเชื่อมั่น
+  Note over B,S: ตอบกลับในคำขอเดียว เพราะประมวลผลเฟรมเดียวใช้เวลาไม่นาน
+  B-->>U: วาดกรอบเส้นประ พร้อมป้ายค่าความเชื่อมั่น
+  U->>B: แก้ไขกรอบ หรือกดยอมรับทั้งหมด / ปฏิเสธทั้งหมด
+  B->>S: PUT /api/frames/frame_id/detections
+  S->>S: บันทึกลง state.json แบบ atomic แล้วสำรองเป็น .bak
+  S-->>B: บันทึกสำเร็จ
+    </pre>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> กรอบ <code>alt</code> อันแรกคือมาตรการป้องกันเครดิต — ระบบถามยืนยันก่อน
+      ยิงคำขอออกคลาวด์ทุกครั้ง · กรอบ <code>alt</code> อันที่สองแสดงว่าโค้ดเรียกใช้ <code>detector.py</code>
+      แบบเดียวกันเสมอ ความต่างของ backend ถูกซ่อนไว้หลังคลาสฐาน <code>BaseDetector</code>
+      ส่วนที่เรียกใช้จึงไม่ต้องรู้ว่าเบื้องหลังประมวลผลที่ไหน
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง (ใช้กับทั้งรูปที่ 6 และ 7)</h4>
+    <ul>
+      <li><b>เวลาไหลจากบนลงล่างเสมอ</b> — ตำแหน่งแนวตั้งของข้อความสื่อลำดับก่อนหลัง ห้ามวางข้อความที่เกิดทีหลัง
+        ไว้สูงกว่าข้อความที่เกิดก่อน</li>
+      <li><b>แยกลูกศรเรียกกับลูกศรตอบให้ชัด</b> — เส้นทึบหัวลูกศรทึบคือการเรียกแบบรอผล เส้นประคือการตอบกลับ
+        การใช้เส้นทึบทั้งหมดทำให้ดูไม่ออกว่าใครรอใคร ซึ่งเป็นสาระสำคัญของรูปที่ 6 พอดี</li>
+      <li><b>ใช้ Combined Fragment แทนการวาดหลายรูป</b> — เงื่อนไขใช้ <code>alt</code>, การทำซ้ำใช้
+        <code>loop</code>, การทำงานพร้อมกันใช้ <code>par</code> ไม่ต้องแยกเป็นรูปละกรณี</li>
+      <li><b>หนึ่งรูปต่อหนึ่งสถานการณ์</b> — Sequence Diagram อธิบาย <i>สถานการณ์หนึ่ง</i> ไม่ใช่ทั้งระบบ
+        การพยายามยัดทุกฟีเจอร์ลงรูปเดียวทำให้อ่านไม่รู้เรื่องและผิดวัตถุประสงค์ของแผนภาพชนิดนี้</li>
+      <li><b>ชื่อเส้นชีวิตต้องเป็นวัตถุหรือส่วนประกอบ ไม่ใช่การกระทำ</b> — <code>server.py</code> ใช้ได้
+        แต่ “การประมวลผล” ใช้ไม่ได้</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด จ</span>
+  <h2>อัลกอริทึมและกระบวนการ</h2>
+  <p>
+    สองรูปนี้ลงลึกถึงตรรกะจริง — รูปแรกคืออัลกอริทึมภายในโค้ด รูปที่สองคือกระบวนการทำงานของมนุษย์
+    ที่ใช้เว็บแอปเป็นเครื่องมือ ซึ่งเป็นสิ่งที่รายงานระยะที่ 1 ยังไม่มี
+  </p>
+</div>
+
+<section id="d8">
+  <h3><span class="num">รูปที่ 8</span>ผังงานอัลกอริทึมการสกัดเฟรม (Flowchart)</h3>
+  <p class="sub">สัญลักษณ์มาตรฐาน ANSI/ISO 5807 · วาดด้วย Mermaid · อ้างอิง <code>frame_extractor.py</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      ระบบเลือกเฟรมอย่างไรให้ได้ภาพที่ <b>ไม่เบลอและไม่ซ้ำกัน</b> — โดยเฉพาะกลไก
+      <b>“ถอยไปหาเฟรมถัดไปในช่วงเดิม” (slot fallback)</b> ซึ่งเป็นจุดที่อธิบายด้วยข้อความยาก
+      แต่เห็นชัดทันทีในผังงาน
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>วงรีมน</b> จุดเริ่มต้น / สิ้นสุด (Terminator)</div>
+    <div><b>สี่เหลี่ยมด้านขนาน</b> ข้อมูลเข้า / ออก (Input–Output)</div>
+    <div><b>สี่เหลี่ยมผืนผ้า</b> การประมวลผล (Process)</div>
+    <div><b>สี่เหลี่ยมข้าวหลามตัด</b> การตัดสินใจ (Decision) — ต้องมีทางออกอย่างน้อย 2 ทาง</div>
+  </div>
+
+  <figure>
+    <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#1a1a2e','primaryBorderColor':'#0f3460','lineColor':'#5c6b7a','background':'#fbfcfe','fontFamily':'Leelawadee UI, Noto Sans Thai, Tahoma, sans-serif','fontSize':'13px','edgeLabelBackground':'#fbfcfe'}}}%%
+flowchart TD
+  A(["เริ่ม"]) --> B[/"รับไฟล์วิดีโอ และพารามิเตอร์ที่ผู้ใช้ตั้งค่า"/]
+  B --> C["คำนวณระยะห่างเฟรม frame_step<br/>กำหนด slot = ลำดับเฟรม ÷ frame_step"]
+  C --> D{"ยังมีเฟรมเหลือ<br/>ในวิดีโอหรือไม่"}
+  D -->|ไม่มีแล้ว| Y[/"เขียนสรุปลง extraction_log.json"/]
+  Y --> Z(["จบ"])
+  D -->|ยังมี| E["อ่านเฟรมถัดไป"]
+  E --> F{"เข้าสู่ slot ใหม่หรือไม่"}
+  F -->|ใช่| G["รีเซ็ตตัวนับของ slot<br/>slot_filled = false และ slot_attempts = 0"]
+  F -->|ไม่ใช่| H{"slot นี้บันทึกไปแล้ว<br/>หรือลองครบ 5 ครั้งแล้วหรือยัง"}
+  G --> H
+  H -->|ใช่ ข้ามไปทั้ง slot| D
+  H -->|ยังไม่| I["เพิ่มค่า slot_attempts อีก 1"]
+  I --> J{"ภาพเบลอหรือไม่<br/>ค่า Laplacian variance ต่ำกว่าเกณฑ์"}
+  J -->|เบลอ ลองเฟรมถัดไปใน slot เดิม| D
+  J -->|ไม่เบลอ| K{"คล้ายกับภาพที่บันทึกไว้แล้วหรือไม่<br/>motion IoU หรือ frame diff หรือ pHash"}
+  K -->|คล้าย ลองเฟรมถัดไปใน slot เดิม| D
+  K -->|ไม่คล้าย| L["บันทึกไฟล์ภาพลงดิสก์<br/>ตั้ง slot_filled = true"]
+  L --> D
+
+  classDef term fill:#0f3460,stroke:#0f3460,color:#ffffff
+  classDef io fill:#e7ebf5,stroke:#0f3460,color:#1a1a2e
+  classDef dec fill:#fff4de,stroke:#c97a00,color:#1a1a2e
+  classDef proc fill:#ffffff,stroke:#0f3460,color:#1a1a2e
+  class A,Z term
+  class B,Y io
+  class D,F,H,J,K dec
+  class C,E,G,I,L proc
+    </pre>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> เมื่อเฟรมไม่ผ่านเกณฑ์ ระบบ <b>ไม่ทิ้งทั้งช่วงเวลานั้น</b> แต่ย้อนกลับไปที่
+      จุดตัดสินใจ “ยังมีเฟรมเหลือหรือไม่” เพื่อลองเฟรมถัดไปใน slot เดิม สูงสุด 5 ครั้ง — นี่คือเหตุผลที่
+      ผลการสกัดจริงมักได้ภาพน้อยกว่าเป้าหมายเล็กน้อย (เช่น ตั้งไว้ 12 ได้จริง 11) ซึ่งเป็นพฤติกรรมที่ตั้งใจ
+      ไม่ใช่ข้อผิดพลาด
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>ทุกผังงานต้องมีจุดเริ่มต้นเดียวและจุดสิ้นสุดที่ชัดเจน</b> — ผังงานที่ไม่มีทางออกคือลูปไม่รู้จบ</li>
+      <li><b>สัญลักษณ์ตัดสินใจต้องมีทางออกอย่างน้อย 2 ทาง และต้องกำกับเงื่อนไขทุกเส้น</b> — เส้นที่ไม่มีป้าย
+        ทำให้ผู้อ่านเดาไม่ออกว่าเป็นกรณีใด</li>
+      <li><b>ห้ามใช้สี่เหลี่ยมผืนผ้าแทนการตัดสินใจ</b> — รูปทรงคือความหมาย ไม่ใช่การตกแต่ง
+        การเลือกรูปทรงผิดทำให้ผังงานสื่อสารผิด</li>
+      <li><b>เขียนในระดับตรรกะ ไม่ใช่ระดับโค้ด</b> — ควรอ่านรู้เรื่องแม้ไม่รู้ภาษา Python
+        แต่ยังคงชื่อตัวแปรสำคัญไว้ได้ เพื่อให้เทียบกับซอร์สโค้ดจริงได้</li>
+    </ul>
+  </div>
+</section>
+
+<section id="d9">
+  <h3><span class="num">รูปที่ 9</span>แผนภาพกิจกรรม: วงจรกำกับข้อมูลโดยมี AI ช่วย (Activity Diagram)</h3>
+  <p class="sub">UML 2.x · วาดด้วย Mermaid · แสดงกระบวนการทำงานแบบวนรอบ</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      <b>เว็บแอปเปลี่ยนวิธีทำงานของโครงการอย่างไร</b> — ระยะที่ 1 กำกับข้อมูล 120 ภาพด้วยมือทั้งหมด
+      แต่กระบวนการใหม่นี้ใช้โมเดลรุ่นก่อนหน้ามาช่วยกำกับข้อมูลรุ่นถัดไป แล้ววนรอบเพื่อขยายชุดข้อมูล
+      ให้ใหญ่ขึ้นเรื่อย ๆ ด้วยแรงคนที่เท่าเดิม ซึ่งตอบโจทย์ข้อจำกัดหลักที่รายงานระยะที่ 1 ระบุไว้
+      คือ “ข้อมูลน้อยและความหลากหลายไม่ครอบคลุม”
+    </p>
+  </div>
+
+  <figure>
+    <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#1a1a2e','primaryBorderColor':'#0f3460','lineColor':'#5c6b7a','background':'#fbfcfe','fontFamily':'Leelawadee UI, Noto Sans Thai, Tahoma, sans-serif','fontSize':'13px','edgeLabelBackground':'#fbfcfe'}}}%%
+flowchart TD
+  S(("เริ่ม")) --> A["กำกับข้อมูลชุดเริ่มต้นด้วยมือ<br/>ปริมาณไม่มาก เพื่อให้มีของไปเทรนรอบแรก"]
+  A --> B["ส่งออกชุดข้อมูล<br/>เลือกเฉพาะเฟรมที่รีวิวแล้ว"]
+  B --> C["เทรนโมเดลนอกระบบ<br/>train_roboflow_yolo.py"]
+  C --> D["อัปโหลดไฟล์ .pt กลับเข้าระบบ"]
+  D --> E["ตรวจจับแบบกลุ่มกับเฟรมที่ยังไม่กำกับ<br/>ตั้งค่าให้ข้ามเฟรมที่รีวิวไปแล้ว"]
+  E --> F["รีวิวผลในหน้ากำกับข้อมูล<br/>แก้ไข ยอมรับทั้งหมด หรือปฏิเสธทั้งหมด"]
+  F --> G{"คุณภาพโมเดลถึงเกณฑ์<br/>ที่ตั้งไว้หรือยัง"}
+  G -->|ยังไม่ถึง วนรอบใหม่| B
+  G -->|ถึงเกณฑ์แล้ว| H["ส่งออกชุดข้อมูลรุ่นสุดท้าย<br/>ไปใช้งานจริง"]
+  H --> T(("สิ้นสุด"))
+
+  classDef term fill:#0f3460,stroke:#0f3460,color:#ffffff,stroke-width:3px
+  classDef dec fill:#fff4de,stroke:#c97a00,color:#1a1a2e
+  classDef act fill:#ffffff,stroke:#0f3460,color:#1a1a2e
+  classDef key fill:#fdeaee,stroke:#e94560,color:#1a1a2e,stroke-width:2px
+  class S,T term
+  class G dec
+  class A,B,C,D,F,H act
+  class E key
+    </pre>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> กิจกรรมที่เน้นกรอบสีแดงคือจุดที่สำคัญที่สุดของทั้งวงจร —
+      การตั้งค่า <b>“ข้ามเฟรมที่รีวิวไปแล้ว”</b> ถ้าไม่มีตัวเลือกนี้ การรันตรวจจับซ้ำด้วยโมเดลรุ่นใหม่จะเขียนทับ
+      งานที่คนแก้ด้วยมือไปแล้วโดยไม่มีคำเตือน ทำให้วงจรนี้ทำซ้ำไม่ได้เลย · สังเกตว่ากิจกรรม “เทรนโมเดล”
+      อยู่ในกระบวนการ แต่ทำนอกเว็บแอป ตรงกับที่แสดงเป็นกล่องเส้นประในรูปที่ 1
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>สัญลักษณ์เริ่มต้นและสิ้นสุดต่างกัน</b> — ในมาตรฐาน UML จุดเริ่มต้นคือ <b>วงกลมทึบ ●</b>
+        ส่วนจุดสิ้นสุดคือ <b>วงกลมทึบมีวงแหวนล้อม ◉</b> (รูปนี้แสดงเป็นวงกลมมีข้อความกำกับตามข้อจำกัด
+        ของเครื่องมือที่ใช้วาด เมื่อนำไปวาดในรายงานควรใช้สัญลักษณ์มาตรฐาน)</li>
+      <li><b>ชื่อกิจกรรมต้องขึ้นต้นด้วยคำกริยา</b> — “ส่งออกชุดข้อมูล” ไม่ใช่ “ชุดข้อมูลที่ส่งออก”</li>
+      <li><b>แผนภาพกิจกรรมต่างจากผังงานตรงที่แสดงการทำงานพร้อมกันได้</b> ด้วยแถบ fork/join
+        ถ้ากระบวนการเป็นเส้นตรงล้วนอย่างรูปนี้ การใช้ผังงานธรรมดาก็เพียงพอ — เลือกใช้แผนภาพกิจกรรมที่นี่
+        เพราะเป็นกระบวนการระดับธุรกิจ/การทำงานของคน ไม่ใช่ตรรกะในโค้ด</li>
+      <li><b>เส้นย้อนกลับต้องกำกับเงื่อนไขเสมอ</b> — เส้นจาก “ยังไม่ถึงเกณฑ์” กลับไปยังขั้นส่งออก
+        คือสิ่งที่ทำให้รูปนี้เป็น “วงจร” ไม่ใช่ “รายการขั้นตอน”</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ฉ</span>
+  <h2>ข้อมูลและสถานะ</h2>
+  <p>สองรูปสุดท้ายอธิบายสิ่งที่ระบบ “จำ” ไว้ — สถานะที่เปลี่ยนไปตามเวลา และโครงสร้างของข้อมูลที่เก็บจริง</p>
+</div>
+
+<section id="d10">
+  <h3><span class="num">รูปที่ 10</span>แผนภาพสถานะ (State Machine Diagram)</h3>
+  <p class="sub">UML 2.x · วาดด้วย Mermaid · แสดง 2 วงจรสถานะที่สำคัญของระบบ</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      สิ่งของในระบบมีได้กี่สถานะ และเปลี่ยนสถานะเมื่อไหร่ — สำคัญเป็นพิเศษกับ <b>เฟรม</b>
+      เพราะเป็นตัวกำหนดว่าเฟรมใดพร้อมนำไปเทรนแล้วบ้าง และเป็นที่มาของตัวเลือก
+      “ข้ามเฟรมที่รีวิวแล้ว” ในรูปที่ 9
+    </p>
+  </div>
+
+  <div class="block">
+    <h4>10.1 วงจรสถานะของงานเบื้องหลัง (Job)</h4>
+    <figure class="fig-lite">
+      <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'darkMode':false,'background':'#fbfcfe','primaryColor':'#e7ebf5','primaryTextColor':'#1a1a2e','primaryBorderColor':'#0f3460','secondaryColor':'#f4f7fc','tertiaryColor':'#ffffff','mainBkg':'#e7ebf5','nodeBkg':'#e7ebf5','nodeBorder':'#0f3460','textColor':'#1a1a2e','lineColor':'#5c6b7a','labelColor':'#1a1a2e','stateBkg':'#e7ebf5','stateLabelColor':'#1a1a2e','labelBackgroundColor':'#fbfcfe','transitionColor':'#5c6b7a','transitionLabelColor':'#1a1a2e','specialStateColor':'#0f3460','innerEndBackground':'#0f3460','altBackground':'#f4f7fc','compositeBackground':'#ffffff','compositeTitleBackground':'#e7ebf5','compositeBorder':'#0f3460','clusterBkg':'#f4f7fc','clusterBorder':'#0f3460','edgeLabelBackground':'#fbfcfe','fontFamily':'Leelawadee UI, Noto Sans Thai, Tahoma, sans-serif','fontSize':'13px'}}}%%
+stateDiagram-v2
+  direction LR
+  [*] --> running: เริ่มงานผ่าน POST /api/extract หรือ /api/detect หรือ /api/export
+  running --> done: ประมวลผลครบทุกเฟรม
+  running --> stopped: ผู้ใช้สั่งหยุดกลางคัน
+  running --> error: เกิดข้อผิดพลาดระหว่างทำงาน
+  done --> [*]
+  stopped --> [*]
+  error --> [*]
+      </pre>
+      <figcaption>
+        งานทุกชนิดใช้ชุดสถานะเดียวกัน · <b>ไม่มีสถานะรอคิว (queued)</b> เพราะระบบสร้างเธรดและเริ่มทำงานทันที
+        ไม่มีระบบคิวงาน — ตรงกับการออกแบบที่ใช้เครื่องมือน้อยที่สุด · สถานะ <code>stopped</code>
+        ต่างจาก <code>error</code> ตรงที่เฟรมที่บันทึกไปแล้วยังใช้งานได้ตามปกติ
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="block">
+    <h4>10.2 วงจรสถานะของเฟรม (Frame)</h4>
+    <figure class="fig-lite">
+      <pre class="mermaid">
+%%{init: {'theme':'base','themeVariables':{'darkMode':false,'background':'#fbfcfe','primaryColor':'#e7ebf5','primaryTextColor':'#1a1a2e','primaryBorderColor':'#0f3460','secondaryColor':'#f4f7fc','tertiaryColor':'#ffffff','mainBkg':'#e7ebf5','nodeBkg':'#e7ebf5','nodeBorder':'#0f3460','textColor':'#1a1a2e','lineColor':'#5c6b7a','labelColor':'#1a1a2e','stateBkg':'#e7ebf5','stateLabelColor':'#1a1a2e','labelBackgroundColor':'#fbfcfe','transitionColor':'#5c6b7a','transitionLabelColor':'#1a1a2e','specialStateColor':'#0f3460','innerEndBackground':'#0f3460','altBackground':'#f4f7fc','compositeBackground':'#ffffff','compositeTitleBackground':'#e7ebf5','compositeBorder':'#0f3460','clusterBkg':'#f4f7fc','clusterBorder':'#0f3460','edgeLabelBackground':'#fbfcfe','fontFamily':'Leelawadee UI, Noto Sans Thai, Tahoma, sans-serif','fontSize':'13px'}}}%%
+stateDiagram-v2
+  direction LR
+  state "ยังไม่มีผลตรวจจับ" as A
+  state "มีผลจาก AI รอการยืนยัน" as B
+  state "กำกับและรีวิวแล้ว" as C
+  [*] --> A: สกัดเฟรมสำเร็จ
+  A --> B: ตรวจจับแบบกลุ่ม หรือ Label Assist
+  A --> C: วาดกรอบด้วยมือแล้วบันทึก
+  B --> C: กดยืนยันการรีวิว
+  B --> B: แก้ไขกรอบ หรือปฏิเสธทั้งหมด
+  C --> B: รันตรวจจับซ้ำโดยไม่ข้ามเฟรมที่รีวิวแล้ว
+  C --> [*]: ถูกนำไปส่งออกเป็นชุดข้อมูล
+      </pre>
+      <figcaption>
+        <b>ข้อความหลักของรูปนี้:</b> เส้นเปลี่ยนสถานะจาก “กำกับและรีวิวแล้ว” ย้อนกลับไปเป็น
+        “รอการยืนยัน” คือความเสี่ยงที่ต้องควบคุม — เป็นเส้นทางที่ทำให้งานที่คนตรวจแล้วถูกเขียนทับ
+        ระบบจึงตั้งค่าเริ่มต้นให้ <b>ข้ามเฟรมที่รีวิวแล้วเสมอ</b> เพื่อไม่ให้เดินเส้นทางนี้โดยไม่ตั้งใจ
+      </figcaption>
+    </figure>
+  </div>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>สถานะต้องเป็นคำนามหรือคำคุณศัพท์ ไม่ใช่คำกริยา</b> — “กำกับและรีวิวแล้ว” คือสถานะ
+        ส่วน “กำลังกำกับข้อมูล” เป็นกิจกรรม ควรอยู่ในแผนภาพกิจกรรมแทน</li>
+      <li><b>เส้นเปลี่ยนสถานะต้องกำกับเหตุการณ์ที่ทำให้เปลี่ยน</b> ไม่ใช่ปล่อยเส้นเปล่า —
+        เพราะสาระของแผนภาพนี้คือ “อะไรทำให้เปลี่ยน”</li>
+      <li><b>ต้องมีสถานะเริ่มต้นและสถานะสิ้นสุด</b> และทุกสถานะต้องมีทางไปต่อ ไม่มีสถานะที่เข้าแล้วออกไม่ได้
+        (นอกจากตั้งใจให้เป็นสถานะสิ้นสุด)</li>
+      <li><b>วาดเฉพาะสถานะที่มีอยู่จริงในโค้ด</b> — รูปที่ 10.1 จึงไม่มี <code>queued</code>, <code>paused</code>
+        หรือ <code>retrying</code> เพราะระบบไม่มีสถานะเหล่านั้น</li>
+    </ul>
+  </div>
+</section>
+
+<section id="d11">
+  <h3><span class="num">รูปที่ 11</span>แผนภาพโครงสร้างข้อมูล (Data Model Diagram)</h3>
+  <p class="sub">รูปแบบ Entity–Relationship · วาดด้วย SVG · อ้างอิงโครงสร้างจริงของ <code>state.json</code></p>
+
+  <div class="rule" style="border-left-color:var(--warn); margin-bottom:22px">
+    <h4 style="color:var(--warn)">ข้อควรระบุให้ชัดในรายงาน</h4>
+    <ul>
+      <li>
+        ระบบนี้ <b>ไม่มีฐานข้อมูลเชิงสัมพันธ์</b> — ข้อมูลทั้งหมดเก็บในไฟล์ JSON ไฟล์เดียวคือ
+        <code>state.json</code> รูปนี้จึงเป็น <b>แบบจำลองเชิงแนวคิด (Conceptual Data Model)</b>
+        ที่ยืมสัญลักษณ์ ER มาใช้อธิบายความสัมพันธ์ของข้อมูลเท่านั้น <b>ไม่ใช่ schema ของฐานข้อมูลจริง</b>
+        ถ้าเขียนในรายงานโดยไม่บอกข้อนี้ กรรมการจะเข้าใจว่ามีฐานข้อมูล ซึ่งไม่ตรงกับระบบจริง
+      </li>
+      <li>
+        <b>เหตุผลของการตัดสินใจ</b> — ระบบออกแบบให้ใช้งานทีละคน ข้อมูลอยู่ในระดับหลักสิบถึงหลักร้อยกิโลไบต์
+        การเพิ่มฐานข้อมูลจะพาเครื่องมือใหม่เข้ามาหลายตัว (ตัวฐานข้อมูล, ORM, ระบบย้ายโครงสร้าง)
+        โดยไม่ได้แก้ปัญหาที่มีอยู่จริง จึงเลือกใช้ไฟล์ JSON พร้อมกลไกเขียนแบบ atomic และสำรองข้อมูลแทน
+      </li>
+    </ul>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 970 700" role="img" aria-label="แผนภาพโครงสร้างข้อมูลแสดง 7 กลุ่มข้อมูล ได้แก่ VIDEO EXTRACT_JOB FRAME DETECTION DETECT_JOB MODEL และ EXPORT_JOB พร้อมความสัมพันธ์แบบตีนกา">
+      <g>
+        <rect x="40" y="60" width="250" height="102" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M40 90 H290" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M43 60 H287 A3 3 0 0 1 290 63 V90 H40 V63 A3 3 0 0 1 43 60 Z" fill="#dde4ef"/>
+        <text x="165" y="80" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">VIDEO</text>
+        <text x="51" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">video_id</text>
+        <text x="279" y="106" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M48 114 H282" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="51" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">filename</text>
+        <path d="M48 138 H282" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="51" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">int</text>
+        <text x="112" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">size_bytes</text>
+      </g>
+      <g>
+        <rect x="360" y="60" width="250" height="150" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M360 90 H610" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M363 60 H607 A3 3 0 0 1 610 63 V90 H360 V63 A3 3 0 0 1 363 60 Z" fill="#dde4ef"/>
+        <text x="485" y="80" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">EXTRACT_JOB</text>
+        <text x="371" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">job_id</text>
+        <text x="599" y="106" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M368 114 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">video_id</text>
+        <text x="599" y="130" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">FK</text>
+        <path d="M368 138 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">status</text>
+        <path d="M368 162 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">int</text>
+        <text x="432" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">progress</text>
+        <path d="M368 186 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="202" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="432" y="202" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">frame_ids</text>
+      </g>
+      <g>
+        <rect x="680" y="60" width="250" height="126" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M680 90 H930" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M683 60 H927 A3 3 0 0 1 930 63 V90 H680 V63 A3 3 0 0 1 683 60 Z" fill="#dde4ef"/>
+        <text x="805" y="80" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">FRAME</text>
+        <text x="691" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">frame_id</text>
+        <text x="919" y="106" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M688 114 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">path</text>
+        <path d="M688 138 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">bool</text>
+        <text x="752" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">reviewed</text>
+        <path d="M688 162 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">detections</text>
+      </g>
+      <g>
+        <rect x="40" y="280" width="250" height="78" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M40 310 H290" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M43 280 H287 A3 3 0 0 1 290 283 V310 H40 V283 A3 3 0 0 1 43 280 Z" fill="#dde4ef"/>
+        <text x="165" y="300" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">MODEL</text>
+        <text x="51" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">name</text>
+        <text x="279" y="326" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M48 334 H282" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="51" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">path</text>
+      </g>
+      <g>
+        <rect x="360" y="280" width="250" height="150" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M360 310 H610" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M363 280 H607 A3 3 0 0 1 610 283 V310 H360 V283 A3 3 0 0 1 363 280 Z" fill="#dde4ef"/>
+        <text x="485" y="300" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">DETECT_JOB</text>
+        <text x="371" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">job_id</text>
+        <text x="599" y="326" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M368 334 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">model</text>
+        <path d="M368 358 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">backend</text>
+        <path d="M368 382 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">float</text>
+        <text x="432" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">conf</text>
+        <path d="M368 406 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">bool</text>
+        <text x="432" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">skip_reviewed</text>
+      </g>
+      <g>
+        <rect x="680" y="280" width="250" height="174" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M680 310 H930" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M683 280 H927 A3 3 0 0 1 930 283 V310 H680 V283 A3 3 0 0 1 683 280 Z" fill="#dde4ef"/>
+        <text x="805" y="300" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">DETECTION</text>
+        <text x="691" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">class_name</text>
+        <path d="M688 334 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">float</text>
+        <text x="752" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">confidence</text>
+        <path d="M688 358 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">bbox</text>
+        <path d="M688 382 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">polygon</text>
+        <path d="M688 406 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">keypoints</text>
+        <path d="M688 430 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="446" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="446" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">source</text>
+      </g>
+      <g>
+        <rect x="360" y="500" width="250" height="126" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M360 530 H610" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M363 500 H607 A3 3 0 0 1 610 503 V530 H360 V503 A3 3 0 0 1 363 500 Z" fill="#dde4ef"/>
+        <text x="485" y="520" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">EXPORT_JOB</text>
+        <text x="371" y="546" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="546" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">job_id</text>
+        <text x="599" y="546" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M368 554 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="570" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="570" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">detect_job_id</text>
+        <text x="599" y="570" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">FK</text>
+        <path d="M368 578 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="594" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">float</text>
+        <text x="432" y="594" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">train_ratio</text>
+        <path d="M368 602 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="618" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">bool</text>
+        <text x="432" y="618" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">reviewed_only</text>
+      </g>
+      <g>
+        <path d="M302 110 H334" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M296 103 V117" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M302 103 V117" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 110 L360 103" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 110 L360 110" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 110 L360 117" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="338" cy="110" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="318" y="102" text-anchor="middle" font-size="10.5" fill="#1a1a2e">ถูกใช้ใน</text>
+        <path d="M622 130 H654" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M616 123 V137" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M622 123 V137" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 130 L680 123" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 130 L680 130" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 130 L680 137" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="658" cy="130" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="638" y="122" text-anchor="middle" font-size="10.5" fill="#1a1a2e">สร้าง</text>
+        <path d="M805 198 V258" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M798 192 H812" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M798 198 H812" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M805 266 L798 280" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M805 266 L805 280" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M805 266 L812 280" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="805" cy="258" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="814" y="234" text-anchor="start" font-size="10.5" fill="#1a1a2e">มี</text>
+        <path d="M302 320 H334" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M296 313 V327" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M302 313 V327" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 320 L360 313" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 320 L360 320" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 320 L360 327" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="338" cy="320" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="318" y="312" text-anchor="middle" font-size="10.5" fill="#1a1a2e">ถูกใช้โดย</text>
+        <path d="M622 300 H645 V150 H654" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M616 293 V307" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M622 293 V307" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 150 L680 143" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 150 L680 150" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 150 L680 157" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="658" cy="150" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="652" y="232" text-anchor="start" font-size="10.5" fill="#1a1a2e">เขียนผลลงบน</text>
+        <path d="M485 442 V478" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M478 436 H492" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M478 442 H492" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M485 486 L478 500" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M485 486 L485 500" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M485 486 L492 500" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="485" cy="478" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="493" y="468" text-anchor="start" font-size="10.5" fill="#1a1a2e">เป็นแหล่งข้อมูลของ</text>
+      </g>
+      <g>
+        <path d="M46 662 H86" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M46 655 V669" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M52 655 V669" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M98 662 L112 655" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M98 662 L112 662" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M98 662 L112 669" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="90" cy="662" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="126" y="666" font-size="10.5" fill="#5c6b7a">อ่านว่า “หนึ่ง ต่อ ศูนย์หรือมากกว่า” — ขีดสองขีดคือหนึ่ง · วงกลมคือศูนย์ได้ · ตีนกาคือมากกว่าหนึ่ง</text>
+      </g>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> <code>FRAME</code> คือศูนย์กลาง — เป็นทั้งผลผลิตของงานสกัดเฟรม
+      เป้าหมายของงานตรวจจับ และวัตถุดิบของงานส่งออก · ฟิลด์ <code>source</code> ใน
+      <code>DETECTION</code> เป็นตัวแยกว่ากรอบนั้นมาจากคนวาดหรือ AI เสนอ ซึ่งเป็นข้อมูลที่ทำให้
+      วงจรในรูปที่ 9 ทำงานได้ · ฟิลด์ <code>polygon</code> และ <code>keypoints</code> รองรับการกำกับ
+      แบบรูปหลายเหลี่ยมและจุดสำคัญตามรูปที่ 5
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>ระบุคีย์หลักและคีย์นอกให้ชัด</b> (<code>PK</code> / <code>FK</code>) แม้จะเป็นแบบจำลองเชิงแนวคิด
+        เพราะเป็นสิ่งที่บอกว่าข้อมูลอ้างถึงกันอย่างไร</li>
+      <li><b>สัญลักษณ์ตีนกา (Crow's Foot) ต้องสื่อจำนวนความสัมพันธ์ให้ถูก</b> —
+        <code>||--o{</code> หมายถึง “หนึ่งต่อศูนย์หรือมากกว่า” เช่น งานสกัดหนึ่งงานสร้างเฟรมได้หลายเฟรม
+        แต่เฟรมหนึ่งเฟรมมาจากงานสกัดเพียงงานเดียว</li>
+      <li><b>ตั้งชื่อความสัมพันธ์เป็นคำกริยา</b> ที่อ่านจากซ้ายไปขวาแล้วได้ประโยคสมบูรณ์
+        เช่น “EXTRACT_JOB สร้าง FRAME”</li>
+      <li><b>ถ้าไม่มีฐานข้อมูล ต้องบอกตรง ๆ</b> — การนำเสนอ ER Diagram โดยไม่ระบุว่าเป็นแบบจำลอง
+        เชิงแนวคิด ถือเป็นการให้ข้อมูลที่ทำให้เข้าใจผิดเกี่ยวกับสถาปัตยกรรมจริงของระบบ</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<section id="map">
+  <div class="grp-head">
+    <span class="k">ภาคผนวก</span>
+    <h2>ใช้รูปไหนในบทใดของรายงาน</h2>
+    <p>ข้อเสนอการจัดวางแผนภาพทั้ง 11 รูปลงในโครงรายงานโครงการแบบมาตรฐาน</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead>
+        <tr><th class="nowrap">บท</th><th class="nowrap">รูปที่</th><th>เหตุผล</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nowrap">บทที่ 1<br><span style="color:var(--ink-faint);font-size:12px">บทนำ</span></td>
+          <td class="nowrap">1</td>
+          <td>ใช้แผนภาพสถาปัตยกรรมเป็นรูปเปิด เพื่อให้ผู้อ่านเห็นภาพรวมทั้งระบบก่อนลงรายละเอียด</td>
+        </tr>
+        <tr>
+          <td class="nowrap">บทที่ 3<br><span style="color:var(--ink-faint);font-size:12px">วิเคราะห์และออกแบบระบบ</span></td>
+          <td class="nowrap">3, 4, 5, 11</td>
+          <td>
+            เรียงตามลำดับการวิเคราะห์มาตรฐาน — กำหนดขอบเขต (Context) → แตกกระบวนการ (DFD ระดับ 1)
+            → มุมมองผู้ใช้ (Use Case) → โครงสร้างข้อมูล เป็นบทที่กรรมการซักถามมากที่สุด
+          </td>
+        </tr>
+        <tr>
+          <td class="nowrap">บทที่ 4<br><span style="color:var(--ink-faint);font-size:12px">การพัฒนาระบบ</span></td>
+          <td class="nowrap">2, 6, 7, 8, 10</td>
+          <td>
+            ส่วนที่ลงลึกถึงการทำงานจริง — สภาพแวดล้อมที่ติดตั้ง ลำดับการทำงานสองรูปแบบ
+            อัลกอริทึมการคัดเลือกเฟรม และการจัดการสถานะ
+          </td>
+        </tr>
+        <tr>
+          <td class="nowrap">บทที่ 5<br><span style="color:var(--ink-faint);font-size:12px">ผลและการอภิปราย</span></td>
+          <td class="nowrap">9</td>
+          <td>
+            ใช้ประกอบการอภิปรายว่าเครื่องมือที่พัฒนาขึ้นช่วยแก้ข้อจำกัดหลักจากระยะที่ 1
+            (ข้อมูลน้อยและไม่หลากหลาย) ได้อย่างไร
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rule">
+    <h4>ข้อควรระวังก่อนนำไปใช้</h4>
+    <ul>
+      <li><b>ตัวเลขผลการทดลอง</b> (mAP@50 68.1% · Precision 80.5% · Recall 73.1%) มาจากรายงานระยะที่ 1
+        เป็นผลจากการทดลองที่ทำ <i>นอก</i> เว็บแอปนี้ ไม่ใช่ตัวเลขที่ระบบคำนวณสด ต้องระบุที่มาให้ชัดในรายงาน</li>
+      <li><b>แผนภาพทั้งหมดสะท้อนสถานะระบบ ณ เดือนสิงหาคม 2569</b> ถ้าพัฒนาต่อจนโครงสร้างเปลี่ยน
+        ต้องปรับรูปตาม โดยเฉพาะจำนวน endpoint ในรูปที่ 1 และรายการยูสเคสในรูปที่ 5</li>
+      <li><b>สิ่งที่ยังไม่ได้ทำ ไม่ควรปรากฏในแผนภาพ</b> — เช่น การเชื่อมกล้องแบบเรียลไทม์
+        และโมเดล RNN วิเคราะห์ลำดับการเคลื่อนไหว ยังเป็นแผนในอนาคต ควรเขียนไว้ในหัวข้อ
+        “แนวทางการพัฒนาต่อ” ไม่ใช่วาดปนลงในแผนภาพระบบปัจจุบัน</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, securityLevel: 'loose' });
+</script>
