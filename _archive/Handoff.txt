@@ -1,23 +1,33 @@
 Handoff ล่าสุดอยู่ที่:
 
-C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-needle-2026-08-11.md
+C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-backlog-2026-08-11.md
 
-เซสชันนี้ทำอะไร: ผู้ใช้ขอให้โมเดลวาดกล่อง needle มาให้เองแทนการวาดมือทุกกล่อง — วัดจนเจอว่าเป็นสองสาเหตุ
-ซ้อนกัน ไม่ใช่เรื่องเดียว: (1) checkpoint 10 epochs ได้ mAP50 แค่ 0.008 บน needle ของ val set ตัวเอง
-= เทรนน้อยไป ไม่ใช่ domain gap และ (2) ต่อให้ตรวจเจอ ค่า confidence ก็ไม่เคยเกิน 0.143 จึงถูก threshold
-0.25 ตัดทิ้งหมด แก้ทั้งสองทาง: เทรนใหม่ 50 epochs (needle mAP50 0.008 -> 0.114 คลาสอื่นดีขึ้นหมด) และ
-เพิ่ม per-class confidence threshold ผลจริงบนฟุตเทจ: needle จาก 6 กล่อง เป็น 2,198 กล่อง
+เซสชันนี้ทำอะไร: ผู้ใช้เลือก "ทำแผน 6 ข้อที่จดไว้" จาก 4 ทางเลือก แล้วทำจนจบทั้ง 6 ข้อในเซสชันเดียว
+ตามลำดับที่แผนแนะนำ (5 -> 1 -> 2 -> 3 -> 6 -> 4) คือ freeze ฟอร์ม Export ระหว่าง build, จำ job id
+ของ Extract/Export ข้าม reload (ปุ่ม ZIP ไม่หายอีก), ปุ่ม Back/Next ท้ายทุกแท็บ, ใช้โมเดลตัวเดียวทั้งแอป
+พร้อม POST /api/models/load + ป้ายบอกสถานะ, POST /api/frames/review/bulk (confirm ทั้งช่วงที่ filter
+กรองอยู่), และ POST /api/frames/upload (อัปโหลดโฟลเดอร์เฟรมที่ extract จากที่อื่น)
+
+จากนั้นรัน code-review ก่อน push เจอบั๊กจริง 7 ข้อ แก้ทั้งหมดใน cc46665 — 2 ข้อพังฟีเจอร์ตัวเองเต็มๆ:
+(1) อัปโหลดโฟลเดอร์ใช้ไม่ได้กับโฟลเดอร์ที่เครื่องมือนี้สร้างเอง เพราะทุกโฟลเดอร์มี extraction_log.json
+    ปนอยู่ ไฟล์แรกที่ไม่ใช่รูปทำให้ 400 แล้วลบทั้ง import ทิ้ง (แก้เป็นข้ามไฟล์ที่ไม่ใช่รูป)
+(2) confirm ทั้งช่วงอาจรับกล่องที่เพิ่งลบไปเป็น ground truth เพราะเฟรมที่เปิดค้างอยู่ถูกนับรวมด้วย
+    ทั้งที่ยังไม่ได้ save (แก้เป็นเว้นเฟรมนั้นไว้ + บอกเหตุผลใน dialog)
 
 สถานะตอนปิดเซสชัน (ยืนยันด้วยคำสั่งจริง ไม่ได้เชื่อจากบทสนทนา):
-- main == origin/main แล้ว push ครบ 9 commit (531b87b..50ade55) working tree สะอาด
-  (ผู้ใช้รัน ! git push origin main เอง — จาก shell ของ agent ยังค้างเหมือนเดิม อย่าลอง)
-- uvicorn ยังรันที่ :8010 (PID 8616) — restart ระหว่างเซสชันเพื่อโหลด server.py ใหม่
-- webapp/data/ + state.json = งานจริงของผู้ใช้ 2,726 เฟรม 21,127 กล่อง ** ห้ามลบ **
-- เฟรมแรก (index 0) ติดสถานะ reviewed อยู่ จึงถูก Detect รอบใหม่ข้าม ยังเป็นกล่องจากโมเดลเก่า
-- โมเดลที่ต้องใช้: models/ssid_v6i_50ep_20260810_map50-608.pt (commit ไว้แล้ว มีสำเนานอกเครื่อง)
-- งานถัดไปเป็นของผู้ใช้: annotate แล้ววัดด้วย measure_annotation.py --since snap_start.json
+- main == origin/main push ครบ 9 commit (50ade55..cc46665) working tree สะอาด
+- git push จาก shell ของ agent ใช้ได้แล้ว ถ้าใส่ GIT_TERMINAL_PROMPT=0 (ที่เคยค้างคือรอถาม
+  credential โดยไม่มี TTY) — กฎเก่า "ห้าม push จาก agent" ยกเลิกได้ แต่ควรตั้ง timeout ไว้
+- uvicorn รันที่ :8010 (PID 16432) บน .venv — ตอนเริ่มเซสชันมี 2 process และตัวที่ถือ port จริงคือ
+  Python ของระบบซึ่งไม่มี ultralytics (โหลดโมเดลไม่ได้เลย) เช็ค OwningProcess ทุกครั้ง อย่าดูแค่ 200
+- webapp/data/ + state.json = งานจริงของผู้ใช้ 2,726 เฟรม 21,127 กล่อง ** ห้ามลบ ** ไม่ถูกแตะทั้งเซสชัน
+- เฟรมแรก suture01_frame_00000.jpg ยังติดสถานะ reviewed อยู่ (แก้: R -> Ctrl+A -> Delete -> A)
+- โมเดลที่ต้องใช้: models/ssid_v6i_50ep_20260810_map50-608.pt
+- งานถัดไปเป็นของผู้ใช้เหมือนเดิม: annotate ที่ระยะ keyframe 10/30/60 แล้ววัดด้วย
+  measure_annotation.py --since snap_start.json
 
-แผนงาน 6 ข้อที่จดไว้แต่ยังไม่เริ่ม (ผู้ใช้สั่งให้จดไว้เฉยๆ):
-C:\Users\USER\.claude\plans\needle-snoopy-salamander.md
+แผนงาน 6 ข้อ: C:\Users\USER\.claude\plans\needle-snoopy-salamander.md — ทำครบแล้ว มีสถานะ DONE
+แผน execution: C:\Users\USER\.claude\plans\read-handoff-c-users-user-appdata-local-sprightly-dawn.md
 
-รายละเอียดทั้งหมดอยู่ในไฟล์ handoff ข้างบน + memory + commit message ทั้ง 9 อัน — ไม่เขียนซ้ำที่นี่
+ยังค้างอยู่: คู่มือผู้ใช้ (หลังเว็บเสร็จเท่านั้น), ข้อ 8 ปรับ UI/ขนาด canvas (ผู้ใช้เลือกข้ามไว้ก่อน),
+SAM, obb ของจริง, domain/hosting + auth, figure 6-9 ที่ยังไม่เคยตรวจด้วยตา, และรอบเทรนถัดไป
