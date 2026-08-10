@@ -208,6 +208,15 @@
 
       <label for="detect-iou">IoU threshold: <span id="detect-iou-label">0.45</span></label>
       <input type="range" id="detect-iou" min="0.01" max="0.99" step="0.01" value="0.45" />
+
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer; font-size:13px; color:var(--muted);">Per-class confidence (optional)</summary>
+        <div id="detect-class-conf"></div>
+        <div style="font-size:11px; color:var(--muted); margin-top:8px;">
+          Blank = use the threshold above. Lower a class here when the model finds it but scores it
+          too low to pass — dropping the shared threshold instead floods every other class.
+        </div>
+      </details>
     </div>
 
     <div class="card">
@@ -288,6 +297,16 @@
         </div>
         <button id="annotate-copy-prev-btn" class="btn-download" style="width:100%;">⬅ Copy from previous frame</button>
 
+        <div class="section-label">AI suggestions (dashed)</div>
+        <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">
+          Dashed boxes are unconfirmed — from Detect, Label Assist or an interpolated span. Saving
+          the frame confirms whatever is still dashed.
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button id="confirm-all-btn" class="btn-download" style="flex:1;">Confirm All</button>
+          <button id="reject-all-btn" class="btn-stop" style="flex:1;">Reject All</button>
+        </div>
+
         <div class="section-label">Interpolate</div>
         <div id="interpolate-status" class="chip" style="display:block; margin-bottom:6px;">No start keyframe</div>
         <button id="interpolate-start-btn" class="btn-download" style="width:100%; margin-bottom:6px;">⚑ Set start keyframe (S)</button>
@@ -326,11 +345,16 @@
           <input class="input" type="text" id="assist-rf-workflow-id" value="ssid-v5-logic" />
         </div>
 
-        <button id="assist-run-btn" class="btn-primary" style="margin-top:16px; width:100%;">Run Assist</button>
-        <div style="display:flex; gap:8px; margin-top:8px;">
-          <button id="assist-accept-all-btn" class="btn-download" style="flex:1;">Accept All</button>
-          <button id="assist-reject-all-btn" class="btn-stop" style="flex:1;">Reject All</button>
+      <details style="margin-top:14px;">
+        <summary style="cursor:pointer; font-size:13px; color:var(--muted);">Per-class confidence (optional)</summary>
+        <div id="assist-class-conf"></div>
+        <div style="font-size:11px; color:var(--muted); margin-top:8px;">
+          Blank = use the threshold above. Lower a class here when the model finds it but scores it
+          too low to pass — dropping the shared threshold instead floods every other class.
         </div>
+      </details>
+
+        <button id="assist-run-btn" class="btn-primary" style="margin-top:16px; width:100%;">Run Assist</button>
 
         <div class="section-label">OCR (burned-in text)</div>
         <button id="ocr-run-btn" class="btn-primary" style="width:100%;">Run OCR</button>

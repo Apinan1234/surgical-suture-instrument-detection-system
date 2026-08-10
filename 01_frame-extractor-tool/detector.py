@@ -222,6 +222,15 @@ class BaseDetector:
         return img
 
 
+def _threshold_for(class_name: str, conf: float, class_conf: dict[str, float] | None) -> float:
+    """Confidence a detection of this class must reach to be kept: the per-class override when one
+    was given, otherwise the run's single `conf`. Lives here so both detectors below apply the same
+    rule — a class the model finds but scores too low (needle, on the models trained so far) can be
+    let through without dropping the threshold for every other class and drowning the user in boxes
+    to reject."""
+    return (class_conf or {}).get(class_name, conf)
+
+
 # ─────────────────────────────────────────────
 #  YOLOv11 Detector  (local .pt weights)
 # ─────────────────────────────────────────────
@@ -234,21 +243,28 @@ class YOLOv11Detector(BaseDetector):
         conf:   float = 0.25,
         iou:    float = 0.45,
         device: str   = "cpu",
+        class_conf: dict[str, float] | None = None,
     ):
         from ultralytics import YOLO  # lazy import (หลีกเลี่ยงหน้าจอช้า)
         self.model       = YOLO(model_path)
         self.conf        = conf
         self.iou         = iou
         self.device      = device
+        self.class_conf  = dict(class_conf or {})
         self.class_names: list[str] = list(self.model.names.values())
 
     # ── Inference ─────────────────────────────
     def predict(self, image_bgr: np.ndarray) -> list[Detection]:
         """รัน inference บน 1 frame (BGR ndarray)"""
         h, w = image_bgr.shape[:2]
+        # Ultralytics drops anything under `conf` before we ever see it, so ask it for the LOWEST
+        # threshold any class wants and enforce the real per-class ones below. NMS is class-wise by
+        # default (agnostic_nms=False), so the extra low-confidence boxes this admits for one class
+        # cannot suppress another class's box.
+        floor = min([self.conf, *self.class_conf.values()])
         results = self.model.predict(
             image_bgr,
-            conf=self.conf,
+            conf=floor,
             iou=self.iou,
             device=self.device,
             verbose=False,
@@ -259,11 +275,14 @@ class YOLOv11Detector(BaseDetector):
                 cid  = int(box.cls[0])
                 name = (self.class_names[cid]
                         if cid < len(self.class_names) else str(cid))
+                confidence = float(box.conf[0])
+                if confidence < _threshold_for(name, self.conf, self.class_conf):
+                    continue
                 x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
                 dets.append(Detection(
                     class_id   = cid,
                     class_name = name,
-                    confidence = float(box.conf[0]),
+                    confidence = confidence,
                     x_center   = ((x1 + x2) / 2) / w,
                     y_center   = ((y1 + y2) / 2) / h,
                     width      = (x2 - x1) / w,
@@ -310,12 +329,14 @@ class RoboflowDetector(BaseDetector):
         workflow_id:    str = "ssid-v5-logic",
         api_url:        str = "https://serverless.roboflow.com",
         conf:           float = 0.25,
+        class_conf:     dict[str, float] | None = None,
     ):
         from inference_sdk import InferenceHTTPClient  # lazy import
         self.client = InferenceHTTPClient(api_url=api_url, api_key=api_key)
         self.workspace_name = workspace_name
         self.workflow_id    = workflow_id
         self.conf           = conf
+        self.class_conf     = dict(class_conf or {})
         self.class_names: list[str] = CLASS_NAMES
 
     # ── Inference ─────────────────────────────
@@ -333,9 +354,9 @@ class RoboflowDetector(BaseDetector):
         dets: list[Detection] = []
         for p in preds:
             confidence = float(p.get("confidence", 0.0))
-            if confidence < self.conf:
-                continue
             name = p.get("class") or p.get("class_name") or "unknown"
+            if confidence < _threshold_for(name, self.conf, self.class_conf):
+                continue
             cid  = p.get("class_id")
             if cid is None:
                 cid = CLASS_NAMES.index(name) if name in CLASS_NAMES else -1

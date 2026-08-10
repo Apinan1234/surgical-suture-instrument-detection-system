@@ -520,9 +520,24 @@ class DetectorConfigBody(BaseModel):
     conf: float = Field(default=0.25, ge=0.01, le=0.99)
     iou: float = Field(default=0.45, ge=0.01, le=0.99)
     device: Literal["cpu", "cuda", "mps"] = "cpu"
+    # Per-class override for `conf`, e.g. {"needle": 0.10}. Absent classes keep `conf`. Exists
+    # because a class the model finds but consistently scores low is otherwise invisible, and the
+    # only alternative — lowering `conf` for everything — floods every other class with boxes the
+    # user has to reject one by one.
+    class_conf: dict[str, float] | None = None
     api_key: str | None = None
     workspace_name: str = "fhasai-khuanpan"
     workflow_id: str = "ssid-v5-logic"
+
+    @model_validator(mode="after")
+    def _check_class_conf(self):
+        for name, value in (self.class_conf or {}).items():
+            if name not in CLASS_NAMES:
+                raise ValueError(f"Unknown class in class_conf: {name!r} (expected one of {CLASS_NAMES})")
+            # Same bounds as the `conf` field above, so neither route can be talked past the other.
+            if not 0.01 <= value <= 0.99:
+                raise ValueError(f"class_conf[{name!r}] must be between 0.01 and 0.99, got {value}")
+        return self
 
     @model_validator(mode="after")
     def _check_backend(self):
@@ -579,6 +594,7 @@ def build_detector(body: DetectorConfigBody):
             workspace_name=body.workspace_name.strip(),
             workflow_id=body.workflow_id.strip(),
             conf=body.conf,
+            class_conf=body.class_conf,
         )
     raw_model_path = body.model_path.strip()
     return YOLOv11Detector(
@@ -586,6 +602,7 @@ def build_detector(body: DetectorConfigBody):
         conf=body.conf,
         iou=body.iou,
         device=body.device,
+        class_conf=body.class_conf,
     )
 
 
@@ -600,10 +617,13 @@ def _get_cached_detector(body: DetectorConfigBody):
     only when the key tuple changes. Guarded by a lock since it's now reachable from a background
     job thread and the /assist request handler at the same time (bounded by MAX_CONCURRENT_JOBS)."""
     global _detector_cache_key, _detector_cache_detector
+    # Sorted tuple, not the dict itself: the key has to be hashable, and two requests that set the
+    # same thresholds in a different order are the same detector.
+    class_conf_key = tuple(sorted((k, round(v, 4)) for k, v in (body.class_conf or {}).items()))
     if body.backend == "roboflow":
-        key = ("roboflow", body.workspace_name.strip(), body.workflow_id.strip(), round(body.conf, 4))
+        key = ("roboflow", body.workspace_name.strip(), body.workflow_id.strip(), round(body.conf, 4), class_conf_key)
     else:
-        key = ("local", body.model_path.strip(), round(body.conf, 4), round(body.iou, 4), body.device)
+        key = ("local", body.model_path.strip(), round(body.conf, 4), round(body.iou, 4), body.device, class_conf_key)
     with _detector_cache_lock:
         if key != _detector_cache_key:
             _detector_cache_detector = build_detector(body)
@@ -1069,6 +1089,7 @@ def assist_frame(frame_id: str, body: AssistBody):
             "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
             "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
             "conf": body.conf,
+            "class_conf": body.class_conf,
             "detected_count": len(dets),
             "created_at": datetime.now().isoformat(),
         })

@@ -344,6 +344,54 @@ async function refreshClasses() {
   classColors = data.class_colors || {};
   classNames = data.class_names || [];
   populateAnnotateClassSelect();
+  buildClassConfInputs("detect-class-conf");
+  buildClassConfInputs("assist-class-conf");
+}
+
+// One number input per class, generated from the same `classNames` list the class dropdowns use, so
+// a new class needs no HTML edit. A blank input means that class keeps the run's single `conf` —
+// only the ones actually filled in are sent, which keeps request bodies unchanged when nobody uses
+// the feature. Detect and Label Assist each get their own set, matching the existing convention that
+// Assist's model picker is deliberately independent of Detect's.
+function buildClassConfInputs(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const previous = readClassConf(containerId); // survive a /api/classes refresh mid-typing
+  container.innerHTML = "";
+  classNames.forEach((name) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex; align-items:center; gap:8px; margin-top:6px;";
+
+    const label = document.createElement("label");
+    label.htmlFor = `${containerId}-${name}`;
+    label.textContent = name;
+    label.style.cssText = "flex:1; margin:0; font-size:12px;";
+
+    const input = document.createElement("input");
+    input.className = "input";
+    input.type = "number";
+    input.id = `${containerId}-${name}`;
+    input.dataset.className = name;
+    input.min = "0.01";
+    input.max = "0.99";
+    input.step = "0.01";
+    input.placeholder = "—";
+    input.style.cssText = "width:84px; padding:4px 8px; font-size:12px;";
+    if (previous[name] !== undefined) input.value = previous[name];
+
+    row.appendChild(label);
+    row.appendChild(input);
+    container.appendChild(row);
+  });
+}
+
+function readClassConf(containerId) {
+  const out = {};
+  document.querySelectorAll(`#${containerId} input[data-class-name]`).forEach((input) => {
+    const value = parseFloat(input.value);
+    if (!Number.isNaN(value)) out[input.dataset.className] = value;
+  });
+  return out;
 }
 
 function updateBackendFields() {
@@ -381,6 +429,9 @@ document.getElementById("detect-start-btn").addEventListener("click", async () =
     iou: parseFloat(document.getElementById("detect-iou").value),
     device: document.querySelector('input[name="device"]:checked').value,
   };
+
+  const classConf = readClassConf("detect-class-conf");
+  if (Object.keys(classConf).length) body.class_conf = classConf;
 
   if (backend === "roboflow") {
     const apiKey = document.getElementById("rf-api-key").value.trim();
@@ -2905,6 +2956,9 @@ async function runAssist(opts) {
   const backend = document.querySelector('input[name="assist-backend"]:checked').value;
   const body = { backend, model_path: document.getElementById("assist-model-path").value };
 
+  const classConf = readClassConf("assist-class-conf");
+  if (Object.keys(classConf).length) body.class_conf = classConf;
+
   if (backend === "roboflow") {
     const apiKey = document.getElementById("assist-rf-api-key").value.trim();
     if (!apiKey) {
@@ -2951,13 +3005,13 @@ function maybeAutoAssist(frame) {
   runAssist({ silent: true });
 }
 
-document.getElementById("assist-accept-all-btn").addEventListener("click", () => {
+document.getElementById("confirm-all-btn").addEventListener("click", () => {
   const boxes = AnnotateState.getBoxes();
   if (!boxes.some((b) => b._pending)) return;
   AnnotateState.setBoxes(boxes.map((b) => { const c = { ...b }; delete c._pending; return c; }));
 });
 
-document.getElementById("assist-reject-all-btn").addEventListener("click", () => {
+document.getElementById("reject-all-btn").addEventListener("click", () => {
   const boxes = AnnotateState.getBoxes();
   if (!boxes.some((b) => b._pending)) return;
   AnnotateState.setBoxes(boxes.filter((b) => !b._pending));
