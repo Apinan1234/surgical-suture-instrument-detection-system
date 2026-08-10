@@ -128,6 +128,12 @@ def export_dataset_pipeline(
     # Per-instance annotation attributes, keyed "<split>/<stem>" so an entry maps onto exactly one
     # labels/<split>/<stem>.txt. Written out as attributes.json below, and only if anything is set.
     attributes_index: dict[str, dict] = {}
+    # Frame filenames are only unique within one Extract job: numbering restarts at 00000 each run,
+    # so a second run with the same prefix yields a second "<prefix>_frame_00000.jpg". A Detect job
+    # can span several Extract jobs, so two pool items can share a stem — and sharing a stem means
+    # the later one overwrites the earlier one's image AND label, losing an annotated frame with no
+    # error and leaving the summary counts overstated. Keep every exported stem distinct instead.
+    used_stems: set[str] = set()
 
     for split_name, items in split_data.items():
         if not items: continue
@@ -168,7 +174,15 @@ def export_dataset_pipeline(
                 img = cv2.resize(img, (resize_size, resize_size))
                 
             # Base save
-            save_name = src.stem + "_0"
+            stem = src.stem
+            if stem in used_stems:
+                n = 2
+                while f"{stem}__{n}" in used_stems:
+                    n += 1
+                stem = f"{stem}__{n}"
+            used_stems.add(stem)
+
+            save_name = stem + "_0"
             cv2.imwrite(str(img_dir / f"{save_name}.jpg"), img)
             
             inst_attrs = {}
@@ -209,7 +223,7 @@ def export_dataset_pipeline(
                         aug_bboxes = transformed['bboxes']
                         aug_labels = transformed['class_labels']
                         
-                        aug_name = src.stem + f"_{i}"
+                        aug_name = stem + f"_{i}"
                         cv2.imwrite(str(img_dir / f"{aug_name}.jpg"), aug_img)
                         with open(lbl_dir / f"{aug_name}.txt", "w") as f:
                             for b, l in zip(aug_bboxes, aug_labels):
