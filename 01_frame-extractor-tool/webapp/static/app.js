@@ -3263,6 +3263,19 @@ document.querySelectorAll('input[name="export-task"]').forEach((el) => {
 });
 updateExportTaskUI();
 
+// The five Export cards stayed editable while a version was building, so the settings on screen could
+// drift from the ones the running job actually used. The two buttons are exempt: Start is already
+// gated by refreshExportPreview(), and Download has to stay clickable the moment it appears.
+function setExportControlsDisabled(disabled) {
+  const keep = new Set(["export-start-btn", "export-download-btn"]);
+  document.querySelectorAll("#export-section input, #export-section select").forEach((el) => {
+    if (!keep.has(el.id)) el.disabled = disabled;
+  });
+  // updateExportTaskUI() owns a disabled rule of its own (the augment inputs are off unless the task
+  // is detect), so re-enabling everything blindly would undo it. Let it reassert on the way back.
+  if (!disabled) updateExportTaskUI();
+}
+
 document.getElementById("export-start-btn").addEventListener("click", async () => {
   if (!currentDetectJobId) return;
   const tr = parseInt(document.getElementById("export-train-pct").value, 10) / 100;
@@ -3299,6 +3312,7 @@ document.getElementById("export-start-btn").addEventListener("click", async () =
   const data = await res.json();
   currentExportJobId = data.job_id;
   document.getElementById("export-start-btn").disabled = true;
+  setExportControlsDisabled(true);
   document.getElementById("export-progress-wrap").classList.remove("hidden");
   document.getElementById("export-download-btn").classList.add("hidden");
   startExportPolling();
@@ -3315,6 +3329,7 @@ function startExportPolling() {
     if (job.status === "done" || job.status === "error") {
       clearInterval(exportPollTimer);
       document.getElementById("export-start-btn").disabled = false;
+      setExportControlsDisabled(false); // both branches: an errored job must not leave the form dead
       if (job.status === "done") {
         const total = job.summary ? job.summary.total_exported : "?";
         document.getElementById("export-progress-label").textContent = `done — ${total} images exported`;
