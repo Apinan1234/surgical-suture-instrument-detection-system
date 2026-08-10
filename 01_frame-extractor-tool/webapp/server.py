@@ -112,7 +112,6 @@ def save_state():
     with _save_io_lock:
         if seq < _last_written_seq:
             return  # a newer payload already reached disk; writing ours would roll it back
-        _last_written_seq = seq
 
         if STATE_PATH.exists():
             shutil.copy(STATE_PATH, STATE_BAK_PATH)
@@ -120,6 +119,10 @@ def save_state():
         with open(STATE_TMP_PATH, "w", encoding="utf-8") as f:
             f.write(payload)
         os.replace(STATE_TMP_PATH, STATE_PATH)
+        # Advanced only once the payload is actually on disk. Stamping it before the write means a
+        # failed write (full disk, unwritable backups dir) still marks this generation as written, so
+        # a queued older-but-complete payload gets skipped as "superseded" and nothing lands at all.
+        _last_written_seq = seq
 
         now = time.time()
         if now - _last_snapshot_time >= SNAPSHOT_INTERVAL_SEC:
@@ -969,6 +972,13 @@ def replace_frame_detections_bulk(body: BulkDetectionsBody):
         for frame_id, dets, _rev in prepared:
             record = _state["frames"][frame_id]
             record["detections"] = dets
+            # Same rule as _run_detect_job: unconfirmed machine output must not inherit the frame's
+            # prior review status. The frontend already keeps reviewed frames out of an interpolated
+            # span, but this route is reachable on its own — and a frame left `reviewed` while holding
+            # machine boxes is worse than it looks, because hydrate() only dashes them when the frame
+            # is unreviewed, so they would never be presented for review at all.
+            if record.get("reviewed") and any(d.get("source") in ("model", "interpolated") for d in dets):
+                record["reviewed"] = False
             results.append({"frame_id": frame_id, "rev": _bump_rev(record)})
 
     save_state()
