@@ -380,6 +380,41 @@ async function restoreDetectJob() {
   await loadDetectFrames(job.frame_ids);
 }
 
+// Frames extracted elsewhere had no way into this app at all: /api/videos takes videos only. The
+// upload registers a finished extract job, so from here on this folder is indistinguishable from an
+// extracted one - Detect, Annotate, Export and the ZIP button all treat it the same.
+document.getElementById("frames-upload-input").addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const input = e.target;
+  const status = document.getElementById("frames-upload-status");
+  const formData = new FormData();
+  files.forEach((f) => formData.append("files", f));
+
+  input.disabled = true;
+  status.textContent = `Uploading ${files.length} file(s)...`;
+  try {
+    const res = await apiFetch("/api/frames/upload", { method: "POST", body: formData });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      status.textContent = errBody.detail || `Upload failed (HTTP ${res.status})`;
+      return;
+    }
+    const data = await res.json();
+    // Becomes the active workspace, the same way a finished Extract run does.
+    setExtractJobId(data.job_id);
+    lastExtractedFrameIds = data.frame_ids;
+    updateDetectFramesInfo();
+    document.getElementById("download-zip-btn").classList.remove("hidden");
+    status.textContent =
+      `${data.count} frame(s) uploaded and now active. The previous workspace is still saved - ` +
+      "re-run Detect on it to come back to it.";
+  } finally {
+    input.disabled = false;
+    input.value = ""; // let the same folder be picked again after a failure
+  }
+});
+
 function updateDetectFramesInfo() {
   const info = document.getElementById("detect-frames-info");
   const startBtn = document.getElementById("detect-start-btn");

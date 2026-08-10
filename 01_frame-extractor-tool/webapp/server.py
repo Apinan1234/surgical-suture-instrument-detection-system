@@ -558,6 +558,99 @@ class DetectBody(DetectorConfigBody):
 PRETRAINED_MODEL_PREFIXES = ("yolo", "rtdetr")
 
 
+@app.post("/api/frames/upload")
+def upload_frames(files: list[UploadFile] = File(...)):  # plain def: blocking writes belong on the threadpool
+    """Adopt an already-extracted folder of images as a workspace.
+
+    Until now the only way into this app was a video: POST /api/videos takes videos only, and frame
+    records were created solely inside _run_extract_job. Anyone who had extracted frames elsewhere -
+    ezgif, an earlier run, someone else's dataset - had nothing to point the tool at.
+
+    It registers a finished extract job rather than inventing a second kind of workspace, so the ZIP
+    route, Detect's frame source and Annotate's filmstrip keep working unchanged.
+    """
+    job_id = uuid.uuid4().hex
+    job_dir = FRAMES_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+
+    saved: list[tuple[str, Path]] = []
+    request_total = 0
+    used_names: set[str] = set()
+    try:
+        for f in files:
+            # An <input webkitdirectory> sends nested paths in filename. Keep the leaf only: it is
+            # what stops a crafted name escaping job_dir (the traversal class the 2026-08-01 security
+            # review found in the Extract prefix field).
+            safe_name = os.path.basename(f.filename or "")
+            ext = Path(safe_name).suffix.lower()
+            if ext not in IMAGE_EXTS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported file type: {ext or '(none)'} ({safe_name or 'unnamed file'})",
+                )
+
+            # Two subfolders can hold the same leaf name. Collisions must not overwrite each other,
+            # and must not reach the exporter as duplicate filenames either - c1902a8 fixed exactly
+            # that failure, where same-named frames silently dropped out of an export.
+            stem, suffix = Path(safe_name).stem, Path(safe_name).suffix
+            n = 2
+            while safe_name in used_names:
+                safe_name = f"{stem}_{n}{suffix}"
+                n += 1
+            used_names.add(safe_name)
+
+            dest_path = job_dir / safe_name
+            size = 0
+            with open(dest_path, "wb") as out:
+                while chunk := f.file.read(1024 * 1024):
+                    size += len(chunk)
+                    request_total += len(chunk)
+                    if size > MAX_UPLOAD_SIZE_BYTES:
+                        raise HTTPException(status_code=413, detail=f"File too large: {safe_name}")
+                    # Bounds this request, where the video route's identical constant bounds total
+                    # stored video. Frames have no per-file size in state, and extracted frames are
+                    # generated locally rather than uploaded, so there is no running total to add to.
+                    if request_total > MAX_TOTAL_UPLOAD_BYTES:
+                        raise HTTPException(status_code=413, detail="Total upload size exceeded")
+                    out.write(chunk)
+            saved.append((safe_name, dest_path))
+
+        if not saved:
+            raise HTTPException(status_code=400, detail="No images in the upload")
+    except HTTPException:
+        # All or nothing: a half-imported folder would look complete in the filmstrip and quietly
+        # train on whatever happened to arrive before the error.
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise
+
+    frame_ids: list[str] = []
+    with _state_lock:
+        for name, path in saved:
+            frame_id = uuid.uuid4().hex
+            # Same key set an extracted frame gets (see _run_extract_job); video_id is None because
+            # there is no source video, not because the field is optional.
+            _state["frames"][frame_id] = {
+                "id": frame_id,
+                "video_id": None,
+                "job_id": job_id,
+                "path": str(path),
+                "filename": name,
+                "reviewed": False,
+                "rev": 0,
+            }
+            frame_ids.append(frame_id)
+        _state["extract_jobs"][job_id] = {
+            "id": job_id,
+            "status": "done",  # nothing to run - these frames arrived finished
+            "progress": 100,
+            "log": [f"[saved] {len(frame_ids)} frame(s) uploaded"],
+            "frame_ids": frame_ids,
+            "saved_total": len(frame_ids),
+        }
+    save_state()
+    return {"job_id": job_id, "frame_ids": frame_ids, "count": len(frame_ids)}
+
+
 def _resolve_model_path(model_path: str) -> str | None:
     """Resolves model_path to an existing file strictly inside TOOL_DIR, or None."""
     p = Path(model_path.strip())
