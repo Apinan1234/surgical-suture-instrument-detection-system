@@ -3362,12 +3362,12 @@ document.querySelectorAll('input[name="export-task"]').forEach((el) => {
 updateExportTaskUI();
 
 // The five Export cards stayed editable while a version was building, so the settings on screen could
-// drift from the ones the running job actually used. The two buttons are exempt: Start is already
-// gated by refreshExportPreview(), and Download has to stay clickable the moment it appears.
+// drift from the ones the running job actually used. Start and Download are <button>s and so fall
+// outside this selector already, which is what we want: Start is gated by refreshExportPreview(), and
+// Download has to stay clickable the moment it appears.
 function setExportControlsDisabled(disabled) {
-  const keep = new Set(["export-start-btn", "export-download-btn"]);
   document.querySelectorAll("#export-section input, #export-section select").forEach((el) => {
-    if (!keep.has(el.id)) el.disabled = disabled;
+    el.disabled = disabled;
   });
   // updateExportTaskUI() owns a disabled rule of its own (the augment inputs are off unless the task
   // is detect), so re-enabling everything blindly would undo it. Let it reassert on the way back.
