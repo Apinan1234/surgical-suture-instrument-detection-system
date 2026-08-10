@@ -12,23 +12,38 @@ async function apiFetch(path, opts) {
 // where the cost was a whole run of frames becoming unreachable. Extract and Export paid the same
 // price more quietly, in two download buttons that vanished on refresh. One helper, three uses.
 function makeJobPointer(storageKey, statusPath) {
+  // Stored as {id, at}. The timestamp is what lets the restores agree on which workspace is the
+  // current one without depending on the order they happen to finish in - see activeFramesSetAt.
+  // A bare string is what earlier versions wrote, and is still read.
+  function read() {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && parsed.id) return { id: parsed.id, at: parsed.at || 0 };
+    } catch (e) {
+      /* pre-{id,at} value */
+    }
+    return { id: raw, at: 0 };
+  }
+
   return {
     set(id) {
-      if (id) localStorage.setItem(storageKey, id);
+      if (id) localStorage.setItem(storageKey, JSON.stringify({ id: id, at: Date.now() }));
       else localStorage.removeItem(storageKey);
     },
     // The persisted id together with the server's current record for it, or null. A pointer the
     // server no longer knows (state.json reset, or a different data dir) is dropped quietly rather
     // than reported: from the user's side it is simply a job that is not there any more.
     async restore() {
-      const id = localStorage.getItem(storageKey);
-      if (!id) return null;
-      const res = await apiFetch(statusPath + "/" + id);
+      const pointer = read();
+      if (!pointer) return null;
+      const res = await apiFetch(statusPath + "/" + pointer.id);
       if (!res.ok) {
         localStorage.removeItem(storageKey);
         return null;
       }
-      return { id: id, job: await res.json() };
+      return { id: pointer.id, at: pointer.at, job: await res.json() };
     },
   };
 }
@@ -205,6 +220,18 @@ document.querySelectorAll('input[name="mode"]').forEach((radio) => {
 });
 updateModeDependentFields();
 
+// Extract and Detect both want to be the source of frames for the next run, and after a folder
+// upload the newer of the two is Extract - so recency decides, not call order. -1 means unclaimed.
+let activeFramesSetAt = -1;
+
+function claimActiveFrames(frameIds, at) {
+  if (at < activeFramesSetAt) return false;
+  activeFramesSetAt = at;
+  lastExtractedFrameIds = frameIds || [];
+  updateDetectFramesInfo();
+  return true;
+}
+
 let currentExtractJobId = null;
 const extractJobPointer = makeJobPointer("extract_job_id", "/api/extract");
 
@@ -328,8 +355,7 @@ async function restoreExtractJob() {
   document.getElementById("extract-progress-label").textContent =
     job.status + " - " + job.saved_total + " frames saved";
   document.getElementById("download-zip-btn").classList.toggle("hidden", job.saved_total === 0);
-  lastExtractedFrameIds = job.frame_ids || [];
-  updateDetectFramesInfo();
+  claimActiveFrames(job.frame_ids, restored.at);
 }
 
 // ────────────────────────────── F-4: Detect section ──────────────────────────────
@@ -364,8 +390,8 @@ async function restoreDetectJob() {
   currentDetectJobId = id;
   // Re-arm the Detect button with this run's frames: after retraining, re-detecting the same frames
   // with a better model is the natural next step, and skip_reviewed protects what is already done.
-  lastExtractedFrameIds = job.frame_ids;
-  updateDetectFramesInfo();
+  // Unless a newer Extract job exists - an uploaded folder is the workspace the user just chose.
+  claimActiveFrames(job.frame_ids, restored.at);
   document.getElementById("detect-progress-wrap").classList.remove("hidden");
 
   if (job.status === "running") {
@@ -403,12 +429,16 @@ document.getElementById("frames-upload-input").addEventListener("change", async 
     const data = await res.json();
     // Becomes the active workspace, the same way a finished Extract run does.
     setExtractJobId(data.job_id);
-    lastExtractedFrameIds = data.frame_ids;
-    updateDetectFramesInfo();
+    claimActiveFrames(data.frame_ids, Date.now());
     document.getElementById("download-zip-btn").classList.remove("hidden");
     status.textContent =
-      `${data.count} frame(s) uploaded and now active. The previous workspace is still saved - ` +
-      "re-run Detect on it to come back to it.";
+      `${data.count} frame(s) uploaded and now active` +
+      (data.skipped ? ` (${data.skipped} non-image file(s) ignored)` : "") +
+      ". The previous workspace is still saved - re-run Detect on it to come back to it.";
+  } catch (err) {
+    // Without this the status is stuck on "Uploading..." for a dropped connection, which reads as
+    // "still going" when nothing is.
+    status.textContent = `Upload failed: ${err && err.message ? err.message : err}`;
   } finally {
     input.disabled = false;
     input.value = ""; // let the same folder be picked again after a failure
@@ -617,7 +647,10 @@ document.getElementById("model-upload-input").addEventListener("change", async (
   if (res.ok) {
     const data = await res.json();
     await refreshModelOptions();
-    document.getElementById("model-path").value = data.uploaded;
+    // Through ModelState, not straight into the input: the input is a view, and the next notify()
+  // would otherwise rewrite it from the unchanged stored path - reverting the model just
+  // uploaded, while the chip claimed the old one was ready.
+  ModelState.setPath(data.uploaded);
   } else {
     const body = await res.json().catch(() => ({}));
     alert(body.detail || "Upload failed");
@@ -2911,10 +2944,36 @@ function updateConfirmRangeButton() {
 // Bulk review of a filtered range. The scope is the filter, never the whole workspace: this
 // workspace is 2,726 frames, and "confirm everything" is not a button anyone should be one click
 // away from.
+// True when the canvas holds something the server has not been told about. Both sides go through
+// toWireDetection so the comparison is of saved shapes only, ignoring client-only fields and key
+// order.
+function openFrameHasUnsavedEdits() {
+  const frame = AnnotateState.currentFrame();
+  if (!frame) return false;
+  const onCanvas = AnnotateState.getBoxes().map(toWireDetection);
+  const stored = (frame.detections || []).map(toWireDetection);
+  return JSON.stringify(onCanvas) !== JSON.stringify(stored);
+}
+
 async function confirmShownFrames() {
   const shown = Filmstrip.getShownFrames();
-  const unreviewed = shown.filter((f) => !f.reviewed);
+  let unreviewed = shown.filter((f) => !f.reviewed);
   if (!unreviewed.length) return;
+
+  // The open frame is in the list like any other, and confirming it would accept what the SERVER
+  // still holds - so deleting a false positive and then confirming the range would ship the very box
+  // that was just rejected, with a tick beside it and no way to tell. Leave it out and say so.
+  const open = AnnotateState.currentFrame();
+  const openSkipped = open && openFrameHasUnsavedEdits() && unreviewed.some((f) => f.id === open.id);
+  if (openSkipped) unreviewed = unreviewed.filter((f) => f.id !== open.id);
+  if (!unreviewed.length) {
+    alert(
+      "Only the frame you have open is left to confirm, and it has unsaved edits." +
+        "\n\n" +
+        "Save it first (Enter), then confirm the range."
+    );
+    return;
+  }
   const boxCount = unreviewed.reduce((n, f) => n + (f.detections || []).length, 0);
 
   // Same guard style as confirmRoboflowCall(): a plain confirm(), no dependency, and the numbers
@@ -2925,7 +2984,11 @@ async function confirmShownFrames() {
       `Every unconfirmed box on those frames becomes accepted training data, mistakes included. ` +
       `needle is by far the weakest class on the current model, so its false positives are what ` +
       `a careless confirm ships into the next training round.\n\n` +
-      `Scope: only the ${shown.length} frame(s) this filter is showing.`
+      `Scope: only the ${shown.length} frame(s) this filter is showing.` +
+      (openSkipped
+        ? `\n\nLeaving out the frame you have open: it has unsaved edits, so confirming it would accept ` +
+          `the version still on the server. Save it (Enter) and confirm again to include it.`
+        : "")
   );
   if (!ok) return;
 
@@ -3786,8 +3849,11 @@ refreshVideoList();
 refreshModelOptions();
 refreshClasses();
 updateDetectFramesInfo();
-// Sequenced rather than fired together: restoreExtractJob and restoreDetectJob both write
-// lastExtractedFrameIds, and Detect has to win - its run is the one Annotate and Export hang off.
-// Last of all, because they await: the calls above get their requests out first.
-restoreExtractJob().then(restoreDetectJob);
-restoreExportJob();
+// Independent, and each failure contained: claimActiveFrames settles which workspace wins by
+// recency, so these no longer depend on the order they finish in. Chaining them meant a rejection in
+// the first silently skipped the second - and the second is the one that exists to stop a whole
+// Detect run being stranded (04ba847). Last of all, because they await: the calls above get their
+// requests out first.
+restoreExtractJob().catch((e) => console.warn("Extract job restore failed:", e));
+restoreDetectJob().catch((e) => console.warn("Detect job restore failed:", e));
+restoreExportJob().catch((e) => console.warn("Export job restore failed:", e));

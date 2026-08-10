@@ -20,6 +20,7 @@ import cv2
 import pytesseract
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
@@ -47,6 +48,9 @@ MAX_BULK_FRAMES = int(os.environ.get("MAX_BULK_FRAMES", "500"))
 # bounds a list of ids. Confirming a whole unfiltered workspace has to stay possible - this one is
 # 2,726 frames and growing.
 MAX_BULK_REVIEW_FRAMES = int(os.environ.get("MAX_BULK_REVIEW_FRAMES", "20000"))
+# Starlette caps a multipart body at 1000 files and FastAPI never raises that cap, so a folder of
+# extracted frames - this workspace alone is 2,726 - was refused before the handler even ran.
+MAX_UPLOAD_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "20000"))
 
 VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
@@ -97,6 +101,17 @@ def load_state():
     for key in ("videos", "extract_jobs", "frames", "detect_jobs", "export_jobs", "ocr_jobs"):
         _state.setdefault(key, {})
     _state.setdefault("assist_log", [])
+    # Jobs are threads, so none of them survive the process. A status left at "running" by a
+    # restart or a crash is therefore a lie, and one that costs something now that the client
+    # persists job ids: restoring such a job disables Start and polls a job nothing will ever
+    # finish, with no way out from the UI. Retire them here, where the fact is known.
+    for key in ("extract_jobs", "detect_jobs", "export_jobs", "ocr_jobs"):
+        for job in _state[key].values():
+            if job.get("status") == "running":
+                job["status"] = "error"
+                job["error"] = "Interrupted by a server restart"
+                if isinstance(job.get("log"), list):
+                    job["log"].append("[error] Interrupted by a server restart")
     # Frames written before optimistic locking existed carry no "rev". Backfilling here makes
     # "every frame record has an int rev" true immediately after load, so no read path needs a default.
     for record in _state["frames"].values():
@@ -559,35 +574,55 @@ PRETRAINED_MODEL_PREFIXES = ("yolo", "rtdetr")
 
 
 @app.post("/api/frames/upload")
-def upload_frames(files: list[UploadFile] = File(...)):  # plain def: blocking writes belong on the threadpool
+async def upload_frames(request: Request):
     """Adopt an already-extracted folder of images as a workspace.
 
     Until now the only way into this app was a video: POST /api/videos takes videos only, and frame
     records were created solely inside _run_extract_job. Anyone who had extracted frames elsewhere -
     ezgif, an earlier run, someone else's dataset - had nothing to point the tool at.
 
-    It registers a finished extract job rather than inventing a second kind of workspace, so the ZIP
-    route, Detect's frame source and Annotate's filmstrip keep working unchanged.
+    The multipart body is parsed by hand rather than through File(...) for one reason: Starlette
+    accepts at most 1000 files per request by default and FastAPI gives no way to raise that, so a
+    real folder of frames was rejected before this function was ever entered. The blocking half -
+    writing the files - then runs on the threadpool, which is where an async route must put it.
     """
+    try:
+        form = await request.form(max_files=MAX_UPLOAD_FILES, max_fields=MAX_UPLOAD_FILES)
+    except Exception as e:  # starlette raises MultiPartException on a malformed or over-cap body
+        raise HTTPException(status_code=400, detail=f"Could not read the upload: {e}")
+
+    # Form values are starlette UploadFiles, not FastAPI's subclass of it, so this asks "not a plain
+    # text field" rather than testing for a class.
+    uploads = [v for v in form.getlist("files") if not isinstance(v, str)]
+    if not uploads:
+        raise HTTPException(status_code=400, detail="No files in the upload")
+    return await run_in_threadpool(_import_uploaded_frames, uploads)
+
+
+def _import_uploaded_frames(uploads: list) -> dict:
+    """Write uploaded images into a new job dir and register them. Blocking; threadpool only."""
     job_id = uuid.uuid4().hex
     job_dir = FRAMES_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
     saved: list[tuple[str, Path]] = []
+    skipped: list[str] = []
     request_total = 0
     used_names: set[str] = set()
     try:
-        for f in files:
-            # An <input webkitdirectory> sends nested paths in filename. Keep the leaf only: it is
-            # what stops a crafted name escaping job_dir (the traversal class the 2026-08-01 security
-            # review found in the Extract prefix field).
+        for f in uploads:
+            # An <input webkitdirectory> hands over the whole directory, so the leaf name is where a
+            # crafted path would hide - keep the leaf only (the traversal shape the 2026-08-01
+            # security review found in the Extract prefix field).
             safe_name = os.path.basename(f.filename or "")
             ext = Path(safe_name).suffix.lower()
             if ext not in IMAGE_EXTS:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unsupported file type: {ext or '(none)'} ({safe_name or 'unnamed file'})",
-                )
+                # Skipped, not rejected. Every frames folder this tool produces holds an
+                # extraction_log.json, and real folders carry .DS_Store / Thumbs.db / desktop.ini
+                # besides; failing the whole import on those would break the one case this route
+                # exists for.
+                skipped.append(safe_name or "unnamed file")
+                continue
 
             # Two subfolders can hold the same leaf name. Collisions must not overwrite each other,
             # and must not reach the exporter as duplicate filenames either - c1902a8 fixed exactly
@@ -608,7 +643,7 @@ def upload_frames(files: list[UploadFile] = File(...)):  # plain def: blocking w
                     if size > MAX_UPLOAD_SIZE_BYTES:
                         raise HTTPException(status_code=413, detail=f"File too large: {safe_name}")
                     # Bounds this request, where the video route's identical constant bounds total
-                    # stored video. Frames have no per-file size in state, and extracted frames are
+                    # stored video. Frames carry no per-file size in state, and extracted frames are
                     # generated locally rather than uploaded, so there is no running total to add to.
                     if request_total > MAX_TOTAL_UPLOAD_BYTES:
                         raise HTTPException(status_code=413, detail="Total upload size exceeded")
@@ -616,10 +651,14 @@ def upload_frames(files: list[UploadFile] = File(...)):  # plain def: blocking w
             saved.append((safe_name, dest_path))
 
         if not saved:
-            raise HTTPException(status_code=400, detail="No images in the upload")
-    except HTTPException:
-        # All or nothing: a half-imported folder would look complete in the filmstrip and quietly
-        # train on whatever happened to arrive before the error.
+            detail = "No images in the upload"
+            if skipped:
+                detail += f" ({len(skipped)} non-image file(s) ignored, e.g. {skipped[0]})"
+            raise HTTPException(status_code=400, detail=detail)
+    except BaseException:
+        # Any failure, not only an HTTPException: a full disk or a client disconnect would otherwise
+        # leave a half-imported folder that looks complete in the filmstrip and quietly becomes
+        # training data.
         shutil.rmtree(job_dir, ignore_errors=True)
         raise
 
@@ -643,12 +682,18 @@ def upload_frames(files: list[UploadFile] = File(...)):  # plain def: blocking w
             "id": job_id,
             "status": "done",  # nothing to run - these frames arrived finished
             "progress": 100,
-            "log": [f"[saved] {len(frame_ids)} frame(s) uploaded"],
+            "log": [f"[saved] {len(frame_ids)} frame(s) uploaded"]
+            + ([f"[skip] {len(skipped)} non-image file(s) ignored"] if skipped else []),
             "frame_ids": frame_ids,
             "saved_total": len(frame_ids),
         }
     save_state()
-    return {"job_id": job_id, "frame_ids": frame_ids, "count": len(frame_ids)}
+    return {
+        "job_id": job_id,
+        "frame_ids": frame_ids,
+        "count": len(frame_ids),
+        "skipped": len(skipped),
+    }
 
 
 def _resolve_model_path(model_path: str) -> str | None:
