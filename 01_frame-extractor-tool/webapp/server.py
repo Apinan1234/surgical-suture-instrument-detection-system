@@ -1333,6 +1333,39 @@ def upload_model(file: UploadFile = File(...)):  # plain def: blocking writes be
     return {"uploaded": relative_path, "models": _scan_models()}
 
 
+@app.post("/api/models/load")
+def load_model(body: DetectorConfigBody):  # plain def: build_detector blocks, and belongs on the threadpool
+    """Build the detector the next Detect or Assist call will use, and report what it turned out to be.
+
+    Without this there is no way to find out whether a model path is usable except to start a real
+    job and wait for it to fail, which on this workspace is minutes. It deliberately goes through
+    _get_cached_detector rather than build_detector: validating the path is only half the point, the
+    other half is leaving the cache warm for the call that follows.
+
+    Note what the answer does and does not mean. The cache holds ONE detector, keyed on the whole
+    parameter tuple including class_conf, so a later request with different thresholds rebuilds it.
+    A success here means "this model loads and these are its classes", never "pinned in memory".
+    """
+    try:
+        _validate_detect_backend(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        det = _get_cached_detector(body)
+    except Exception as e:  # torch.load / ultralytics raise a wide range on a corrupt or wrong-type file
+        raise HTTPException(status_code=400, detail=f"Could not load model: {e}")
+
+    return {
+        "backend": body.backend,
+        "model_path": body.model_path.strip() if body.backend == "local" else None,
+        "class_names": list(getattr(det, "class_names", [])),
+        # Only ultralytics models carry a task; a Roboflow workflow has none, hence None rather than
+        # a guess. This is what tells the user a segment checkpoint was loaded for a detect job.
+        "task": getattr(getattr(det, "model", None), "task", None),
+    }
+
+
 @app.get("/api/classes")
 def list_classes():
     return {"class_names": CLASS_NAMES, "class_colors": CLASS_COLORS_HEX}

@@ -399,6 +399,65 @@ const MODEL_PICKERS = [
   ["assist-model-select", "assist-model-path"],
 ];
 
+// One status chip per picker. Both show the same thing; they are on different tabs.
+const MODEL_STATUS_CHIPS = ["model-status", "assist-model-status"];
+
+// ── ModelState ──
+//
+// Detect and Label Assist each kept their own model path. That was deliberate at first - Assist
+// existed to try a different model against an already-detected frame - but in use it meant picking a
+// model on Detect left Assist still pointing at yolo11n.pt, and the two panels read as unrelated
+// tools. The user asked for one model for the whole app, so there is now a single value and both
+// pickers are views onto it.
+const ModelState = (() => {
+  const KEY = "active_model_path";
+  const subscribers = [];
+  // The markup ships a default in the text inputs; adopt it rather than blanking the field on a
+  // first visit.
+  let path = localStorage.getItem(KEY) || document.getElementById("model-path").value || "yolo11n.pt";
+  let status = { state: "unknown", text: "Not loaded yet" };
+
+  function notify() {
+    subscribers.forEach((fn) => fn(path, status));
+  }
+
+  return {
+    getPath: () => path,
+    setPath(next) {
+      if (next === path) return;
+      path = next;
+      localStorage.setItem(KEY, path);
+      // Whatever the chip said was about the previous model; it says nothing about this one.
+      status = { state: "unknown", text: "Not loaded yet" };
+      notify();
+    },
+    setStatus(state, text) {
+      status = { state: state, text: text };
+      notify();
+    },
+    subscribe(fn) {
+      subscribers.push(fn);
+      fn(path, status);
+    },
+  };
+})();
+
+ModelState.subscribe((path, status) => {
+  MODEL_PICKERS.forEach(([selectId, inputId]) => {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    // Guarded: assigning .value to the box being typed in would move the caret to the end.
+    if (input.value !== path) input.value = path;
+    syncModelSelect(selectId, inputId);
+  });
+  MODEL_STATUS_CHIPS.forEach((id) => {
+    const chip = document.getElementById(id);
+    if (!chip) return;
+    chip.textContent = status.text;
+    chip.classList.toggle("chip-warn", status.state === "error");
+  });
+});
+
 async function refreshModelOptions() {
   const res = await apiFetch("/api/models");
   if (!res.ok) return;
@@ -446,10 +505,71 @@ function syncModelSelect(selectId, inputId) {
 
 MODEL_PICKERS.forEach(([selectId, inputId]) => {
   document.getElementById(selectId).addEventListener("change", (e) => {
-    if (e.target.value) document.getElementById(inputId).value = e.target.value;
+    if (e.target.value) ModelState.setPath(e.target.value);
   });
-  document.getElementById(inputId).addEventListener("input", () => syncModelSelect(selectId, inputId));
+  document.getElementById(inputId).addEventListener("input", (e) => ModelState.setPath(e.target.value));
 });
+
+function describeClasses(names) {
+  if (!names.length) return "no class names reported";
+  const shown = names.slice(0, 5).join(", ");
+  return names.length > 5
+    ? `${names.length} classes: ${shown}, +${names.length - 5} more`
+    : `${names.length} classes: ${shown}`;
+}
+
+// Until now the only way to find out whether a model path was usable was to start a real job and
+// wait for it to fail - minutes, on a workspace this size. This asks the server to build the very
+// detector the next call will use and reports what came back.
+async function loadModelFrom(panel) {
+  const isDetect = panel === "detect";
+  const pick = (a, b) => document.getElementById(isDetect ? a : b);
+  const backend = document.querySelector(
+    `input[name="${isDetect ? "detect-backend" : "assist-backend"}"]:checked`
+  ).value;
+
+  const body = { backend: backend, model_path: ModelState.getPath() };
+  const classConf = readClassConf(isDetect ? "detect-class-conf" : "assist-class-conf");
+  if (Object.keys(classConf).length) body.class_conf = classConf;
+  if (isDetect) {
+    // Assist has no conf/iou/device controls, so from that panel the server's defaults are the
+    // honest thing to send - they are what an Assist call would use.
+    body.conf = parseFloat(document.getElementById("detect-conf").value);
+    body.iou = parseFloat(document.getElementById("detect-iou").value);
+    body.device = document.querySelector('input[name="device"]:checked').value;
+  }
+  if (backend === "roboflow") {
+    const apiKey = pick("rf-api-key", "assist-rf-api-key").value.trim();
+    if (!apiKey) {
+      alert("Please enter a Roboflow API Key first");
+      return;
+    }
+    // No confirmRoboflowCall() here: constructing RoboflowDetector only builds an HTTP client, it
+    // runs no inference and spends no credits. The guard stays on the calls that actually predict.
+    body.api_key = apiKey;
+    body.workspace_name = pick("rf-workspace", "assist-rf-workspace").value.trim();
+    body.workflow_id = pick("rf-workflow-id", "assist-rf-workflow-id").value.trim();
+  }
+
+  ModelState.setStatus("loading", "Loading...");
+  const res = await apiFetch("/api/models/load", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    ModelState.setStatus("error", errBody.detail || `Failed to load (HTTP ${res.status})`);
+    return;
+  }
+  const data = await res.json();
+  const label = backend === "roboflow" ? body.workflow_id : data.model_path;
+  const task = data.task ? data.task + ", " : "";
+  ModelState.setStatus("ready", `✓ Ready — ${label} (${task}${describeClasses(data.class_names || [])})`);
+}
+
+document.getElementById("model-load-btn").addEventListener("click", () => loadModelFrom("detect"));
+document.getElementById("assist-model-load-btn").addEventListener("click", () => loadModelFrom("assist"));
 
 document.getElementById("model-upload-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
