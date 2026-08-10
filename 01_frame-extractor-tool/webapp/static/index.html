@@ -166,8 +166,10 @@
       </div>
 
       <div id="local-fields">
-        <label for="model-path">Model</label>
-        <input class="input" type="text" id="model-path" list="model-datalist" value="yolo11n.pt" />
+        <label for="model-select">Model</label>
+        <select class="input" id="model-select"></select>
+        <input class="input" type="text" id="model-path" list="model-datalist" value="yolo11n.pt"
+               style="margin-top:6px;" aria-label="Model path" />
         <datalist id="model-datalist"></datalist>
 
         <label for="model-upload-input">Upload trained model (.pt)</label>
@@ -332,8 +334,10 @@
         </div>
 
         <div id="assist-local-fields">
-          <label for="assist-model-path">Model</label>
-          <input class="input" type="text" id="assist-model-path" list="model-datalist" value="yolo11n.pt" />
+          <label for="assist-model-select">Model</label>
+          <select class="input" id="assist-model-select"></select>
+          <input class="input" type="text" id="assist-model-path" list="model-datalist" value="yolo11n.pt"
+                 style="margin-top:6px;" aria-label="Model path" />
         </div>
 
         <div id="assist-roboflow-fields" class="hidden">

@@ -303,6 +303,13 @@ function updateDetectFramesInfo() {
   }
 }
 
+// Each pair is [<select> that lists what the server has, text input holding the path actually sent].
+// The text input stays authoritative: a path can be typed for a model the scan does not know about.
+const MODEL_PICKERS = [
+  ["model-select", "model-path"],
+  ["assist-model-select", "assist-model-path"],
+];
+
 async function refreshModelOptions() {
   const res = await apiFetch("/api/models");
   if (!res.ok) return;
@@ -314,7 +321,46 @@ async function refreshModelOptions() {
     opt.value = name;
     list.appendChild(opt);
   });
+
+  // A datalist on its own is not a picker. Chrome filters its suggestions against whatever is
+  // already in the text box, and both boxes ship pre-filled with yolo11n.pt, so the list of models
+  // on the server was effectively invisible - users went looking for an upload button and
+  // re-uploaded a model the server already had.
+  MODEL_PICKERS.forEach(([selectId, inputId]) => {
+    const select = document.getElementById(selectId);
+    const input = document.getElementById(inputId);
+    if (!select || !input) return;
+    select.innerHTML = "";
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = data.models.length ? "Pick a model on the server..." : "No models found";
+    select.appendChild(placeholder);
+    data.models.forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    });
+    syncModelSelect(selectId, inputId);
+  });
 }
+
+// Never let the dropdown claim a model the request will not actually use: it shows the placeholder
+// whenever the typed path is not one of the scanned ones.
+function syncModelSelect(selectId, inputId) {
+  const select = document.getElementById(selectId);
+  const input = document.getElementById(inputId);
+  if (!select || !input) return;
+  const match = Array.from(select.options).some((o) => o.value === input.value);
+  select.value = match ? input.value : "";
+}
+
+MODEL_PICKERS.forEach(([selectId, inputId]) => {
+  document.getElementById(selectId).addEventListener("change", (e) => {
+    if (e.target.value) document.getElementById(inputId).value = e.target.value;
+  });
+  document.getElementById(inputId).addEventListener("input", () => syncModelSelect(selectId, inputId));
+});
 
 document.getElementById("model-upload-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
