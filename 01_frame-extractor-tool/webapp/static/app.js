@@ -1123,6 +1123,13 @@ const AnnotateState = (() => {
     if (frames[idx]) frames[idx].ocr_text = text;
   }
 
+  // Repaint every subscriber without touching `boxes` or the undo stack. selectFrame() is the usual
+  // way to force a repaint, but it re-hydrates the canvas from the frame's last SERVER-saved
+  // detections — which silently discards unsaved edits when the frame is already the current one.
+  function repaint() {
+    emit();
+  }
+
   return {
     subscribe, init, selectFrame, currentFrame, getBoxes, setBoxes, addBoxes,
     selectBox, selectBoxes, getSelected, isSelected, getSelectedIds, getSelectedCount,
@@ -1130,6 +1137,7 @@ const AnnotateState = (() => {
     setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
     findNextUnreviewedIndex, markReviewedLocal, setFrameDetections, setFrameRev, setFrameOcrText,
+    repaint,
   };
 })();
 
@@ -2690,13 +2698,18 @@ const Interpolate = (() => {
 
     const { results } = await res.json();
     const revByFrameId = new Map(results.map((r) => [r.frame_id, r.rev]));
+    // Indices are re-resolved against the CURRENT frame list, not the `frames` captured before the
+    // await: a Detect job finishing mid-write runs initAnnotateFrames, which swaps the array out from
+    // under us. An index from the old array would graft these detections onto an unrelated frame.
+    const liveFrames = AnnotateState.getFrames();
     items.forEach((item) => {
-      const idx = frames.findIndex((f) => f.id === item.frame_id);
+      const idx = liveFrames.findIndex((f) => f.id === item.frame_id);
       if (idx >= 0) AnnotateState.setFrameDetections(idx, item.detections, revByFrameId.get(item.frame_id));
     });
-    // Re-selecting the current frame is what repaints the filmstrip badges and the canvas from the
-    // now-updated records. Safe here: the end keyframe's own boxes were not touched by this write.
-    AnnotateState.selectFrame(endIdx);
+    // Repaint, do NOT re-select: the end keyframe is the current frame, and its boxes may be unsaved
+    // work this very run interpolated FROM (endBoxes comes off the live canvas). selectFrame() would
+    // re-hydrate them from the server record and reset the undo stack, throwing that work away.
+    AnnotateState.repaint();
     alert(`Filled ${targets.length} frame(s) with ${pairs.length} interpolated instance(s) each.`);
   }
 
@@ -2754,8 +2767,12 @@ async function saveCurrentFrame() {
       AnnotateState.markReviewedLocal(!!conflict.reviewed);
       AnnotateState.selectFrame(idx); // re-hydrates the canvas from the now-updated record
     } else {
-      // Adopt their rev so the next Save is a deliberate overwrite rather than a second 409.
-      AnnotateState.setFrameRev(idx, conflict.current_rev);
+      // Adopt their rev so the next Save is a deliberate overwrite rather than a second 409, and
+      // store MY boxes as this record's detections. Adopting the rev alone left the record holding
+      // the pre-conflict snapshot, so any navigation (which re-hydrates from the record) replaced the
+      // edits this branch just promised to keep — and the next Save then passed the rev check and
+      // overwrote their work with content neither side authored.
+      AnnotateState.setFrameDetections(idx, cleanBoxes, conflict.current_rev);
     }
     return false;
   }
