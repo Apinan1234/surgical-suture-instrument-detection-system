@@ -2,3 +2,11 @@
 **/__pycache__/
 *.pyc
 03_dataset/
+
+# Raw source footage. Same policy as 03_dataset/ above: large binary inputs that
+# get fed to the tool, not code. The landing page's own background video was
+# committed before this rule and stays tracked — gitignore does not untrack it.
+*.mp4
+*.mov
+*.avi
+*.mkv
