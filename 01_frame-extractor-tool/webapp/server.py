@@ -43,6 +43,10 @@ MAX_FRAMES_ALL_MODE = int(os.environ.get("MAX_FRAMES_ALL_MODE", "20000"))
 # Upper bound on one bulk detections write, i.e. on how long an interpolated span may be. The whole
 # batch is applied under a single _state_lock, so this is really a cap on how long that lock is held.
 MAX_BULK_FRAMES = int(os.environ.get("MAX_BULK_FRAMES", "500"))
+# Its own cap, deliberately far higher: MAX_BULK_FRAMES bounds a payload of box arrays, this one
+# bounds a list of ids. Confirming a whole unfiltered workspace has to stay possible - this one is
+# 2,726 frames and growing.
+MAX_BULK_REVIEW_FRAMES = int(os.environ.get("MAX_BULK_REVIEW_FRAMES", "20000"))
 
 VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
@@ -1017,6 +1021,55 @@ def mark_frame_reviewed(frame_id: str, body: ReviewBody = ReviewBody()):
         reviewed = record["reviewed"]
     save_state()
     return {"frame_id": frame_id, "reviewed": reviewed}
+
+
+class BulkReviewBody(BaseModel):
+    frame_ids: list[str]
+    reviewed: bool = True
+
+
+# Path shape matches /api/frames/detections/bulk and for the same reason: "/api/frames/bulk/review"
+# would be swallowed by the route above with frame_id="bulk".
+@app.post("/api/frames/review/bulk")
+def review_frames_bulk(body: BulkReviewBody):
+    """Flip `reviewed` on many frames as one write.
+
+    Reviewing frame by frame means one save_state() - a full serialisation of every frame in the app
+    - per frame, which is why confirming a filtered range was not something the UI could offer.
+
+    Deliberately does NOT bump `rev`: the single-frame route documents review as disjoint from
+    detections, and if this one bumped it every bulk confirm would invalidate every open editor's
+    optimistic-locking token for no reason.
+
+    The two guards below raise HTTPException rather than living in a validator, because the client
+    puts `detail` straight into an alert and a pydantic 422 body is a list of objects there.
+    """
+    if not body.frame_ids:
+        raise HTTPException(status_code=400, detail="frame_ids must not be empty")
+    # Order-preserving dedupe: the same id twice is harmless here (unlike the detections route, where
+    # each entry carries data), but it would inflate the count reported back.
+    frame_ids = list(dict.fromkeys(body.frame_ids))
+    if len(frame_ids) > MAX_BULK_REVIEW_FRAMES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"At most {MAX_BULK_REVIEW_FRAMES} frames per bulk review (got {len(frame_ids)})",
+        )
+
+    with _state_lock:
+        # Pass 1 decides, pass 2 mutates - same all-or-nothing shape as the bulk detections route, so
+        # a rejected call leaves nothing half-applied.
+        unknown = [fid for fid in frame_ids if fid not in _state["frames"]]
+        if unknown:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No frames were changed. Unknown frame id(s): {', '.join(unknown[:5])}"
+                + (f" and {len(unknown) - 5} more" if len(unknown) > 5 else ""),
+            )
+        for fid in frame_ids:
+            _state["frames"][fid]["reviewed"] = body.reviewed
+
+    save_state()
+    return {"updated": len(frame_ids), "reviewed": body.reviewed}
 
 
 @app.get("/api/frames/{frame_id}/image.jpg")

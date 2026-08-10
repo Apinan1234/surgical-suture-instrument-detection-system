@@ -1163,6 +1163,13 @@ const Api = {
       body: JSON.stringify({ reviewed: reviewed !== false }),
     });
   },
+  postReviewBulk(frameIds, reviewed) {
+    return apiFetch("/api/frames/review/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ frame_ids: frameIds, reviewed: reviewed !== false }),
+    });
+  },
   postAssist(frameId, body) {
     return apiFetch(`/api/frames/${frameId}/assist`, {
       method: "POST",
@@ -1455,6 +1462,31 @@ const AnnotateState = (() => {
     emit();
   }
 
+  // Bulk sibling of markReviewedLocal. The server has already flipped these, so the client agrees
+  // without refetching every frame record. It deliberately does not re-hydrate from
+  // frame.detections: the open frame may hold unsaved edits, and throwing those away is exactly the
+  // kind of silent data loss this file has been bitten by before. Clearing _pending is enough - it
+  // is what hydrate() would derive for a reviewed frame anyway.
+  function markReviewedManyLocal(ids, v) {
+    const wanted = new Set(ids);
+    frames.forEach((f) => {
+      if (wanted.has(f.id)) f.reviewed = v;
+    });
+    const cur = currentFrame();
+    if (v && cur && wanted.has(cur.id) && boxes.some((b) => b._pending)) {
+      // Stamp `source` on the way out, exactly as saveCurrentFrame does. Dropping _pending without
+      // it would let the next Save recompute provenance from a now-absent flag and record a model
+      // box as hand-drawn.
+      boxes = boxes.map((b) => {
+        if (!b._pending) return b;
+        const confirmed = { ...b, source: b.source || "model" };
+        delete confirmed._pending;
+        return confirmed;
+      });
+    }
+    emit();
+  }
+
   function setFrameDetections(idx, detections, rev) {
     if (!frames[idx]) return;
     frames[idx].detections = detections;
@@ -1484,7 +1516,7 @@ const AnnotateState = (() => {
     reselectIfMissing, deleteBoxesByIds, deleteVertex, setKeypointVisibility, reassignClassByIds, setBoxAttrByIds, deleteSelectedBoxes, reassignSelectedBoxesClass,
     setActiveTool, getActiveTool: () => activeTool,
     getFrames: () => frames, getFrameIdx: () => frameIdx, getPrevFrame,
-    findNextUnreviewedIndex, markReviewedLocal, setFrameDetections, setFrameRev, setFrameOcrText,
+    findNextUnreviewedIndex, markReviewedLocal, markReviewedManyLocal, setFrameDetections, setFrameRev, setFrameOcrText,
     repaint,
   };
 })();
@@ -2709,13 +2741,28 @@ const Filmstrip = (() => {
     builtForLength = -1;
   }
 
-  return { render, forceRebuild };
+  // The confirm-range button acts on exactly the frames the strip is showing, so it asks the strip
+  // instead of re-deriving the predicate - two copies of passesFilter would drift the moment a
+  // filter option is added.
+  function getShownFrames() {
+    const filter = document.getElementById("annotate-filmstrip-filter").value;
+    const query = document.getElementById("annotate-filmstrip-search").value.trim().toLowerCase();
+    return AnnotateState.getFrames().filter((frame) => passesFilter(frame, filter, query));
+  }
+
+  return { render, forceRebuild, getShownFrames };
 })();
 
-document.getElementById("annotate-filmstrip-filter").addEventListener("change", () => Filmstrip.render());
+document.getElementById("annotate-filmstrip-filter").addEventListener("change", () => {
+  Filmstrip.render();
+  updateConfirmRangeButton();
+});
 // Frame count is unchanged while typing, so render() takes the cheap patch() path and never tears
 // down the <img> elements — rebuilding here would re-trigger every S-9 thumbnail fetch on each keystroke.
-document.getElementById("annotate-filmstrip-search").addEventListener("input", () => Filmstrip.render());
+document.getElementById("annotate-filmstrip-search").addEventListener("input", () => {
+  Filmstrip.render();
+  updateConfirmRangeButton();
+});
 
 // ── PropertyPanel: per-box detection list (class dropdown + confidence badge + click-to-highlight) ──
 
@@ -2818,6 +2865,48 @@ function renderDetectionList() {
   });
 }
 
+function updateConfirmRangeButton() {
+  const btn = document.getElementById("annotate-confirm-range-btn");
+  const shown = Filmstrip.getShownFrames();
+  const pending = shown.filter((f) => !f.reviewed).length;
+  btn.textContent = pending ? `Confirm ${pending} shown` : "Nothing to confirm";
+  btn.disabled = pending === 0;
+}
+
+// Bulk review of a filtered range. The scope is the filter, never the whole workspace: this
+// workspace is 2,726 frames, and "confirm everything" is not a button anyone should be one click
+// away from.
+async function confirmShownFrames() {
+  const shown = Filmstrip.getShownFrames();
+  const unreviewed = shown.filter((f) => !f.reviewed);
+  if (!unreviewed.length) return;
+  const boxCount = unreviewed.reduce((n, f) => n + (f.detections || []).length, 0);
+
+  // Same guard style as confirmRoboflowCall(): a plain confirm(), no dependency, and the numbers
+  // that decide the answer are in the text. Confirming is what turns model output into training
+  // data, so its cost is named explicitly.
+  const ok = window.confirm(
+    `Confirm ${unreviewed.length} frame(s) and accept ${boxCount} box(es) as ground truth?\n\n` +
+      `Every unconfirmed box on those frames becomes accepted training data, mistakes included. ` +
+      `needle is by far the weakest class on the current model, so its false positives are what ` +
+      `a careless confirm ships into the next training round.\n\n` +
+      `Scope: only the ${shown.length} frame(s) this filter is showing.`
+  );
+  if (!ok) return;
+
+  const ids = unreviewed.map((f) => f.id);
+  const res = await Api.postReviewBulk(ids, true);
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    alert(errBody.detail || `Bulk confirm failed (HTTP ${res.status})`);
+    return;
+  }
+  AnnotateState.markReviewedManyLocal(ids, true);
+  updateConfirmRangeButton();
+}
+
+document.getElementById("annotate-confirm-range-btn").addEventListener("click", confirmShownFrames);
+
 function updateStatusBar() {
   const frames = AnnotateState.getFrames();
   const idx = AnnotateState.getFrameIdx();
@@ -2892,6 +2981,7 @@ AnnotateState.subscribe(() => {
   Filmstrip.render();
   renderDetectionList();
   updateStatusBar();
+  updateConfirmRangeButton();
   updateAnnotateReviewStatus();
   updateToolButtons();
   updateBulkActionsBar();
