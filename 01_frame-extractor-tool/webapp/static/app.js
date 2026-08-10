@@ -1408,6 +1408,16 @@ const Canvas = (() => {
     e.preventDefault();
     zoomBy(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientX, e.clientY);
   }, { passive: false });
+
+  // The two view controls above are the only interactions a user cannot discover from the "?"
+  // cheat-sheet, because that sheet is generated from Keyboard.SHORTCUTS and neither of these ever
+  // reaches it: Space is consumed before the lookup table, and wheel/drag are not keydowns at all.
+  // Their help text lives here, next to the handlers that implement them, for the same reason the
+  // key labels live in SHORTCUTS — so the documentation cannot drift away from the behavior.
+  const POINTER_HELP = [
+    "Space + drag — Pan the image",
+    "Mouse wheel — Zoom in / out at the cursor",
+  ];
   canvas.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     if (!img) return;
@@ -1445,6 +1455,7 @@ const Canvas = (() => {
 
   return {
     setImage, resize, requestRender, screenToImage, imageToScreen, zoomBy, setSpaceHeld, setCursor,
+    getPointerHelp: () => POINTER_HELP.slice(),
     getCssScale: () => cssScale,
     getImageSize: () => (img ? { w: img.naturalWidth, h: img.naturalHeight } : { w: 0, h: 0 }),
   };
@@ -2172,7 +2183,10 @@ const Keyboard = (() => {
     if (!popover.classList.contains("open")) {
       popover.innerHTML = "";
       const pre = document.createElement("pre");
-      pre.textContent = SHORTCUTS.filter((s) => s.label).map((s) => s.label).join("\n");
+      // Mouse/view controls come from Canvas, which owns them — see its POINTER_HELP comment.
+      pre.textContent = SHORTCUTS.filter((s) => s.label).map((s) => s.label)
+        .concat(Canvas.getPointerHelp())
+        .join("\n");
       popover.appendChild(pre);
     }
     popover.classList.toggle("open");
