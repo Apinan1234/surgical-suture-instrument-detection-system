@@ -16,6 +16,26 @@ Detect / Label Assist model pickers with no further wiring.
 
 ## Baselines
 
+### `ssid_v6i_50ep_20260810_map50-608.pt`  (current best)
+
+Same data and hyperparameters as the 10-epoch baseline below, trained for **50 epochs** to test
+whether that baseline was simply undertrained. It was. Copy of
+`runs/roboflow_train_50ep/train/weights/best.pt`.
+
+| | |
+|---|---|
+| Results (epoch 50) | **mAP50 0.608**, mAP50-95 0.311, precision 0.645, recall 0.598 |
+| Per-class mAP50 | finger 0.857, needle_holder 0.877, forcep 0.736, wound 0.518, **needle 0.114** |
+
+The point of the run was `needle`, which the baseline scored 0.008 on and never once produced on
+real footage. Here it reaches 0.114 (precision 0.000 -> 0.415) and fires on **30 of 40 sampled real
+frames at the ordinary 0.25 threshold**, where the baseline managed 0 of 40. It is still the weakest
+class by a wide margin; needles from this footage are what the next round of annotation is for.
+
+Inference stays at **imgsz 640**. Re-tested on this checkpoint: 1280 drops needle from 34 boxes to 6
+and wound from 50 to 17, 1920 drops needle to 1 -- the model is trained at 640 and anything else is
+off-distribution.
+
 ### `ssid_v6i_20260808_map50-557.pt`
 
 Byte-identical copy (SHA-256 `c96f6e80…e54f95c`) of `runs/roboflow_train/train/weights/best.pt` as
