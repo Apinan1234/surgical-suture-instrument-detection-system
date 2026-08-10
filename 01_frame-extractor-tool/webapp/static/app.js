@@ -95,6 +95,44 @@ function switchTab(name) {
   if (name === "analytics") refreshAnalytics();
 }
 
+// ── Footer step nav ──
+//
+// The tabs are at the top of the page and nowhere else, so reaching the next step after filling in a
+// long form - Extract's especially - meant scrolling all the way back up. The steps are read off the
+// tab buttons rather than listed again here, so their order and their labels cannot drift from the
+// navigation they mirror.
+function stepNavButton(label, target) {
+  const btn = document.createElement("button");
+  btn.className = "btn-download";
+  btn.textContent = label;
+  btn.addEventListener("click", () => {
+    switchTab(target);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  return btn;
+}
+
+function buildStepNav() {
+  const steps = Array.from(document.querySelectorAll(".tabs .tab")).map((btn) => ({
+    name: btn.dataset.tab,
+    label: btn.textContent.trim(),
+  }));
+  steps.forEach((step, i) => {
+    const section = document.getElementById(step.name + "-section");
+    if (!section) return;
+    const nav = document.createElement("div");
+    // space-between with an empty first slot, so a lone Next button still sits on the right.
+    nav.style.cssText = "display:flex; justify-content:space-between; gap:8px; margin-top:24px;";
+    nav.appendChild(
+      i > 0 ? stepNavButton("← " + steps[i - 1].label, steps[i - 1].name) : document.createElement("span")
+    );
+    if (i < steps.length - 1) {
+      nav.appendChild(stepNavButton(steps[i + 1].label + " →", steps[i + 1].name));
+    }
+    section.appendChild(nav);
+  });
+}
+
 document.querySelectorAll(".tab").forEach((btn) => {
   btn.addEventListener("click", () => {
     if (btn.disabled) return;
@@ -3498,6 +3536,7 @@ async function refreshAnalytics() {
 
 // ────────────────────────────── Init ──────────────────────────────
 
+buildStepNav();
 refreshVideoList();
 refreshModelOptions();
 refreshClasses();
