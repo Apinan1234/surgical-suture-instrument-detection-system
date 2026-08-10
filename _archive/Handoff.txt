@@ -1,21 +1,23 @@
 Handoff ล่าสุดอยู่ที่:
 
-C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-realfootage-2026-08-10.md
+C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-needle-2026-08-11.md
 
-เซสชันนี้ทำอะไร: เลือก "เอา interpolation ไปใช้กับงานจริง" แทนการทำฟีเจอร์ใหม่ — เจอว่ามีโมเดลที่เทรน
-จริงอยู่แล้ว (runs/roboflow_train/.../best.pt, mAP50 0.557) แล้วการใช้งานจริงเปิดโปงบั๊กข้อมูลหายเงียบๆ
-2 ตัว แก้และ verify ครบ commit เป็น 04ba847 (รีเฟรชหน้าแล้ว Detect job หายจนเข้าเฟรมไม่ได้อีก),
-c1902a8 (exporter ทับไฟล์ที่ชื่อซ้ำ ทำให้เฟรมที่ annotate แล้วหายตอน export) และ 049642b (gitignore วิดีโอ)
+เซสชันนี้ทำอะไร: ผู้ใช้ขอให้โมเดลวาดกล่อง needle มาให้เองแทนการวาดมือทุกกล่อง — วัดจนเจอว่าเป็นสองสาเหตุ
+ซ้อนกัน ไม่ใช่เรื่องเดียว: (1) checkpoint 10 epochs ได้ mAP50 แค่ 0.008 บน needle ของ val set ตัวเอง
+= เทรนน้อยไป ไม่ใช่ domain gap และ (2) ต่อให้ตรวจเจอ ค่า confidence ก็ไม่เคยเกิน 0.143 จึงถูก threshold
+0.25 ตัดทิ้งหมด แก้ทั้งสองทาง: เทรนใหม่ 50 epochs (needle mAP50 0.008 -> 0.114 คลาสอื่นดีขึ้นหมด) และ
+เพิ่ม per-class confidence threshold ผลจริงบนฟุตเทจ: needle จาก 6 กล่อง เป็น 2,198 กล่อง
 
 สถานะตอนปิดเซสชัน (ยืนยันด้วยคำสั่งจริง ไม่ได้เชื่อจากบทสนทนา):
-- main อยู่ที่ c1902a8 นำ origin/main อยู่ 3 commit — ยังไม่ push รอผู้ใช้ตัดสินใจ
-  (git push จาก shell ของ agent ค้างทุกครั้ง ให้ผู้ใช้รัน ! git push origin main เอง)
-- working tree เหลือแค่ ssid.v6i.yolov11.zip / ssid.v6i.yolov11/ ที่ตั้งใจไม่ track
-- uvicorn ยังรันอยู่ที่ :8010 และแท็บ Chrome เปิดค้างไว้พร้อม workspace — ตั้งใจ ไม่ใช่ลืมปิด
-- webapp/data/ มีเฟรมจริง 2,726 เฟรม (357 MB) + state.json มี 17,151 กล่องจากโมเดล reviewed 0
-  ** ห้ามลบ ต่างจากทุกเซสชันก่อนหน้า — นี่คืองานจริงของผู้ใช้แล้ว ไม่ใช่ test artifact **
-- งานถัดไปเป็นของผู้ใช้: annotate จริงแล้ววัดผลด้วย measure_annotation.py --since snap_start.json
+- main == origin/main แล้ว push ครบ 9 commit (531b87b..50ade55) working tree สะอาด
+  (ผู้ใช้รัน ! git push origin main เอง — จาก shell ของ agent ยังค้างเหมือนเดิม อย่าลอง)
+- uvicorn ยังรันที่ :8010 (PID 8616) — restart ระหว่างเซสชันเพื่อโหลด server.py ใหม่
+- webapp/data/ + state.json = งานจริงของผู้ใช้ 2,726 เฟรม 21,127 กล่อง ** ห้ามลบ **
+- เฟรมแรก (index 0) ติดสถานะ reviewed อยู่ จึงถูก Detect รอบใหม่ข้าม ยังเป็นกล่องจากโมเดลเก่า
+- โมเดลที่ต้องใช้: models/ssid_v6i_50ep_20260810_map50-608.pt (commit ไว้แล้ว มีสำเนานอกเครื่อง)
+- งานถัดไปเป็นของผู้ใช้: annotate แล้ววัดด้วย measure_annotation.py --since snap_start.json
 
-รายละเอียดทั้งหมดอยู่ในไฟล์ handoff ข้างบน + memory (project_videoframeextractor_web_rewrite.md
-หัวข้อ "First real-footage session" และ "NEW OPEN ITEM — write a user manual") + commit message
-ทั้งสามอัน — ไม่เขียนซ้ำที่นี่
+แผนงาน 6 ข้อที่จดไว้แต่ยังไม่เริ่ม (ผู้ใช้สั่งให้จดไว้เฉยๆ):
+C:\Users\USER\.claude\plans\needle-snoopy-salamander.md
+
+รายละเอียดทั้งหมดอยู่ในไฟล์ handoff ข้างบน + memory + commit message ทั้ง 9 อัน — ไม่เขียนซ้ำที่นี่
