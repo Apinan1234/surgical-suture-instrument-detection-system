@@ -151,11 +151,19 @@ def export_dataset_pipeline(
                 bboxes.append([d["x_center"], d["y_center"], d["width"], d["height"]])
                 labels.append(d["class_id"])
                 
-            # Preprocess (Resize). The augmented branch below does its own resizing, so the base
-            # image is only resized here when augmentation is not going to run for this split.
+            # Preprocess (Resize).
             # `and` binds tighter than `or`, so the do_resize guard has to wrap the whole condition —
             # without the outer parens the train split resized even with resize turned off, and
             # resize_size is None in that case.
+            #
+            # KNOWN GAP (pre-existing, deliberately left as-is): an augmented train split comes out at
+            # mixed resolutions. The base copy is skipped here on the assumption that augmentation
+            # resizes instead, but the only size-setting transform below is RandomResizedCrop — which
+            # is added only when augment_config["crop"] is on, and even then fires at p=0.5. So with
+            # Resize on and multiplier > 1, train images keep their original size while val/test are
+            # resize_size square. Harmless for training (Ultralytics resizes to imgsz on load anyway);
+            # it costs disk and makes the export look inconsistent. Fix the condition here and add an
+            # explicit resize to the augmented branch if that ever matters.
             if do_resize and (split_name != "train" or not do_augment):
                 img = cv2.resize(img, (resize_size, resize_size))
                 
