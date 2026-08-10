@@ -249,6 +249,48 @@ let detectPollTimer = null;
 let detectFrames = [];
 let detectPreviewIdx = 0;
 
+// Annotate and Export both hang off the last Detect run, and nothing else can reach a job by id —
+// there is no picker and no list route. Losing this id on a reload therefore strands every frame in
+// that run: re-running Extract mints new frame ids, so annotations already saved against the old
+// ones stay in state.json but become unreachable from the UI. Persist it so a reload — or coming
+// back the next day — lands back on the same frames.
+const DETECT_JOB_KEY = "detect_job_id";
+
+function setDetectJobId(id) {
+  currentDetectJobId = id;
+  if (id) localStorage.setItem(DETECT_JOB_KEY, id);
+  else localStorage.removeItem(DETECT_JOB_KEY);
+}
+
+async function restoreDetectJob() {
+  const id = localStorage.getItem(DETECT_JOB_KEY);
+  if (!id) return;
+  const res = await apiFetch(`/api/detect/${id}`);
+  if (!res.ok) {
+    // The job is gone (state.json reset, or a different data dir) — drop the stale pointer quietly.
+    localStorage.removeItem(DETECT_JOB_KEY);
+    return;
+  }
+  const job = await res.json();
+  currentDetectJobId = id;
+  // Re-arm the Detect button with this run's frames: after retraining, re-detecting the same frames
+  // with a better model is the natural next step, and skip_reviewed protects what is already done.
+  lastExtractedFrameIds = job.frame_ids;
+  updateDetectFramesInfo();
+  document.getElementById("detect-progress-wrap").classList.remove("hidden");
+
+  if (job.status === "running") {
+    document.getElementById("detect-start-btn").disabled = true;
+    document.getElementById("detect-stop-btn").classList.remove("hidden");
+    startDetectPolling(); // loads the frames itself once the job reaches done/stopped
+    return;
+  }
+  document.getElementById("detect-progress-fill").style.width = job.progress + "%";
+  document.getElementById("detect-progress-label").textContent =
+    job.status + " — " + job.detected_total + "/" + job.frame_ids.length + " frames with objects";
+  await loadDetectFrames(job.frame_ids);
+}
+
 function updateDetectFramesInfo() {
   const info = document.getElementById("detect-frames-info");
   const startBtn = document.getElementById("detect-start-btn");
@@ -365,7 +407,7 @@ document.getElementById("detect-start-btn").addEventListener("click", async () =
   }
 
   const data = await res.json();
-  currentDetectJobId = data.job_id;
+  setDetectJobId(data.job_id);
   document.getElementById("detect-start-btn").disabled = true;
   document.getElementById("detect-stop-btn").classList.remove("hidden");
   document.getElementById("detect-progress-wrap").classList.remove("hidden");
@@ -3244,3 +3286,4 @@ refreshVideoList();
 refreshModelOptions();
 refreshClasses();
 updateDetectFramesInfo();
+restoreDetectJob(); // last: it awaits, so the calls above get their requests out first
