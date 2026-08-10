@@ -6,4 +6,9 @@ webapp/.venv/
 __pycache__/
 roboflow_dataset/
 runs/
-models/
+# Models uploaded through POST /api/models are user data. The trained baselines named below are
+# the exception: runs/ is ignored above and training runs with exist_ok=true, so the next run
+# overwrites runs/.../best.pt in place and these copies are the only durable ones. See models/README.md.
+models/*
+!models/README.md
+!models/ssid_v6i_20260808_map50-557.pt
