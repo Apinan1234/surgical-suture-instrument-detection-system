@@ -1,44 +1,16 @@
-Handoff อัปเดตแล้วที่ไฟล์เดิม:
+Handoff ล่าสุดอยู่ที่:
 
-C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-interpolation-2026-08-10.md
+C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-codereview-2026-08-10.md
 
-ผมเลือกเขียนทับไฟล์เดิมแทนสร้างไฟล์ใหม่ เพราะยังเป็นเซสชันเดียวกันและสถานะเดิม — ถ้าสร้างใหม่จะเหลือไฟล์ handoff ที่เกือบเหมือนกัน 2 อันใน temp แล้วเซสชันหน้าต้องมานั่งเดาว่าอันไหนใหม่กว่า
+เซสชันนี้ทำอะไร: เลือก review 6 commits ที่ค้างอยู่ก่อน push (แทนที่จะทำฟีเจอร์ใหม่) — เจอบั๊กข้อมูลหาย
+จริง 3 ตัวใน Annotate client + ปัญหาฝั่ง server 2 ข้อ แก้และ verify ครบ commit เป็น 69a5a18, 806faa6,
+2820aa0 แล้ว push ขึ้น origin/main เรียบร้อย
 
-ยืนยันสถานะก่อนเขียนแล้ว ไม่ได้เชื่อจากบทสนทนาอย่างเดียว: main นำอยู่ 5 commits, HEAD = 3130a7b, working tree เหลือแค่ไฟล์ dataset ที่ตั้งใจไม่ track, ไม่มี python.exe ค้าง
+สถานะตอนปิดเซสชัน (ยืนยันด้วยคำสั่งจริง ไม่ได้เชื่อจากบทสนทนา):
+- origin/main == main ที่ 2820aa0 (rev-list --left-right --count = 0 0) ไม่มี commit ค้างอีก
+- working tree เหลือแค่ ssid.v6i.yolov11.zip / ssid.v6i.yolov11/ ที่ตั้งใจไม่ track
+- ไม่มี python.exe ค้าง, webapp/data/* ว่างทั้งหมด, state.json กลับเป็น skeleton เปล่า
+- ไม่มีงานค้างกลางทาง และไม่มีคำถามค้างรอผู้ใช้ตัดสินใจ
 
-ที่เพิ่มจากรอบแรก:
-
-- Frontmatter บอกด้วยว่ามีการคุยเรื่องฟีเจอร์วัดระยะแล้วพักไว้ และไม่มีโค้ดค้างที่ยังไม่ commit
-- "What happened this session" เพิ่มข้อ 4 — ระบุชัดว่าหลัง 3130a7b ไม่มีการแก้โค้ดอีกเลย เป็นการคุยออกแบบล้วนๆ
-- หัวข้อ Parked ideas แยกจาก open items ชัดเจน พร้อมคำสั่งตรงๆ ว่าห้ามเอาไปเสนอเป็นงานถัดไป และห้ามใส่รวมตอนไล่ open items ให้คุณเลือก
-- เพิ่ม gotcha เล็กๆ ที่เพิ่งเจอ — เขียนเอกสารยาวๆ ผ่าน bash heredoc พังเรื่อง quoting ให้ใช้เครื่องมือเขียนไฟล์แทน
-
-ส่วนที่ยังชี้ไปที่อื่นเหมือนเดิม ไม่เขียนซ้ำ: design detail อยู่ในไฟล์แผน, เหตุผล/tradeoff/รายการ verify อยู่ใน git show 3130a7b, เหตุผลเรื่องฟีเจอร์วัดระยะอยู่ใน memory
-
-✻ Brewed for 2m 44s
-
-
-
-
-Handoff เขียนแล้วที่:
-
-C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-diagrams-2026-08-09.md
-
-สิ่งที่บันทึกไว้
-
-อ้างอิงแทนการเขียนซ้ำ — ชี้ไปที่ลิงก์ artifact, ไฟล์ใน 05_reports/, ไฟล์แผน, ไฟล์ความจำ และ commit SHA แทนที่จะคัดลอกเนื้อหามาใส่
-
-สถานะ git ที่ต้องระวังที่สุด — main นำหน้า origin/main 2 commit และทั้งคู่ตั้งใจไม่ push เขียนย้ำไว้ว่าห้าม push โดยไม่ถาม พร้อมบันทึกผล git prune และของที่ไม่ได้แตะ
-
-สิ่งที่ยังไม่ได้ตรวจ — รูปที่ 6–9 ไม่เคยมีใครยืนยันเรื่องเลย์เอาต์ พร้อมเหตุผลว่าทำไมผมตรวจเองไม่ได้ (iframe คนละ origin + เบราว์เซอร์ค้าง) และกำชับว่าอย่าไปเคลมว่าตรวจแล้ว
-
-บทเรียนที่ยังไม่ได้จดที่อื่น 6 ข้อ — เช่น กฎว่าถ้าต้องการคุมสีให้แน่นอนต้องใช้ inline SVG ไม่ใช่ Mermaid, ไฟล์ในเครื่องต้องมีสคริปต์ Mermaid แต่ artifact ไม่ต้อง, ตัวอักษรเพี้ยนใน console ของ Windows เป็นสัญญาณลวง, และเตือนว่า Report-WebApp-Current-State.md ล้าสมัย ห้ามใช้อ้างอิง
-
-Suggested skills — artifact-design + artifact-diagramming (บังคับก่อนแก้ artifact), run, code-review, security-review และระบุว่าให้ข้าม claude-in-chrome สำหรับหน้า artifact พวกนี้ เพราะล้มเหลวซ้ำ ๆ
-
-ไม่มีข้อมูลอ่อนไหว — ไม่มี API key, ไม่มีอีเมล, ไม่มีรหัสผ่าน
-
----
-หมายเหตุ: โปรเจกต์นี้มีธรรมเนียมว่า _archive/Handoff.txt เป็นไฟล์ที่ track ไว้และเขียนทับทุกเซสชันให้ชี้ไปยัง handoff ฉบับเต็ม — ผมยังไม่ได้อัปเดต เพราะ skill กำหนดให้เขียนลง temp ไม่ใช่ในโปรเจกต์ ตอนนี้ไฟล์นั้นยังชี้ไปที่ handoff ของเซสชันก่อน ถ้าอยากให้รักษาธรรมเนียมไว้บอกได้ ผมอัปเดตให้ครับ
-
-✻ Brewed for 1m 43s
+รายละเอียดทั้งหมดอยู่ในไฟล์ handoff ข้างบน + memory (project_videoframeextractor_web_rewrite.md
+หัวข้อ "Pre-push code review of the 6 held commits") + commit message ทั้งสามอัน — ไม่เขียนซ้ำที่นี่
