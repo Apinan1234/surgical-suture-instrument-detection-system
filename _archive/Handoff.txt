@@ -1,16 +1,21 @@
 Handoff ล่าสุดอยู่ที่:
 
-C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-codereview-2026-08-10.md
+C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-realfootage-2026-08-10.md
 
-เซสชันนี้ทำอะไร: เลือก review 6 commits ที่ค้างอยู่ก่อน push (แทนที่จะทำฟีเจอร์ใหม่) — เจอบั๊กข้อมูลหาย
-จริง 3 ตัวใน Annotate client + ปัญหาฝั่ง server 2 ข้อ แก้และ verify ครบ commit เป็น 69a5a18, 806faa6,
-2820aa0 แล้ว push ขึ้น origin/main เรียบร้อย
+เซสชันนี้ทำอะไร: เลือก "เอา interpolation ไปใช้กับงานจริง" แทนการทำฟีเจอร์ใหม่ — เจอว่ามีโมเดลที่เทรน
+จริงอยู่แล้ว (runs/roboflow_train/.../best.pt, mAP50 0.557) แล้วการใช้งานจริงเปิดโปงบั๊กข้อมูลหายเงียบๆ
+2 ตัว แก้และ verify ครบ commit เป็น 04ba847 (รีเฟรชหน้าแล้ว Detect job หายจนเข้าเฟรมไม่ได้อีก),
+c1902a8 (exporter ทับไฟล์ที่ชื่อซ้ำ ทำให้เฟรมที่ annotate แล้วหายตอน export) และ 049642b (gitignore วิดีโอ)
 
 สถานะตอนปิดเซสชัน (ยืนยันด้วยคำสั่งจริง ไม่ได้เชื่อจากบทสนทนา):
-- origin/main == main ที่ 2820aa0 (rev-list --left-right --count = 0 0) ไม่มี commit ค้างอีก
+- main อยู่ที่ c1902a8 นำ origin/main อยู่ 3 commit — ยังไม่ push รอผู้ใช้ตัดสินใจ
+  (git push จาก shell ของ agent ค้างทุกครั้ง ให้ผู้ใช้รัน ! git push origin main เอง)
 - working tree เหลือแค่ ssid.v6i.yolov11.zip / ssid.v6i.yolov11/ ที่ตั้งใจไม่ track
-- ไม่มี python.exe ค้าง, webapp/data/* ว่างทั้งหมด, state.json กลับเป็น skeleton เปล่า
-- ไม่มีงานค้างกลางทาง และไม่มีคำถามค้างรอผู้ใช้ตัดสินใจ
+- uvicorn ยังรันอยู่ที่ :8010 และแท็บ Chrome เปิดค้างไว้พร้อม workspace — ตั้งใจ ไม่ใช่ลืมปิด
+- webapp/data/ มีเฟรมจริง 2,726 เฟรม (357 MB) + state.json มี 17,151 กล่องจากโมเดล reviewed 0
+  ** ห้ามลบ ต่างจากทุกเซสชันก่อนหน้า — นี่คืองานจริงของผู้ใช้แล้ว ไม่ใช่ test artifact **
+- งานถัดไปเป็นของผู้ใช้: annotate จริงแล้ววัดผลด้วย measure_annotation.py --since snap_start.json
 
 รายละเอียดทั้งหมดอยู่ในไฟล์ handoff ข้างบน + memory (project_videoframeextractor_web_rewrite.md
-หัวข้อ "Pre-push code review of the 6 held commits") + commit message ทั้งสามอัน — ไม่เขียนซ้ำที่นี่
+หัวข้อ "First real-footage session" และ "NEW OPEN ITEM — write a user manual") + commit message
+ทั้งสามอัน — ไม่เขียนซ้ำที่นี่
