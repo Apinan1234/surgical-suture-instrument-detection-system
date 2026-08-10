@@ -5,6 +5,34 @@ async function apiFetch(path, opts) {
   return fetch(path, opts);
 }
 
+// ── Job pointers ──
+//
+// A job id that lives only in a JS variable dies on reload, and that id is the only handle on what
+// the job produced: this app has no job-list route and no job picker. 04ba847 fixed it for Detect,
+// where the cost was a whole run of frames becoming unreachable. Extract and Export paid the same
+// price more quietly, in two download buttons that vanished on refresh. One helper, three uses.
+function makeJobPointer(storageKey, statusPath) {
+  return {
+    set(id) {
+      if (id) localStorage.setItem(storageKey, id);
+      else localStorage.removeItem(storageKey);
+    },
+    // The persisted id together with the server's current record for it, or null. A pointer the
+    // server no longer knows (state.json reset, or a different data dir) is dropped quietly rather
+    // than reported: from the user's side it is simply a job that is not there any more.
+    async restore() {
+      const id = localStorage.getItem(storageKey);
+      if (!id) return null;
+      const res = await apiFetch(statusPath + "/" + id);
+      if (!res.ok) {
+        localStorage.removeItem(storageKey);
+        return null;
+      }
+      return { id: id, job: await res.json() };
+    },
+  };
+}
+
 // ── Theme ──
 
 function applyTheme(pref) {
@@ -140,6 +168,12 @@ document.querySelectorAll('input[name="mode"]').forEach((radio) => {
 updateModeDependentFields();
 
 let currentExtractJobId = null;
+const extractJobPointer = makeJobPointer("extract_job_id", "/api/extract");
+
+function setExtractJobId(id) {
+  currentExtractJobId = id;
+  extractJobPointer.set(id);
+}
 let pollTimer = null;
 
 document.getElementById("extract-start-btn").addEventListener("click", async () => {
@@ -176,7 +210,7 @@ document.getElementById("extract-start-btn").addEventListener("click", async () 
   }
 
   const data = await res.json();
-  currentExtractJobId = data.job_id;
+  setExtractJobId(data.job_id);
   document.getElementById("extract-start-btn").disabled = true;
   document.getElementById("extract-stop-btn").classList.remove("hidden");
   document.getElementById("extract-progress-wrap").classList.remove("hidden");
@@ -237,6 +271,29 @@ function startPolling() {
   }, 1000);
 }
 
+// The zip is only reachable through this id, and the button that uses it used to disappear on any
+// refresh - which is exactly why the user could not find it.
+async function restoreExtractJob() {
+  const restored = await extractJobPointer.restore();
+  if (!restored) return;
+  const job = restored.job;
+  setExtractJobId(restored.id);
+  document.getElementById("extract-progress-wrap").classList.remove("hidden");
+
+  if (job.status === "running") {
+    document.getElementById("extract-start-btn").disabled = true;
+    document.getElementById("extract-stop-btn").classList.remove("hidden");
+    startPolling(); // re-renders the whole log, which is right: the log element is empty after a reload
+    return;
+  }
+  document.getElementById("extract-progress-fill").style.width = job.progress + "%";
+  document.getElementById("extract-progress-label").textContent =
+    job.status + " - " + job.saved_total + " frames saved";
+  document.getElementById("download-zip-btn").classList.toggle("hidden", job.saved_total === 0);
+  lastExtractedFrameIds = job.frame_ids || [];
+  updateDetectFramesInfo();
+}
+
 // ────────────────────────────── F-4: Detect section ──────────────────────────────
 
 let lastExtractedFrameIds = [];
@@ -254,24 +311,18 @@ let detectPreviewIdx = 0;
 // that run: re-running Extract mints new frame ids, so annotations already saved against the old
 // ones stay in state.json but become unreachable from the UI. Persist it so a reload — or coming
 // back the next day — lands back on the same frames.
-const DETECT_JOB_KEY = "detect_job_id";
+const detectJobPointer = makeJobPointer("detect_job_id", "/api/detect");
 
 function setDetectJobId(id) {
   currentDetectJobId = id;
-  if (id) localStorage.setItem(DETECT_JOB_KEY, id);
-  else localStorage.removeItem(DETECT_JOB_KEY);
+  detectJobPointer.set(id);
 }
 
 async function restoreDetectJob() {
-  const id = localStorage.getItem(DETECT_JOB_KEY);
-  if (!id) return;
-  const res = await apiFetch(`/api/detect/${id}`);
-  if (!res.ok) {
-    // The job is gone (state.json reset, or a different data dir) — drop the stale pointer quietly.
-    localStorage.removeItem(DETECT_JOB_KEY);
-    return;
-  }
-  const job = await res.json();
+  const restored = await detectJobPointer.restore();
+  if (!restored) return;
+  const id = restored.id;
+  const job = restored.job;
   currentDetectJobId = id;
   // Re-arm the Detect button with this run's frames: after retraining, re-detecting the same frames
   // with a better model is the natural next step, and skip_reviewed protects what is already done.
@@ -3187,6 +3238,12 @@ document.getElementById("annotate-mark-reviewed-btn").addEventListener("click", 
 // ────────────────────────────── S-6: Export section ──────────────────────────────
 
 let currentExportJobId = null;
+const exportJobPointer = makeJobPointer("export_job_id", "/api/export");
+
+function setExportJobId(id) {
+  currentExportJobId = id;
+  exportJobPointer.set(id);
+}
 let exportPollTimer = null;
 let exportPoolTotal = 0;
 
@@ -3206,7 +3263,10 @@ async function refreshExportPreview() {
   document.getElementById("export-stat-total").textContent = stats.total;
   document.getElementById("export-stat-classes").textContent = stats.class_count;
   document.getElementById("export-stat-unreviewed").textContent = stats.unreviewed;
-  document.getElementById("export-start-btn").disabled = stats.total === 0;
+  // exportPollTimer is the one signal that a version is still building. Without it this line
+  // would hand Start back mid-run every time the tab is switched away and back, and a restored
+  // running job would lose its disabled state on the first tab switch after a reload.
+  document.getElementById("export-start-btn").disabled = stats.total === 0 || exportPollTimer !== null;
   updateExportMaxSizeLabel();
 }
 
@@ -3310,7 +3370,7 @@ document.getElementById("export-start-btn").addEventListener("click", async () =
     return;
   }
   const data = await res.json();
-  currentExportJobId = data.job_id;
+  setExportJobId(data.job_id);
   document.getElementById("export-start-btn").disabled = true;
   setExportControlsDisabled(true);
   document.getElementById("export-progress-wrap").classList.remove("hidden");
@@ -3328,6 +3388,7 @@ function startExportPolling() {
 
     if (job.status === "done" || job.status === "error") {
       clearInterval(exportPollTimer);
+      exportPollTimer = null;
       document.getElementById("export-start-btn").disabled = false;
       setExportControlsDisabled(false); // both branches: an errored job must not leave the form dead
       if (job.status === "done") {
@@ -3339,6 +3400,32 @@ function startExportPolling() {
       }
     }
   }, 1000);
+}
+
+// A built version is downloadable for as long as its zip is on disk, so the button belongs back on
+// screen after a reload - not only in the minute after the job finished.
+async function restoreExportJob() {
+  const restored = await exportJobPointer.restore();
+  if (!restored) return;
+  const job = restored.job;
+  setExportJobId(restored.id);
+  document.getElementById("export-progress-wrap").classList.remove("hidden");
+  document.getElementById("export-progress-fill").style.width = job.progress + "%";
+
+  if (job.status === "running") {
+    document.getElementById("export-start-btn").disabled = true;
+    setExportControlsDisabled(true);
+    startExportPolling();
+    return;
+  }
+  if (job.status === "done") {
+    const total = job.summary ? job.summary.total_exported : "?";
+    document.getElementById("export-progress-label").textContent = `done - ${total} images exported`;
+    // zip_path is cleared if the file never got written; the download route would 400 on it anyway.
+    document.getElementById("export-download-btn").classList.toggle("hidden", !job.zip_path);
+    return;
+  }
+  document.getElementById("export-progress-label").textContent = job.error || job.status;
 }
 
 document.getElementById("export-download-btn").addEventListener("click", () => {
@@ -3415,4 +3502,8 @@ refreshVideoList();
 refreshModelOptions();
 refreshClasses();
 updateDetectFramesInfo();
-restoreDetectJob(); // last: it awaits, so the calls above get their requests out first
+// Sequenced rather than fired together: restoreExtractJob and restoreDetectJob both write
+// lastExtractedFrameIds, and Detect has to win - its run is the one Annotate and Export hang off.
+// Last of all, because they await: the calls above get their requests out first.
+restoreExtractJob().then(restoreDetectJob);
+restoreExportJob();
