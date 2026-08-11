@@ -506,13 +506,46 @@ main.wide {
   padding: 6px 0;
 }
 
+/* Was an inline style on the element. It lives here so body.annotate-fill can reclaim its top margin
+ * without !important. `.hidden` still wins over it, being display: none !important. */
+.annotate-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
 .annotate-statusbar {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   font-size: 12px;
   color: var(--muted);
   margin-top: 8px;
   padding: 8px 4px 0;
+}
+
+.annotate-statusbar-stats {
+  display: flex;
+  gap: 16px;
+}
+
+/* Built by buildStepNav(). space-between with an empty first slot, so a lone Next button still sits
+ * on the right. */
+.step-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+/* Riding in the status row instead of taking a strip of its own. In here it is a shrink-to-fit flex
+ * item, so space-between above has nothing to distribute - the right-alignment is `margin-left: auto`
+ * doing the work, which is what to change if the buttons ever end up in the wrong place. */
+.annotate-statusbar .step-nav {
+  margin-top: 0;
+  margin-left: auto;
 }
 
 .annotate-canvas-wrap {
@@ -565,6 +598,7 @@ body.annotate-fill main.wide {
   /* The escape hatch on a short window: scroll the column rather than clip the property panel. */
   overflow-y: auto;
   padding-top: 16px;
+  padding-bottom: 8px; /* 32px of trailing space is a luxury this tab cannot afford */
   display: flex;
   flex-direction: column;
 }
@@ -574,6 +608,48 @@ body.annotate-fill #annotate-section {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Vertical chrome, cut to the bone, because on this tab it is competing directly with the frame.
+ * The canvas is already as wide as a 16:9 frame can use at 640px tall, so height is the only
+ * constraint left and every pixel taken back here makes the frame 1.78px wider as well. Measured
+ * before: 302px of this view sat below the fold on an 730px window. These rules give back ~242 of
+ * it - and on any window with room to spare the flex row hands the difference to the canvas.
+ *
+ * `> .card` matches the toolbar card AND #annotate-workspace, which is what the padding cut is for. */
+/* Visually gone, still in the accessibility tree. `display: none` would take the section's only
+ * heading out of it entirely, leaving someone navigating by heading with nothing between the tab bar
+ * and the canvas - and the pixels are all this tab is trying to reclaim, not the landmark. */
+body.annotate-fill #annotate-section h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+body.annotate-fill .annotate-toolbar {
+  margin-top: 0;
+}
+
+body.annotate-fill #annotate-section > .card {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+
+body.annotate-fill .annotate-statusbar {
+  margin-top: 4px;
+  padding-top: 0;
+}
+
+/* The row is 12px text; without this the full-size nav buttons set its height instead, which is a
+ * strip of decoration charged to the canvas. */
+body.annotate-fill .annotate-statusbar .step-nav button {
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 /* #annotate-workspace and .annotate-layout are the same element, so the flex child and the flex
@@ -600,11 +676,12 @@ body.annotate-fill #annotate-workspace {
 
 /* Height is floored at the 640px this used to be hard-coded to, so the canvas can only ever get
  * taller than before, never shorter. That floor is not theoretical: measured on the machine this
- * was built for, the browser window is ~810 CSS px tall (1080p at 125% Windows scaling), and the
- * topnav, the toolbar card, the status bar, the step nav and the padding take ~350px of it - so
- * fitting the viewport alone would have handed the canvas 430px, a downgrade. The real win on this
- * screen is width: 640px to about 1150px. When the window IS tall enough, the flex row above gives
- * the extra height to the canvas and this floor never comes up; when it is not, main.wide scrolls. */
+ * was built for, the browser window is ~730 CSS px tall at 100% zoom, and after the chrome cuts
+ * above the topnav, the toolbar bar, the status row and the padding still take ~200px of it - so
+ * fitting the viewport alone would hand the canvas ~530px, a downgrade. The real win on this screen
+ * is width: 640px to about 1170px. When the window IS tall enough - F11 fullscreen, or any taller
+ * display - the flex row above gives the extra height to the canvas and this floor never comes up;
+ * when it is not, main.wide scrolls by the difference. */
 body.annotate-fill .annotate-canvas-wrap {
   height: auto;
   min-height: var(--annotate-row-h);
@@ -618,8 +695,8 @@ body.annotate-fill .annotate-canvas-wrap {
  * to fit, come back and the card cannot shrink again, because the inline height it just wrote is now
  * the card's min-content size and no flex shrink factor can go below that. Measured: a canvas left
  * at 1200px kept the card at 1248px through repeated resizes, overflowing the section and pushing
- * the status bar and the step nav out of view until a reload. Out of flow, the wrap contributes
- * nothing but its own min-height and the card sits at 688px no matter what the canvas says. */
+ * the status row out of view until a reload. Out of flow, the wrap contributes nothing but its own
+ * min-height, and the card sits at 640 + its 8px padding no matter what the canvas says. */
 body.annotate-fill #annotate-canvas {
   position: absolute;
   top: 0;

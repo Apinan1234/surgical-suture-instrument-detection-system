@@ -271,7 +271,7 @@
     <div class="card">
       <h2 style="margin-top:0;">Annotate</h2>
       <div id="annotate-frames-info" style="font-size:13px; color:var(--muted);">No frames yet — run Detect first.</div>
-      <div id="annotate-toolbar" class="hidden" style="display:flex; align-items:center; gap:12px; margin-top:12px;">
+      <div id="annotate-toolbar" class="annotate-toolbar hidden">
         <button id="annotate-tool-select-btn" class="btn-download" title="Select tool (V)">🖱 Select</button>
         <button id="annotate-tool-draw-btn" class="btn-download" title="Draw box tool (B)">▭ Draw</button>
         <button id="annotate-tool-polygon-btn" class="btn-download" title="Polygon tool (P)">⬠ Polygon</button>
@@ -395,10 +395,14 @@
       </div>
     </div>
 
-    <div id="annotate-statusbar" class="annotate-statusbar hidden">
-      <span id="annotate-statusbar-frame"></span>
-      <span id="annotate-statusbar-boxes"></span>
-      <span id="annotate-statusbar-progress"></span>
+    <!-- The row itself is always present, because the step nav is built into it (see buildStepNav);
+         only the counts come and go with the frame list. -->
+    <div id="annotate-statusbar" class="annotate-statusbar">
+      <div id="annotate-statusbar-stats" class="annotate-statusbar-stats hidden">
+        <span id="annotate-statusbar-frame"></span>
+        <span id="annotate-statusbar-boxes"></span>
+        <span id="annotate-statusbar-progress"></span>
+      </div>
     </div>
 
   </section>

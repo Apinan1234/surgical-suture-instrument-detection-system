@@ -141,15 +141,17 @@ function buildStepNav() {
     const section = document.getElementById(step.name + "-section");
     if (!section) return;
     const nav = document.createElement("div");
-    // space-between with an empty first slot, so a lone Next button still sits on the right.
-    nav.style.cssText = "display:flex; justify-content:space-between; gap:8px; margin-top:24px;";
+    nav.className = "step-nav";
+    // The empty first slot is what .step-nav's space-between pushes a lone Next button against.
     nav.appendChild(
       i > 0 ? stepNavButton("← " + steps[i - 1].label, steps[i - 1].name) : document.createElement("span")
     );
     if (i < steps.length - 1) {
       nav.appendChild(stepNavButton(steps[i + 1].label + " →", steps[i + 1].name));
     }
-    section.appendChild(nav);
+    // A tab with a status bar puts its nav in that row rather than spending a strip of its own on it.
+    // Only Annotate has one, and only Annotate is short of vertical space, so no tab is named here.
+    (document.getElementById(step.name + "-statusbar") || section).appendChild(nav);
   });
 }
 
@@ -2730,7 +2732,9 @@ function initAnnotateFrames(frames) {
   document.getElementById("annotate-frames-info").classList.toggle("hidden", list.length > 0);
   document.getElementById("annotate-toolbar").classList.toggle("hidden", list.length === 0);
   document.getElementById("annotate-workspace").classList.toggle("hidden", list.length === 0);
-  document.getElementById("annotate-statusbar").classList.toggle("hidden", list.length === 0);
+  // The counts hide, not the row: the row carries the step nav, and losing that on the empty tab
+  // would strand anyone who opened Annotate before running Detect.
+  document.getElementById("annotate-statusbar-stats").classList.toggle("hidden", list.length === 0);
   Filmstrip.forceRebuild();
   AnnotateState.init(list);
 }
