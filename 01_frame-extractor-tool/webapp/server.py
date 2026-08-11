@@ -28,11 +28,15 @@ from pydantic import BaseModel, Field, model_validator
 WEBAPP_DIR = Path(__file__).resolve().parent
 TOOL_DIR = WEBAPP_DIR.parent
 sys.path.insert(0, str(TOOL_DIR))
+# Load .env BEFORE importing detector: detector does os.environ.setdefault("ULTRALYTICS_SAFE_LOAD",
+# …) at import time, so a value set here from .env is what setdefault preserves. If this ran after
+# the import, an operator's ULTRALYTICS_SAFE_LOAD override in .env — where every other tunable lives
+# — would be silently ignored (the setdefault would already have won).
+load_dotenv(WEBAPP_DIR / ".env")
+
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
 from detector import Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES, CLASS_COLORS_HEX  # noqa: E402
 from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
-
-load_dotenv(WEBAPP_DIR / ".env")
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", WEBAPP_DIR / "data")).resolve()
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "8192"))
@@ -586,6 +590,17 @@ async def upload_frames(request: Request):
     real folder of frames was rejected before this function was ever entered. The blocking half -
     writing the files - then runs on the threadpool, which is where an async route must put it.
     """
+    # Note on temp-disk use: Starlette spools every multipart part over 1 MB to a temp file as it
+    # parses (SpooledTemporaryFile, formparsers.py), before _import_uploaded_frames checks a byte, so
+    # a large body transiently occupies temp disk during the request (Starlette frees it when the
+    # request ends). A Content-Length precheck was considered and rejected: it only catches an honest
+    # client that declares an over-cap size (a chunked/lying client spools anyway), and only above
+    # MAX_TOTAL_UPLOAD_MB — a 50 GB default that a disk-filling upload stays under — so it would add a
+    # limit the project has declined (see the 2026-08-01 review's accepted DoS-shaped gaps) while
+    # returning a 413 the browser usually never sees (connection reset mid-upload → "Failed to
+    # fetch"). This is now an authenticated route (S-1), which is the intended mitigation; the
+    # incremental MAX_TOTAL_UPLOAD_BYTES guard inside _import_uploaded_frames remains the real cap on
+    # what actually lands in the workspace.
     try:
         form = await request.form(max_files=MAX_UPLOAD_FILES, max_fields=MAX_UPLOAD_FILES)
     except Exception as e:  # starlette raises MultiPartException on a malformed or over-cap body

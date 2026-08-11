@@ -48,6 +48,13 @@ from tqdm import tqdm
 # since load_dotenv() never overrides an already-set os.environ value.
 load_dotenv(Path(__file__).resolve().parent / "webapp" / ".env")
 
+# This script does not import detector, so it must request ultralytics' restricted (weights_only)
+# checkpoint loading itself — it calls YOLO() on weights that can arrive from a downloaded Roboflow
+# dataset, and an unrestricted torch.load() of a crafted .pt executes arbitrary code. "true" (not
+# "1") because ultralytics 8.4.84 only accepts that spelling; set before the lazy `from ultralytics
+# import YOLO` below so it is read at ultralytics import time. See detector.py for the full rationale.
+os.environ.setdefault("ULTRALYTICS_SAFE_LOAD", "true")
+
 IMAGE_EXTS = (".jpg", ".jpeg", ".png")
 
 

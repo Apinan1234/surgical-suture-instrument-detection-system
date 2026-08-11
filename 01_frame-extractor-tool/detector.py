@@ -18,7 +18,64 @@ import numpy as np
 # execute on load) unless this env var is set. Must be set before ultralytics is ever imported (its
 # SAFE_LOAD constant is read once at import time) — set here, at module load, since YOLOv11Detector
 # below imports ultralytics lazily. setdefault() so an operator can still explicitly opt out.
-os.environ.setdefault("ULTRALYTICS_SAFE_LOAD", "1")
+#
+# The value MUST be "true", not "1": ultralytics 8.4.84 (the version on this repo's system Python)
+# parses the flag with `str(os.getenv(...)).lower() == "true"`, which rejects "1" — so "1" left
+# restricted loading silently OFF there. 8.4.114 (the webapp venv) accepts both via its newer
+# env_bool(). "true" is honoured by every version. ensure_safe_load_or_raise() below is the
+# backstop that catches any remaining case where the flag is set but not actually in effect.
+os.environ.setdefault("ULTRALYTICS_SAFE_LOAD", "true")
+
+# Truthy strings ultralytics' own env_bool() accepts (utils/__init__.py). Used only to detect an
+# operator opt-out here; whether the flag is actually *honoured* is read from ultralytics at runtime
+# by _restricted_load_active(), which is authoritative across versions.
+_TRUTHY_ENV = {"1", "true", "yes", "on", "y", "t"}
+
+
+def _env_wants_safe_load() -> bool:
+    return (os.environ.get("ULTRALYTICS_SAFE_LOAD") or "").strip().lower() in _TRUTHY_ENV
+
+
+def _restricted_load_active() -> bool:
+    """Whether ultralytics will actually load checkpoints in restricted (weights_only) mode right now.
+
+    This reads the exact two runtime facts ultralytics' own loader ANDs together to decide
+    (nn/tasks.torch_safe_load → `_SafeLoad.SUPPORTED and SAFE_LOAD`):
+      - `ultralytics.utils.SAFE_LOAD`  — the flag as *this installed version* parsed it, so a version
+        that rejected our env spelling reads False here (no version-number guessing, and no reliance
+        on our _TRUTHY_ENV matching theirs);
+      - `torch.serialization.safe_globals` — present only on torch ≥ 2.5, which is what restricted
+        loading requires; ultralytics silently downgrades to an unrestricted load without it.
+    A direct capability check, not a probe: the fragile alternative (loading a crafted pickle and
+    watching for a side effect) can silently pass — return "not executed" — the moment any earlier
+    validation rejects the file before the payload runs, which is exactly the fail-open this guard
+    exists to prevent.
+    """
+    import torch
+    from ultralytics.utils import SAFE_LOAD
+
+    return bool(SAFE_LOAD) and hasattr(torch.serialization, "safe_globals")
+
+
+def ensure_safe_load_or_raise() -> None:
+    """Fail closed before loading a model if restricted loading was requested but isn't in effect.
+
+    A model file is executable content in this ecosystem, so this is the guard that keeps an
+    uploaded/attacker-supplied .pt from running code on the host. Placed in this shared module so the
+    Tkinter desktop app is covered too, the same way the 2026-08-01 path-traversal fix lives here.
+    An operator who has deliberately set ULTRALYTICS_SAFE_LOAD to a falsey value has opted out and is
+    left alone; the danger is the *silent* case where the flag is on but ineffective.
+    """
+    if not _env_wants_safe_load():
+        return  # explicit operator opt-out
+    if not _restricted_load_active():
+        raise RuntimeError(
+            "Refusing to load a model: ULTRALYTICS_SAFE_LOAD is set but restricted (weights_only) "
+            "loading is NOT active, so a malicious .pt could execute code on load. Causes: torch "
+            "older than 2.5 (upgrade it), or an ultralytics version that did not accept this flag's "
+            "value (use 'true'). Or set ULTRALYTICS_SAFE_LOAD=0 to explicitly accept unrestricted "
+            "loading."
+        )
 
 
 # ─────────────────────────────────────────────
@@ -246,6 +303,7 @@ class YOLOv11Detector(BaseDetector):
         class_conf: dict[str, float] | None = None,
     ):
         from ultralytics import YOLO  # lazy import (หลีกเลี่ยงหน้าจอช้า)
+        ensure_safe_load_or_raise()  # fail closed if weights_only loading isn't actually active
         self.model       = YOLO(model_path)
         self.conf        = conf
         self.iou         = iou

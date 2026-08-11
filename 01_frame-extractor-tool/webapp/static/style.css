@@ -570,8 +570,9 @@ main.wide {
  * puts the class on <body>.
  *
  * What this actually buys, measured rather than assumed: width. The canvas goes 640px -> ~1150px.
- * Height stays at 640px, because the window here is ~810 CSS px tall and the chrome around the
- * canvas takes ~250px of that - see the canvas-wrap rule.
+ * Height stays floored at 640px on this screen, because once the topnav/toolbar/status chrome is
+ * subtracted the viewport cannot afford more - the exact figures are zoom-dependent, so the
+ * canvas-wrap rule carries the measured breakdown rather than repeating a single number here.
  *
  * min-height: 0 appears on most flex children on purpose. The default is auto, which refuses to
  * shrink below the content, so without it the canvas overflows the card instead of fitting it.

@@ -4,6 +4,13 @@ Pillow
 numpy
 tqdm
 ultralytics
+# torch is pulled in transitively by ultralytics; pin the floor explicitly because restricted
+# (weights_only) checkpoint loading — the guard in detector.py that stops a malicious .pt from
+# executing code on load — requires torch.serialization.safe_globals, added in torch 2.5. Below
+# that, ultralytics silently falls back to an unrestricted load. detector.ensure_safe_load_or_raise()
+# fails closed if this floor is ever violated, but pinning it keeps that from happening in the first
+# place.
+torch>=2.5
 PyYAML
 inference-sdk
 ipykernel
