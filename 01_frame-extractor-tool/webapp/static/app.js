@@ -106,6 +106,11 @@ function switchTab(name) {
     section.classList.toggle("hidden", section.id !== `${name}-section`);
   });
   document.querySelector("main").classList.toggle("wide", name === "annotate");
+  document.body.classList.toggle("annotate-fill", name === "annotate");
+  // The resize has to happen here rather than on the tab button, because the footer step nav below
+  // calls switchTab() directly. Reading clientWidth forces the layout the class change just asked
+  // for, so the canvas is measured against the size it actually ends up at.
+  if (name === "annotate") Canvas.resize();
   if (name === "export") refreshExportPreview();
   if (name === "analytics") refreshAnalytics();
 }
@@ -1604,6 +1609,7 @@ const Canvas = (() => {
   let rafScheduled = false;
   let spaceHeld = false;
   let panDragStart = null;
+  let lastCssW = 0, lastCssH = 0, lastDpr = 0; // what resize() last applied, so it can skip a no-op
 
   function requestRender() {
     if (rafScheduled) return;
@@ -1725,21 +1731,31 @@ const Canvas = (() => {
     requestRender();
   }
 
+  // Returns true when it actually resized, so callers that must re-fit can tell.
   function resize() {
     const dpr = window.devicePixelRatio || 1;
     const wrap = canvas.parentElement;
     const cssW = wrap.clientWidth || 640;
     const cssH = wrap.clientHeight || 640;
+    // Nothing changed, so do nothing: writing canvas.width clears the bitmap and fitToImage()
+    // throws away the current zoom and pan. switchTab() calls this on every entry to Annotate, and
+    // leaving a frame to check another tab should not cost the user the view they zoomed in on.
+    if (cssW === lastCssW && cssH === lastCssH && dpr === lastDpr) return false;
+    lastCssW = cssW;
+    lastCssH = cssH;
+    lastDpr = dpr;
     canvas.style.width = cssW + "px";
     canvas.style.height = cssH + "px";
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     fitToImage();
+    return true;
   }
 
   function setImage(newImg) {
     img = newImg;
-    resize();
+    // A new image always gets fitted, whether or not the canvas itself changed size.
+    if (!resize()) fitToImage();
   }
 
   function screenToImage(clientX, clientY) {
@@ -3086,8 +3102,6 @@ AnnotateState.subscribe(() => {
   Interpolate.renderStatus();
   ContextMenu.close();
 });
-
-document.querySelector('.tab[data-tab="annotate"]').addEventListener("click", () => Canvas.resize());
 
 document.getElementById("annotate-tool-select-btn").addEventListener("click", () => AnnotateState.setActiveTool("select"));
 document.getElementById("annotate-tool-draw-btn").addEventListener("click", () => AnnotateState.setActiveTool("draw_box"));

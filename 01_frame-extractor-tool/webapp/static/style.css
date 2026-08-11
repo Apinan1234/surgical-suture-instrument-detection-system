@@ -528,6 +528,125 @@ main.wide {
   display: block;
 }
 
+/* The Annotate tab fills the window.
+ *
+ * Every rule above stays as written and remains the base: a 640px canvas in a 1100px column, which
+ * is where a tab that is mostly a form belongs, and what the page falls back to if this class never
+ * lands. Annotate is the exception - it is one canvas, it is where all the annotation time goes, and
+ * a 640px square of it was showing a 1280x720 frame at 640x360. Only Annotate opts in; switchTab()
+ * puts the class on <body>.
+ *
+ * What this actually buys, measured rather than assumed: width. The canvas goes 640px -> ~1150px.
+ * Height stays at 640px, because the window here is ~810 CSS px tall and the chrome around the
+ * canvas takes ~250px of that - see the canvas-wrap rule.
+ *
+ * min-height: 0 appears on most flex children on purpose. The default is auto, which refuses to
+ * shrink below the content, so without it the canvas overflows the card instead of fitting it.
+ */
+body.annotate-fill {
+  /* The floor the canvas can never go below, and the cap that stops the filmstrip from setting the
+   * row's height. One value, because the two have to agree - see the filmstrip rule for why. */
+  --annotate-row-h: 640px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body.annotate-fill main.wide {
+  max-width: none;
+  /* main is centred with `margin: 0 auto`, and an auto cross-axis margin on a flex item turns OFF
+   * the stretch that would otherwise make it full width - it gets sized to its content instead.
+   * Measured: 1199px inside a 1707px window until these two margins were zeroed. */
+  margin-left: 0;
+  margin-right: 0;
+  flex: 1;
+  min-height: 0;
+  /* The escape hatch on a short window: scroll the column rather than clip the property panel. */
+  overflow-y: auto;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+body.annotate-fill #annotate-section {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* #annotate-workspace and .annotate-layout are the same element, so the flex child and the flex
+ * container are one node. align-items goes from flex-start to stretch so the filmstrip, the canvas
+ * and the property panel all take the card's full height.
+ *
+ * `1 1 auto`, not `1`: the basis has to stay `auto` so the card is at least as tall as the canvas
+ * floor below it. With a `0` basis the card takes only the free space left in the section - measured
+ * at 436px - and the 640px canvas then paints straight out through the bottom of it, over the status
+ * bar and the step nav. Growing from a content basis keeps the card around its contents and lets
+ * main.wide scroll when the window cannot fit them.
+ *
+ * The shrink factor has to stay 1, and that is subtler. The basis is the row's content height, and
+ * one of those contents is the canvas, whose inline height Canvas.resize() wrote from the previous
+ * measurement - so the measured height feeds back into the basis. With shrink 0 that loop only ever
+ * ratchets upward: go fullscreen, the canvas grows and its height is written inline, leave
+ * fullscreen and the card cannot shrink back, so it overflows and pushes the status bar and the step
+ * nav out of view until a reload. Shrink 1 lets it fall back, and the wrap's own min-height still
+ * stops it at the 640px floor - the automatic minimum size of a flex item is its min-content size. */
+body.annotate-fill #annotate-workspace {
+  flex: 1 1 auto;
+  align-items: stretch;
+}
+
+/* Height is floored at the 640px this used to be hard-coded to, so the canvas can only ever get
+ * taller than before, never shorter. That floor is not theoretical: measured on the machine this
+ * was built for, the browser window is ~810 CSS px tall (1080p at 125% Windows scaling), and the
+ * topnav, the toolbar card, the status bar, the step nav and the padding take ~350px of it - so
+ * fitting the viewport alone would have handed the canvas 430px, a downgrade. The real win on this
+ * screen is width: 640px to about 1150px. When the window IS tall enough, the flex row above gives
+ * the extra height to the canvas and this floor never comes up; when it is not, main.wide scrolls. */
+body.annotate-fill .annotate-canvas-wrap {
+  height: auto;
+  min-height: var(--annotate-row-h);
+  position: relative;
+}
+
+/* The canvas comes out of flow, and this is load-bearing rather than cosmetic. Canvas.resize()
+ * writes the measured height back onto the element as an inline style; while the canvas is in flow
+ * that inline height is part of the wrap's content height, which is the card's flex basis - so the
+ * measurement feeds its own input. The loop only ratchets upward: go fullscreen and the canvas grows
+ * to fit, come back and the card cannot shrink again, because the inline height it just wrote is now
+ * the card's min-content size and no flex shrink factor can go below that. Measured: a canvas left
+ * at 1200px kept the card at 1248px through repeated resizes, overflowing the section and pushing
+ * the status bar and the step nav out of view until a reload. Out of flow, the wrap contributes
+ * nothing but its own min-height and the card sits at 688px no matter what the canvas says. */
+body.annotate-fill #annotate-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* The filmstrip keeps a cap, and the cap is the same value as the canvas floor. Dropping it looks
+ * harmless and is not: `overflow-y: auto` bounds the scroll box but not the element's auto height,
+ * so with the row's height coming from its content the filmstrip's 2,726 rows set it - measured at
+ * 141,861px, which the canvas then matched into a backing store of about 160 megapixels.
+ *
+ * `max-height: 100%` is the obvious tidier version and does not work: the percentage resolves
+ * against the card, whose own height is content-derived, so it computes to no limit at all. Tried
+ * and measured - the row went back to 141,909px. The cost of the fixed value is that on a window
+ * tall enough for the canvas to grow past the floor, these two panels stop at the floor and leave
+ * empty space beside it. Nothing on this screen ever gets there. */
+body.annotate-fill .annotate-filmstrip {
+  max-height: var(--annotate-row-h);
+  min-height: 0;
+}
+
+body.annotate-fill .annotate-props {
+  max-height: var(--annotate-row-h);
+  min-height: 0;
+  overflow-y: auto;
+}
+
 .btn-download.active-tool {
   background: var(--highlight);
   color: #fff;
