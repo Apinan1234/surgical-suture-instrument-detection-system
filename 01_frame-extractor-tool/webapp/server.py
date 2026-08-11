@@ -3,25 +3,27 @@ Web version of app.py — Phase 1 (Extract pipeline only).
 FastAPI + in-memory state + threading.Thread jobs + HTTP polling, no DB, no framework frontend.
 """
 
+import hmac
 import io
 import json
 import os
+import secrets
 import shutil
 import sys
 import threading
 import time
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
 import cv2
 import pytesseract
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
@@ -37,6 +39,32 @@ load_dotenv(WEBAPP_DIR / ".env")
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
 from detector import Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES, CLASS_COLORS_HEX  # noqa: E402
 from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
+
+# ── Auth (S-1) configuration ──
+# Required, and fail-closed: refuse to start with no password rather than come up wide open. A model
+# file is executable content here (see detector.py), so an unauthenticated caller reaching
+# /api/models + /api/models/load is remote code execution - auth is that route's real mitigation.
+# .env is loaded above, before this runs, so a value there is honoured.
+APP_PASSWORD = os.environ.get("APP_PASSWORD")
+if not APP_PASSWORD:
+    raise RuntimeError(
+        "APP_PASSWORD environment variable is required (see webapp/.env.example). The app refuses to "
+        "start without one because every API route - including model upload/load, which can execute "
+        "code - would otherwise be open to anyone who can reach the port."
+    )
+try:
+    # `or "10"` handles a blank SESSION_TTL_HOURS= (a plausible edit, since every other new tunable in
+    # .env.example is left blank); the try/except also catches a non-numeric value. Either falls back
+    # to the documented default rather than crashing startup with an opaque int() traceback.
+    _session_ttl_hours = int(os.environ.get("SESSION_TTL_HOURS") or "10")
+except ValueError:
+    _session_ttl_hours = 10
+SESSION_TTL = timedelta(hours=_session_ttl_hours)
+RATE_LIMIT_WINDOW_SEC = 5 * 60
+RATE_LIMIT_MAX_FAILURES = 5
+# Off by default so localhost/plain-HTTP dev keeps working; set true once the app is served over
+# HTTPS (behind a TLS-terminating proxy) so the session cookie is never sent in clear text.
+SESSION_COOKIE_SECURE = (os.environ.get("SESSION_COOKIE_SECURE", "") or "").strip().lower() in {"1", "true", "yes", "on"}
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", WEBAPP_DIR / "data")).resolve()
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "8192"))
@@ -162,12 +190,132 @@ load_state()
 app = FastAPI()
 
 
+# ────────────────────────────── S-1 Auth ──────────────────────────────
+#
+# Token -> expiry. In memory only, and deliberately NOT persisted into state.json: that file is the
+# user's dataset, not a session store, and a process restart logging everyone out is the correct,
+# safe behaviour. Both dicts are mutated from Starlette's threadpool, so a lock guards them, the same
+# lesson _state_lock encodes for the workspace state.
+_sessions: dict[str, datetime] = {}
+_login_failures: dict[str, list[float]] = {}
+_auth_lock = threading.Lock()
+
+# Reachable without a session. Everything else under /api/ requires one. The static mount (the login
+# page, app.js, style.css - none of them secret) is not under /api/ and stays public so the login
+# form can render before a session exists.
+_AUTH_ALLOWLIST = frozenset({"/api/health", "/api/login", "/api/logout"})
+
+
+def _client_ip(request: Request) -> str:
+    # This is the peer address as the ASGI server reports it, which is the login rate-limiter's bucket
+    # key. Behind a reverse proxy that is the PROXY's address unless uvicorn is run with
+    # --proxy-headers --forwarded-allow-ips=<proxy> (documented in README.md), which rewrites it to
+    # the real client from X-Forwarded-For. Parsing XFF here in app code instead would be worse: it is
+    # trivially spoofable unless the trusted-hop count is configured, which is exactly what
+    # --forwarded-allow-ips exists to handle at the server layer.
+    return request.client.host if request.client else "unknown"
+
+
+def _session_valid(token: str | None) -> bool:
+    """True iff the token names a live, unexpired session. Prunes it if expired."""
+    if not token:
+        return False
+    with _auth_lock:
+        expiry = _sessions.get(token)
+        if expiry is None:
+            return False
+        if expiry < datetime.now():
+            _sessions.pop(token, None)  # lazy eviction of an expired token on use
+            return False
+        return True
+
+
+class LoginBody(BaseModel):
+    password: str
+
+
+# Registered BEFORE security_headers below on purpose. Starlette applies the last-registered
+# middleware outermost, so registering auth first leaves security_headers outermost - which means its
+# headers are present even on the 401s this gate returns. The gate cannot raise HTTPException (that is
+# handled inside the router, which is inner to middleware); it returns a Response directly.
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and path not in _AUTH_ALLOWLIST:
+        if not _session_valid(request.cookies.get("session")):
+            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     return response
+
+
+@app.post("/api/login")
+def login(body: LoginBody, request: Request, response: Response):
+    ip = _client_ip(request)
+    now = time.time()
+    token = None
+    # One locked section covers check -> compare -> record, so a burst of concurrent wrong guesses
+    # from the same IP cannot each start from the same `recent` snapshot and lose each other's
+    # appends (which would let the lockout be outrun), and none can pass the len() check before an
+    # in-flight failure is recorded. hmac.compare_digest is microseconds and login is rare, so holding
+    # the lock across it costs nothing. secrets.token_urlsafe is likewise cheap.
+    with _auth_lock:
+        # Drop stale failure timestamps everywhere (in place, no rebind), so neither a per-IP list nor
+        # the dict itself grows without bound. Keep only IPs that still have a failure in the window.
+        for k in [k for k, v in _login_failures.items()
+                  if not any(now - t < RATE_LIMIT_WINDOW_SEC for t in v)]:
+            _login_failures.pop(k, None)
+        recent = [t for t in _login_failures.get(ip, []) if now - t < RATE_LIMIT_WINDOW_SEC]
+        if len(recent) >= RATE_LIMIT_MAX_FAILURES:
+            _login_failures[ip] = recent
+            raise HTTPException(status_code=401, detail="Too many failed attempts, try again later")
+
+        # compare_digest on str raises TypeError on any non-ASCII character, so a Thai password would
+        # 500 instead of logging in - compare bytes. Still constant-time.
+        if not hmac.compare_digest(body.password.encode("utf-8"), APP_PASSWORD.encode("utf-8")):
+            recent.append(now)
+            _login_failures[ip] = recent
+            raise HTTPException(status_code=401, detail="Invalid password")
+
+        _login_failures.pop(ip, None)
+        token = secrets.token_urlsafe(32)
+        cutoff = datetime.now()
+        # Prune expired sessions on each successful login so the dict cannot grow without bound.
+        for t in [t for t, exp in _sessions.items() if exp < cutoff]:
+            _sessions.pop(t, None)
+        _sessions[token] = cutoff + SESSION_TTL
+    response.set_cookie(
+        key="session",
+        value=token,
+        httponly=True,
+        secure=SESSION_COOKIE_SECURE,
+        samesite="strict",
+        max_age=int(SESSION_TTL.total_seconds()),
+    )
+    return {"authenticated": True}
+
+
+@app.post("/api/logout")
+def logout(request: Request, response: Response):
+    token = request.cookies.get("session")
+    if token:
+        with _auth_lock:
+            _sessions.pop(token, None)
+    response.delete_cookie("session")
+    return {"authenticated": False}
+
+
+@app.get("/api/me")
+def me(request: Request):
+    # NOT in the allowlist: the gate 401s it when there is no valid session, which is exactly the
+    # signal the frontend's boot probe wants (200 = logged in, 401 = show the login overlay).
+    return {"authenticated": True}
 
 
 @app.get("/api/health")
