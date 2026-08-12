@@ -1539,7 +1539,7 @@ const AnnotateState = (() => {
     // interpolated spans go through the same human-review gate Label Assist (S-8) results have.
     // Tested against the two machine values explicitly rather than `!== "manual"`: frame records
     // written before `source` existed carry no such key, and those are human work, not suggestions.
-    const machine = (s) => s === "model" || s === "interpolated";
+    const machine = (s) => s === "model" || s === "assist" || s === "interpolated";
     return (detections || []).map((d) => ({
       ...d,
       id: makeId(),
@@ -4006,10 +4006,20 @@ async function refreshAnalytics() {
   if (!res.ok) return;
   const data = await res.json();
 
-  document.getElementById("analytics-accept-rate").textContent = `${data.accept_rate.rate_pct}%`;
-  document.getElementById("analytics-suggested-total").textContent = data.accept_rate.suggested_total;
-  document.getElementById("analytics-accepted-total").textContent = data.accept_rate.accepted_total;
-  document.getElementById("analytics-assist-calls").textContent = data.accept_rate.assist_call_count;
+  const accept = data.accept_rate;
+  // null means no tracked assist call has happened yet. Printing "null%" or "0%" would both claim
+  // something the server deliberately declined to claim.
+  document.getElementById("analytics-accept-rate").textContent =
+    accept.rate_pct === null || accept.rate_pct === undefined ? "—" : `${accept.rate_pct}%`;
+  document.getElementById("analytics-suggested-total").textContent = accept.suggested_total;
+  document.getElementById("analytics-accepted-total").textContent = accept.accepted_total;
+  document.getElementById("analytics-assist-calls").textContent = accept.assist_call_count;
+  document.getElementById("analytics-model-boxes").textContent = accept.model_box_total;
+  document.getElementById("analytics-untracked-calls").textContent = accept.untracked_call_count;
+  document.getElementById("analytics-untracked-note").classList.toggle(
+    "hidden",
+    !accept.untracked_call_count
+  );
 
   document.getElementById("analytics-total-frames").textContent = data.dataset.total;
   document.getElementById("analytics-with-detection").textContent = data.dataset.with_detection;

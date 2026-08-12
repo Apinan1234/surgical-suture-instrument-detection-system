@@ -1138,6 +1138,11 @@ def frame_preview(frame_id: str):
 # ────────────────────────────── S-5 Annotation ──────────────────────────────
 
 
+# Sources that mean "a model produced this and a human has not confirmed it yet". hydrate() in
+# app.js keeps its own copy of this list -- keep them in step.
+MACHINE_SOURCES = ("model", "assist", "interpolated")
+
+
 class DetectionIn(BaseModel):
     class_id: int
     class_name: str
@@ -1146,7 +1151,10 @@ class DetectionIn(BaseModel):
     y_center: float = Field(ge=0.0, le=1.0)
     width: float = Field(gt=0.0, le=1.0)
     height: float = Field(gt=0.0, le=1.0)
-    source: Literal["model", "manual", "interpolated"] = "manual"
+    # "model" is bulk /api/detect output, "assist" is an accepted Label Assist suggestion. They
+    # were one value until the accept rate needed a numerator that matched its denominator; see
+    # /api/analytics. Records written before the split carry "model" for both and stay that way.
+    source: Literal["model", "assist", "manual", "interpolated"] = "manual"
     points: list[list[float]] | None = None
     keypoints: list[list[float]] | None = None
     # Set by a human in the Annotate tab only — never by the detectors (see Detection in detector.py).
@@ -1318,7 +1326,7 @@ def replace_frame_detections_bulk(body: BulkDetectionsBody):
             # span, but this route is reachable on its own — and a frame left `reviewed` while holding
             # machine boxes is worse than it looks, because hydrate() only dashes them when the frame
             # is unreviewed, so they would never be presented for review at all.
-            if record.get("reviewed") and any(d.get("source") in ("model", "interpolated") for d in dets):
+            if record.get("reviewed") and any(d.get("source") in MACHINE_SOURCES for d in dets):
                 record["reviewed"] = False
             results.append({"frame_id": frame_id, "rev": _bump_rev(record)})
 
@@ -1451,6 +1459,14 @@ def assist_frame(frame_id: str, body: AssistBody):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Assist failed: {e}")
 
+    # Detection defaults to source="model"; re-stamping here is what lets /api/analytics count the
+    # boxes this call had accepted without also sweeping in every box a bulk detect run produced.
+    suggestions = []
+    for d in dets:
+        wire = d.to_dict()
+        wire["source"] = "assist"
+        suggestions.append(wire)
+
     with _state_lock:
         _state["assist_log"].append({
             "frame_id": frame_id,
@@ -1461,11 +1477,16 @@ def assist_frame(frame_id: str, body: AssistBody):
             "conf": body.conf,
             "class_conf": body.class_conf,
             "detected_count": len(dets),
+            # Marks this call as one whose accepted boxes are identifiable (they will be saved as
+            # source="assist"). Entries logged before the split have no such flag and are left out of
+            # the accept-rate denominator rather than being compared against boxes that cannot be
+            # told apart from bulk detect output.
+            "tracks_accepts": True,
             "created_at": datetime.now().isoformat(),
         })
     save_state()
 
-    return {"detections": [d.to_dict() for d in dets]}
+    return {"detections": suggestions}
 
 
 # ────────────────────────────── OCR (burned-in overlay text) ──────────────────────────────
@@ -1828,15 +1849,37 @@ def analytics():
         frames = list(_state["frames"].values())
         detect_jobs = list(_state["detect_jobs"].values())
 
-    suggested_total = sum(int(e.get("detected_count", 0)) for e in assist_log)
+    # This ratio read 4834.6% because its two halves counted different things: the denominator
+    # counted only suggestions made through /assist, while the numerator counted every model-sourced
+    # box in the app -- including bulk /api/detect output that was never offered as a suggestion, and
+    # boxes annotated before the assist log existed at all.
+    #
+    # Accepted assist suggestions now save as source="assist" (see assist_frame), so the numerator
+    # can name exactly what the denominator offered. Assist calls logged before that split are
+    # excluded from both halves: their accepted boxes were saved as "model" and cannot be picked out
+    # of the bulk-detect population, so counting their suggestions would understate the rate as badly
+    # as the old numerator overstated it.
+    tracked = [e for e in assist_log if e.get("tracks_accepts")]
+    suggested_total = sum(int(e.get("detected_count", 0)) for e in tracked)
 
     accepted_total = sum(
         1
         for f in frames
         for d in f.get("detections", [])
-        if d.get("source") == "model"
+        if d.get("source") == "assist"
     )
-    rate_pct = round(accepted_total / suggested_total * 100, 1) if suggested_total else 0.0
+    # None, not 0.0: before the first tracked assist call there is no rate to report, and 0% would
+    # read as "the user rejects everything".
+    rate_pct = round(accepted_total / suggested_total * 100, 1) if suggested_total else None
+
+    # Reported beside the rate rather than divided into it. This is the quantity the old numerator
+    # was actually measuring -- every box in the app that came from a model by any route.
+    model_box_total = sum(
+        1
+        for f in frames
+        for d in f.get("detections", [])
+        if d.get("source") in ("model", "assist")
+    )
 
     job_history = [
         {
@@ -1870,7 +1913,11 @@ def analytics():
             "suggested_total": suggested_total,
             "accepted_total": accepted_total,
             "rate_pct": rate_pct,
-            "assist_call_count": len(assist_log),
+            "assist_call_count": len(tracked),
+            # How many logged assist calls the rate had to leave out, so a small denominator beside a
+            # large annotation count is self-explaining rather than suspicious.
+            "untracked_call_count": len(assist_log) - len(tracked),
+            "model_box_total": model_box_total,
         },
         "detect_jobs": job_history,
         "dataset": {**dataset_stats, "reviewed": reviewed_count},

@@ -546,12 +546,21 @@
         </div>
         <div class="stat-tile">
           <div class="stat-tile-value" id="analytics-assist-calls">—</div>
-          <div class="stat-tile-label">Assist calls</div>
+          <div class="stat-tile-label">Assist calls counted</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile-value" id="analytics-model-boxes">—</div>
+          <div class="stat-tile-label">Model-sourced boxes (all routes)</div>
         </div>
       </div>
       <div style="font-size:12px; color:var(--muted); margin-top:12px;">
-        Tracks Label Assist suggestions vs. what's currently saved as model-sourced, going forward from
-        when this tracking shipped — annotations made before that aren't counted.
+        The rate counts boxes accepted from Label Assist against the suggestions those same calls
+        made. Boxes written by a bulk Detect run were never offered as suggestions, so they are
+        reported separately on the right rather than folded into the rate.
+      </div>
+      <div id="analytics-untracked-note" class="hidden" style="font-size:12px; color:var(--muted); margin-top:6px;">
+        <span id="analytics-untracked-calls">—</span> earlier assist calls are excluded: they predate
+        accept tracking, and the boxes accepted from them cannot be told apart from Detect output.
       </div>
     </div>
 
