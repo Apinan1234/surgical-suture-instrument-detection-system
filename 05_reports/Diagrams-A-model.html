@@ -197,7 +197,7 @@ hr.div{border:none; border-top:1px solid var(--line); margin:56px 0}
     ส่วนแผนภาพของเว็บแอปพลิเคชันซึ่งเป็น <i>เครื่องมือสนับสนุน</i> แยกไว้ในชุด ข
   </p>
   <div class="meta">
-    <span>5 แผนภาพวาดใหม่</span>
+    <span>8 แผนภาพวาดใหม่</span>
     <span>+ 4 กลุ่มรูปผลการทดลอง</span>
     <span>YOLO11n · 9 คลาส · 2,190 ภาพ</span>
     <span>อ้างอิงผลจริง ส.ค. 2569</span>
@@ -215,7 +215,11 @@ hr.div{border:none; border-top:1px solid var(--line); margin:56px 0}
     <li><a href="#a5"><b>ก4</b><span>สถาปัตยกรรม YOLO11 และฟังก์ชันสูญเสีย</span></a></li>
     <li class="grp">ค · การทดลอง</li>
     <li><a href="#a6"><b>ก5</b><span>แบบแผนการทดลอง A/B</span></a></li>
-    <li class="grp">ง · รูปผลการทดลอง</li>
+    <li class="grp">ง · ผังงาน</li>
+    <li><a href="#a7"><b>ก6</b><span>ผังงานทำความสะอาด label</span></a></li>
+    <li><a href="#a8"><b>ก7</b><span>ผังงานการฝึกโมเดล</span></a></li>
+    <li><a href="#a9"><b>ก8</b><span>ผังงานการอนุมาน</span></a></li>
+    <li class="grp">จ · รูปผลการทดลอง</li>
     <li><a href="#results"><b>—</b><span>รูปที่ generate ไว้แล้ว</span></a></li>
     <li class="grp">ภาคผนวก</li>
     <li><a href="#map"><b>—</b><span>ใช้รูปไหนในบทใด</span></a></li>
@@ -896,6 +900,392 @@ hr.div{border:none; border-top:1px solid var(--line); margin:56px 0}
 
 <div class="grp-head">
   <span class="k">หมวด ง</span>
+  <h2>ผังงาน</h2>
+  <p>
+    สามรูปก่อนหน้าบอกว่าระบบ <i>ประกอบด้วยอะไร</i> และ <i>ทดลองอย่างไร</i> สามรูปนี้ลงลึกถึง
+    <b>ตรรกะจริงในโค้ด</b> — เงื่อนไขทุกกล่องข้าวหลามตัดในผังงานเหล่านี้มีอยู่จริงในไฟล์ที่ระบุไว้
+  </p>
+</div>
+
+<section id="a7">
+  <h3><span class="num">รูปที่ ก6</span>ผังงานการทำความสะอาดไฟล์ label</h3>
+  <p class="sub">ผังงานมาตรฐาน (ANSI/ISO) · วาดด้วย SVG · ตรงกับ <code>polygons_to_bboxes.py</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      อัลกอริทึมตัดสินใจอย่างไรกับ label แต่ละแถว และ <b>แถวแบบไหนบ้างที่ถูกทิ้ง</b> —
+      เป็นผังงานของโค้ดที่โครงงานนี้เขียนขึ้นเอง ไม่ใช่ของไลบรารี จึงเป็นผังงานที่ควรได้พื้นที่มากที่สุด
+      ในบทที่ 3 หัวข้อการเตรียมข้อมูล
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>สี่เหลี่ยมมุมมน</b> จุดเริ่มต้นและจุดสิ้นสุด</div>
+    <div><b>สี่เหลี่ยมผืนผ้า</b> การประมวลผล</div>
+    <div><b>ข้าวหลามตัด</b> การตัดสินใจ มีทางออกสองทางเสมอ</div>
+    <div><b>วงกลม ก</b> จุดเชื่อมต่อ — วนกลับไปอ่านแถวถัดไป</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 872" role="img" aria-label="ผังงานการทำความสะอาดไฟล์ label อ่านทีละแถว ตรวจว่าเป็นกรอบห้าค่าหรือ polygon ถ้าเป็น polygon จะแปลงเป็นกรอบที่ล้อมรอบและตรวจว่าพื้นที่ไม่เป็นศูนย์ แถวที่ตีความไม่ได้จะถูกทิ้งพร้อมข้อความเตือน">
+      <defs>
+        <marker id="f1h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .f1p{fill:#ffffff;stroke:#0f3460;stroke-width:1.4}
+        .f1d{fill:#eef4fb;stroke:#0f3460;stroke-width:1.4}
+        .f1term{fill:#0f3460;stroke:#0f3460;stroke-width:1.4}
+        .f1drop{fill:#fff5f6;stroke:#e94560;stroke-width:1.4}
+        .f1keep{fill:#f2faf6;stroke:#2f9e78;stroke-width:1.4}
+        .f1t{font-size:12px;fill:#1a1a2e}
+        .f1w{font-size:12px;fill:#ffffff;font-weight:600}
+        .f1m{font-size:10px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .f1y{font-size:10.5px;fill:#2f9e78;font-weight:700}
+        .f1n{font-size:10.5px;fill:#e94560;font-weight:700}
+        .f1ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <rect class="f1term" x="320" y="16" width="170" height="34" rx="17"/>
+      <text class="f1w" x="405" y="38" text-anchor="middle">เริ่ม · เปิดไฟล์ label</text>
+      <line class="f1ln" x1="405" y1="50" x2="405" y2="72" marker-end="url(#f1h)"/>
+
+      <circle cx="196" cy="93" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="196" y="97" text-anchor="middle">ก</text>
+      <line class="f1ln" x1="209" y1="93" x2="283" y2="93" marker-end="url(#f1h)"/>
+
+      <rect class="f1p" x="285" y="74" width="240" height="40" rx="3"/>
+      <text class="f1t" x="405" y="99" text-anchor="middle">อ่านแถวถัดไป ตัดช่องว่างหัวท้าย</text>
+      <line class="f1ln" x1="405" y1="114" x2="405" y2="132" marker-end="url(#f1h)"/>
+
+      <polygon class="f1d" points="405,132 575,168 405,204 235,168"/>
+      <text class="f1t" x="405" y="172" text-anchor="middle">ยังมีแถวเหลือหรือไม่</text>
+      <text class="f1n" x="588" y="164">ไม่</text>
+      <path class="f1ln" d="M575 168 H700" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="222">ใช่</text>
+      <line class="f1ln" x1="405" y1="204" x2="405" y2="232" marker-end="url(#f1h)"/>
+
+      <rect class="f1term" x="702" y="150" width="290" height="36" rx="18"/>
+      <text class="f1w" x="847" y="173" text-anchor="middle">เขียนไฟล์ผลลัพธ์ + พิมพ์สรุปสถิติ</text>
+
+      <polygon class="f1d" points="405,232 575,268 405,304 235,268"/>
+      <text class="f1t" x="405" y="266" text-anchor="middle">จำนวนค่าในแถว</text>
+      <text class="f1t" x="405" y="282" text-anchor="middle">เท่ากับ 5 หรือไม่</text>
+      <text class="f1y" x="588" y="264">ใช่</text>
+      <path class="f1ln" d="M575 268 H700" marker-end="url(#f1h)"/>
+      <text class="f1n" x="418" y="322">ไม่</text>
+      <line class="f1ln" x1="405" y1="304" x2="405" y2="332" marker-end="url(#f1h)"/>
+
+      <rect class="f1keep" x="702" y="248" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="266" fill="#1d6b51">เป็นกรอบอยู่แล้ว เก็บทั้งบรรทัด</text>
+      <text class="f1m" x="714" y="282" fill="#1d6b51">ไม่แตะตัวเลขเดิมแม้แต่หลักเดียว</text>
+      <line class="f1ln" x1="950" y1="268" x2="975" y2="268"/>
+      <circle cx="988" cy="268" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="272" text-anchor="middle">ก</text>
+
+      <polygon class="f1d" points="405,332 595,372 405,412 215,372"/>
+      <text class="f1t" x="405" y="368" text-anchor="middle">ค่าน้อยกว่า 7 หรือ</text>
+      <text class="f1t" x="405" y="384" text-anchor="middle">จำนวนค่าเป็นเลขคู่</text>
+      <text class="f1n" x="606" y="368">ใช่</text>
+      <path class="f1ln" d="M595 372 H700" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="430">ไม่</text>
+      <line class="f1ln" x1="405" y1="412" x2="405" y2="440" marker-end="url(#f1h)"/>
+
+      <rect class="f1drop" x="702" y="352" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="370" fill="#a8203a">ทิ้งแถว + เตือน malformed</text>
+      <text class="f1m" x="714" y="386" fill="#a8203a">ไม่ใช่ทั้งกรอบและ polygon</text>
+      <line class="f1ln" x1="950" y1="372" x2="975" y2="372"/>
+      <circle cx="988" cy="372" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="376" text-anchor="middle">ก</text>
+
+      <rect class="f1p" x="285" y="440" width="240" height="40" rx="3"/>
+      <text class="f1t" x="405" y="465" text-anchor="middle">แปลงพิกัดทุกค่าเป็นตัวเลข</text>
+      <line class="f1ln" x1="405" y1="480" x2="405" y2="500" marker-end="url(#f1h)"/>
+
+      <polygon class="f1d" points="405,500 575,536 405,572 235,536"/>
+      <text class="f1t" x="405" y="540" text-anchor="middle">แปลงเป็นตัวเลขไม่ได้</text>
+      <text class="f1n" x="588" y="532">ใช่</text>
+      <path class="f1ln" d="M575 536 H700" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="590">ไม่</text>
+      <line class="f1ln" x1="405" y1="572" x2="405" y2="600" marker-end="url(#f1h)"/>
+
+      <rect class="f1drop" x="702" y="516" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="534" fill="#a8203a">ทิ้งแถว + เตือน</text>
+      <text class="f1m" x="714" y="550" fill="#a8203a">พิกัดไม่ใช่ตัวเลข</text>
+      <line class="f1ln" x1="950" y1="536" x2="975" y2="536"/>
+      <circle cx="988" cy="536" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="540" text-anchor="middle">ก</text>
+
+      <rect class="f1p" x="255" y="600" width="300" height="46" rx="3"/>
+      <text class="f1t" x="405" y="620" text-anchor="middle">หากรอบสี่เหลี่ยมที่ล้อม polygon พอดี</text>
+      <text class="f1m" x="405" y="637" text-anchor="middle">แล้ว clamp ทุกค่าเข้าช่วง [0,1]</text>
+      <line class="f1ln" x1="405" y1="646" x2="405" y2="666" marker-end="url(#f1h)"/>
+
+      <polygon class="f1d" points="405,666 575,702 405,738 235,702"/>
+      <text class="f1t" x="405" y="706" text-anchor="middle">กว้าง &gt; 0 และ สูง &gt; 0</text>
+      <text class="f1n" x="588" y="698">ไม่</text>
+      <path class="f1ln" d="M575 702 H700" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="756">ใช่</text>
+      <line class="f1ln" x1="405" y1="738" x2="405" y2="766" marker-end="url(#f1h)"/>
+
+      <rect class="f1drop" x="702" y="682" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="700" fill="#a8203a">ทิ้งแถว · กรอบพื้นที่ศูนย์</text>
+      <text class="f1m" x="714" y="716" fill="#a8203a">ถ้าเก็บไว้ จะกลายเป็นเป้าที่ผิด</text>
+      <line class="f1ln" x1="950" y1="702" x2="975" y2="702"/>
+      <circle cx="988" cy="702" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="706" text-anchor="middle">ก</text>
+
+      <rect class="f1keep" x="270" y="766" width="270" height="44" rx="3"/>
+      <text class="f1t" x="405" y="786" text-anchor="middle" fill="#1d6b51">เขียนแถวใหม่เป็นกรอบ 5 ค่า</text>
+      <text class="f1m" x="405" y="803" text-anchor="middle" fill="#1d6b51">cls xc yc w h ทศนิยม 6 ตำแหน่ง</text>
+      <line class="f1ln" x1="540" y1="788" x2="562" y2="788"/>
+      <circle cx="575" cy="788" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="575" y="792" text-anchor="middle">ก</text>
+
+      <text class="f1m" x="16" y="850">ผลที่รันจริงกับ 03_dataset/ssid.yolov11 : 2,190 ไฟล์ · แปลง polygon 4,783 แถว · ทิ้ง 0 แถว · ได้ทั้งหมด 22,957 แถว</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ทางออกทุกทางถูกนับและรายงาน ไม่มีแถวใดหายไปเงียบ ๆ —
+      โปรแกรมพิมพ์สรุปว่ามีกี่แถวที่เป็นกรอบอยู่แล้ว กี่แถวที่แปลงมาจาก polygon และกี่แถวที่ถูกทิ้ง
+      พร้อมเหตุผล · เมื่อรันกับชุดข้อมูลจริง <b>จำนวนแถวที่ถูกทิ้งเป็นศูนย์</b> ซึ่งเป็นหลักฐานว่า
+      การแปลงไม่ได้ทำให้ข้อมูลหาย · เงื่อนไข <code>จำนวนค่าเป็นเลขคู่</code> มีไว้ดักแถวที่พิกัดขาดหาย
+      เพราะ polygon ที่ถูกต้องต้องมี class หนึ่งค่าบวกพิกัดเป็นคู่ รวมแล้วต้องเป็นเลขคี่เสมอ
+    </figcaption>
+  </figure>
+</section>
+
+<section id="a8">
+  <h3><span class="num">รูปที่ ก7</span>ผังงานการฝึกแบบจำลอง</h3>
+  <p class="sub">ผังงานพร้อมวงวนซ้อน · วาดด้วย SVG · ตรงกับบันทึกการรันจริงและ <code>train_roboflow_yolo.py</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      การฝึกหนึ่งรอบเกิดอะไรขึ้นบ้าง และ <b>ระบบตัดสินใจอย่างไรว่าจะเก็บน้ำหนักชุดไหนไว้ และจะหยุดเมื่อไร</b>
+      สองเรื่องนี้คือสิ่งที่ทำให้ <code>best.pt</code> ต่างจาก <code>last.pt</code> ซึ่งเป็นจุดที่รายงานมักอธิบายผิด
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 796" role="img" aria-label="ผังงานการฝึกแบบจำลอง เริ่มจากตรวจหน่วยความจำ สแกน label โหลดน้ำหนักตั้งต้น แล้ววนทีละ epoch ซึ่งภายในวนทีละ batch เพื่อคำนวณค่าสูญเสียและปรับน้ำหนัก จบแต่ละ epoch จะประเมินบนชุด validation และบันทึก best.pt เมื่อดีขึ้น">
+      <defs>
+        <marker id="f2h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .f2p{fill:#ffffff;stroke:#0f3460;stroke-width:1.4}
+        .f2d{fill:#eef4fb;stroke:#0f3460;stroke-width:1.4}
+        .f2term{fill:#0f3460;stroke:#0f3460;stroke-width:1.4}
+        .f2stop{fill:#fff5f6;stroke:#e94560;stroke-width:1.4}
+        .f2keep{fill:#f2faf6;stroke:#2f9e78;stroke-width:1.4}
+        .f2t{font-size:12px;fill:#1a1a2e}
+        .f2w{font-size:12px;fill:#ffffff;font-weight:600}
+        .f2m{font-size:10px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .f2y{font-size:10.5px;fill:#2f9e78;font-weight:700}
+        .f2n{font-size:10.5px;fill:#e94560;font-weight:700}
+        .f2ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <rect class="f2term" x="300" y="14" width="150" height="32" rx="16"/>
+      <text class="f2w" x="375" y="35" text-anchor="middle">เริ่ม</text>
+      <line class="f2ln" x1="375" y1="46" x2="375" y2="64" marker-end="url(#f2h)"/>
+
+      <polygon class="f2d" points="375,64 545,98 375,132 205,98"/>
+      <text class="f2t" x="375" y="94" text-anchor="middle">หน่วยความจำ commit</text>
+      <text class="f2t" x="375" y="110" text-anchor="middle">ว่างเกิน 6 GB หรือไม่</text>
+      <text class="f2n" x="558" y="92">ไม่</text>
+      <path class="f2ln" d="M545 98 H676" marker-end="url(#f2h)"/>
+      <rect class="f2stop" x="678" y="78" width="300" height="40" rx="3"/>
+      <text class="f2t" x="690" y="96" fill="#a8203a">หยุดทันที พร้อมบอกให้ปิดโปรแกรมอื่น</text>
+      <text class="f2m" x="690" y="112" fill="#a8203a">กันไม่ให้ตายกลางทางด้วย WinError 1455</text>
+      <text class="f2y" x="388" y="150">ใช่</text>
+      <line class="f2ln" x1="375" y1="132" x2="375" y2="152" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="152" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="172" text-anchor="middle">สแกนไฟล์ label แล้วสร้างแคช</text>
+      <text class="f2m" x="375" y="188" text-anchor="middle">รายงานจำนวนไฟล์เสียหาย</text>
+      <line class="f2ln" x1="375" y1="194" x2="375" y2="214" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="214" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="234" text-anchor="middle">โหลดน้ำหนักตั้งต้น yolo11n.pt</text>
+      <text class="f2m" x="375" y="250" text-anchor="middle">ย้ายมาได้ 448 จาก 499 ชั้น</text>
+      <line class="f2ln" x1="375" y1="256" x2="375" y2="276" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="276" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="296" text-anchor="middle">เลือก optimizer อัตโนมัติ</text>
+      <text class="f2m" x="375" y="312" text-anchor="middle">AdamW lr=0.000769</text>
+      <line class="f2ln" x1="375" y1="318" x2="375" y2="338" marker-end="url(#f2h)"/>
+
+      <!-- epoch loop -->
+      <rect x="60" y="338" width="700" height="330" rx="5" fill="none" stroke="#0f3460"
+            stroke-width="1.2" stroke-dasharray="6 4"/>
+      <text class="f2m" x="72" y="356" fill="#0f3460">วงวนระดับ epoch</text>
+
+      <polygon class="f2d" points="375,364 545,398 375,432 205,398"/>
+      <text class="f2t" x="375" y="394" text-anchor="middle">ยังไม่ครบ 150 epoch</text>
+      <text class="f2t" x="375" y="410" text-anchor="middle">และยังไม่ถูกสั่งหยุด</text>
+      <text class="f2y" x="388" y="450">ใช่</text>
+      <line class="f2ln" x1="375" y1="432" x2="375" y2="452" marker-end="url(#f2h)"/>
+
+      <rect x="150" y="452" width="450" height="86" rx="4" fill="#f7f9fd" stroke="#9fb0c9" stroke-width="1.2"/>
+      <text class="f2m" x="162" y="470" fill="#0f3460">วงวนระดับ batch · ทีละ 8 ภาพ</text>
+      <text class="f2t" x="162" y="492">augment → forward → คำนวณ box(CIoU) + cls(BCE) + dfl</text>
+      <text class="f2t" x="162" y="512">→ backward → ปรับน้ำหนัก → batch ถัดไปจนครบ 197 batch</text>
+      <text class="f2m" x="162" y="530" fill="#5c6b7a">แขนที่ปิด augmentation ข้ามขั้น augment ไปเลย</text>
+      <line class="f2ln" x1="375" y1="538" x2="375" y2="558" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="558" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="578" text-anchor="middle">ประเมินบนชุด validation</text>
+      <text class="f2m" x="375" y="594" text-anchor="middle">400 ภาพ ได้ mAP50 และ mAP50-95</text>
+      <line class="f2ln" x1="375" y1="600" x2="375" y2="618" marker-end="url(#f2h)"/>
+
+      <polygon class="f2d" points="375,618 545,644 375,670 205,644"/>
+      <text class="f2t" x="375" y="648" text-anchor="middle">ดีกว่าค่าที่ดีที่สุดเดิม</text>
+      <text class="f2y" x="558" y="638">ใช่</text>
+      <path class="f2ln" d="M545 644 H676" marker-end="url(#f2h)"/>
+      <rect class="f2keep" x="678" y="624" width="300" height="40" rx="3"/>
+      <text class="f2t" x="690" y="642" fill="#1d6b51">บันทึกทับ best.pt</text>
+      <text class="f2m" x="690" y="658" fill="#1d6b51">last.pt ถูกบันทึกทุก epoch อยู่แล้ว</text>
+
+      <text class="f2n" x="196" y="638">ไม่</text>
+      <path class="f2ln" d="M205 644 H100 V398 H203" marker-end="url(#f2h)"/>
+      <text class="f2m" x="104" y="520" fill="#5c6b7a">epoch ถัดไป</text>
+      <path class="f2ln" d="M828 664 V690 H100 V646" />
+
+      <text class="f2n" x="558" y="392">ไม่</text>
+      <path class="f2ln" d="M545 398 H996 V60 H700" marker-end="url(#f2h)"/>
+      <rect class="f2term" x="420" y="42" width="278" height="36" rx="18"/>
+      <text class="f2w" x="559" y="65" text-anchor="middle">จบ · ส่งคืน best.pt เป็นผลลัพธ์</text>
+
+      <rect x="60" y="704" width="918" height="56" rx="4" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="f2t" x="74" y="724" fill="#8a5500">เงื่อนไขหยุดก่อนกำหนด (patience): ถ้า mAP ไม่ดีขึ้นติดต่อกันครบจำนวน epoch ที่กำหนด ระบบจะหยุดเอง</text>
+      <text class="f2t" x="74" y="744" fill="#8a5500">รอบ 50 epoch จบโดยชน epoch สุดท้าย แปลว่ายังไม่ converge จึงต้องเทรนรอบใหม่ที่ยาวกว่า — เป็นที่มาของรอบ 150 epoch</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> <code>best.pt</code> กับ <code>last.pt</code> ไม่ใช่ไฟล์เดียวกัน —
+      <code>last.pt</code> คือน้ำหนักของ epoch สุดท้าย ส่วน <code>best.pt</code> คือน้ำหนักของ epoch ที่
+      ให้ mAP บน validation สูงที่สุด ซึ่งอาจอยู่กลางทาง <b>ผลที่รายงานต้องมาจาก <code>best.pt</code></b>
+      · การที่แขนเปิด augmentation จบโดย best epoch ตรงกับ epoch สุดท้ายพอดี คือสัญญาณว่ายังไม่ converge
+      ไม่ใช่สัญญาณว่าเทรนสำเร็จ
+    </figcaption>
+  </figure>
+</section>
+
+<section id="a9">
+  <h3><span class="num">รูปที่ ก8</span>ผังงานการอนุมาน (Inference)</h3>
+  <p class="sub">ผังงานมาตรฐาน · วาดด้วย SVG · ตรงกับ <code>detector.py</code> คลาส <code>YOLOv11Detector</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      หนึ่งเฟรมเดินทางอย่างไรจนกลายเป็นรายการกรอบที่วาดบนภาพ และ <b>ระบบกรองผลลัพธ์ด้วยเกณฑ์อะไร</b>
+      จุดที่ต้องอธิบายให้ถูกคือระบบนี้ใช้ <b>เกณฑ์ความเชื่อมั่นแยกรายคลาส</b> ไม่ใช่ค่าเดียวทั้งระบบ
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 700" role="img" aria-label="ผังงานการอนุมาน รับเฟรมภาพ คำนวณเกณฑ์ความเชื่อมั่นต่ำสุด เรียกโมเดลทำนาย แล้ววนกรองผลทีละกรอบด้วยเกณฑ์เฉพาะของคลาสนั้น ก่อนแปลงพิกัดกลับเป็นสัดส่วน">
+      <defs>
+        <marker id="f3h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .f3p{fill:#ffffff;stroke:#0f3460;stroke-width:1.4}
+        .f3d{fill:#eef4fb;stroke:#0f3460;stroke-width:1.4}
+        .f3term{fill:#0f3460;stroke:#0f3460;stroke-width:1.4}
+        .f3drop{fill:#fff5f6;stroke:#e94560;stroke-width:1.4}
+        .f3t{font-size:12px;fill:#1a1a2e}
+        .f3w{font-size:12px;fill:#ffffff;font-weight:600}
+        .f3m{font-size:10px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .f3y{font-size:10.5px;fill:#2f9e78;font-weight:700}
+        .f3n{font-size:10.5px;fill:#e94560;font-weight:700}
+        .f3ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <rect class="f3term" x="270" y="14" width="230" height="34" rx="17"/>
+      <text class="f3w" x="385" y="36" text-anchor="middle">รับเฟรมภาพ · เก็บขนาดเดิม</text>
+      <line class="f3ln" x1="385" y1="48" x2="385" y2="68" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="245" y="68" width="280" height="44" rx="3"/>
+      <text class="f3t" x="385" y="88" text-anchor="middle">หาเกณฑ์ต่ำสุดของทุกคลาส</text>
+      <text class="f3m" x="385" y="105" text-anchor="middle">floor = min(conf รวม, conf รายคลาส)</text>
+      <line class="f3ln" x1="385" y1="112" x2="385" y2="132" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="185" y="132" width="400" height="106" rx="3"/>
+      <text class="f3t" x="197" y="152">เรียกโมเดลทำนายด้วยเกณฑ์ floor</text>
+      <text class="f3m" x="197" y="170">ภายในไลบรารี:</text>
+      <text class="f3m" x="197" y="186">ปรับภาพเป็น 640×640 แบบ letterbox แล้ว normalize</text>
+      <text class="f3m" x="197" y="202">forward ผ่าน backbone → neck → head</text>
+      <text class="f3m" x="197" y="218">ถอดผลจาก P3 P4 P5 แล้วทำ NMS แยกตามคลาส</text>
+      <text class="f3m" x="197" y="232">(agnostic_nms=False กรอบต่างคลาสจึงไม่กดทับกัน)</text>
+      <line class="f3ln" x1="385" y1="238" x2="385" y2="258" marker-end="url(#f3h)"/>
+
+      <circle cx="150" cy="278" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f3t" x="150" y="282" text-anchor="middle">ก</text>
+      <line class="f3ln" x1="163" y1="278" x2="213" y2="278" marker-end="url(#f3h)"/>
+
+      <polygon class="f3d" points="385,258 555,292 385,326 215,292"/>
+      <text class="f3t" x="385" y="290" text-anchor="middle">ยังมีกรอบที่ยังไม่ตรวจ</text>
+      <text class="f3t" x="385" y="306" text-anchor="middle">เหลืออยู่หรือไม่</text>
+      <text class="f3n" x="568" y="286">ไม่</text>
+      <path class="f3ln" d="M555 292 H690" marker-end="url(#f3h)"/>
+      <rect class="f3term" x="692" y="274" width="300" height="36" rx="18"/>
+      <text class="f3w" x="842" y="297" text-anchor="middle">คืนรายการผลลัพธ์ทั้งหมด</text>
+      <text class="f3y" x="398" y="344">ใช่</text>
+      <line class="f3ln" x1="385" y1="326" x2="385" y2="352" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="245" y="352" width="280" height="42" rx="3"/>
+      <text class="f3t" x="385" y="372" text-anchor="middle">หาชื่อคลาสจากรหัสคลาส</text>
+      <text class="f3m" x="385" y="388" text-anchor="middle">รหัสเกินช่วง ใช้ตัวเลขเป็นชื่อแทน</text>
+      <line class="f3ln" x1="385" y1="394" x2="385" y2="414" marker-end="url(#f3h)"/>
+
+      <polygon class="f3d" points="385,414 575,452 385,490 195,452"/>
+      <text class="f3t" x="385" y="448" text-anchor="middle">ความเชื่อมั่น ≥ เกณฑ์</text>
+      <text class="f3t" x="385" y="464" text-anchor="middle">เฉพาะของคลาสนั้น</text>
+      <text class="f3n" x="588" y="446">ไม่</text>
+      <path class="f3ln" d="M575 452 H690" marker-end="url(#f3h)"/>
+      <rect class="f3drop" x="692" y="432" width="248" height="40" rx="3"/>
+      <text class="f3t" x="704" y="450" fill="#a8203a">ทิ้งกรอบนี้</text>
+      <text class="f3m" x="704" y="466" fill="#a8203a">ผ่าน floor แต่ไม่ผ่านเกณฑ์ของคลาส</text>
+      <line class="f3ln" x1="940" y1="452" x2="965" y2="452"/>
+      <circle cx="978" cy="452" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f3t" x="978" y="456" text-anchor="middle">ก</text>
+
+      <text class="f3y" x="398" y="508">ใช่</text>
+      <line class="f3ln" x1="385" y1="490" x2="385" y2="516" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="215" y="516" width="340" height="46" rx="3"/>
+      <text class="f3t" x="385" y="536" text-anchor="middle">แปลงพิกัดมุมเป็นจุดกึ่งกลางและขนาด</text>
+      <text class="f3m" x="385" y="553" text-anchor="middle">หารด้วยขนาดภาพเดิม ได้สัดส่วน 0–1</text>
+      <line class="f3ln" x1="385" y1="562" x2="385" y2="582" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="265" y="582" width="240" height="40" rx="3"/>
+      <text class="f3t" x="385" y="607" text-anchor="middle">เพิ่มลงรายการผลลัพธ์</text>
+      <line class="f3ln" x1="505" y1="602" x2="540" y2="602"/>
+      <circle cx="553" cy="602" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f3t" x="553" y="606" text-anchor="middle">ก</text>
+
+      <rect x="16" y="644" width="988" height="44" rx="4" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="f3t" x="30" y="663" fill="#8a5500">ทำไมต้องขอที่ floor แล้วค่อยกรองเอง: ไลบรารีจะตัดกรอบที่ต่ำกว่าเกณฑ์ทิ้งก่อนที่โปรแกรมจะเห็น</text>
+      <text class="f3t" x="30" y="680" fill="#8a5500">ถ้าส่งเกณฑ์รวมไปตรง ๆ คลาสที่ตั้งเกณฑ์ต่ำกว่า เช่น needle จะไม่มีวันได้กรอบคืนมาเลย</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> การกรองเกิด <b>สองชั้น</b> — ชั้นแรกอยู่ในไลบรารีที่เกณฑ์ต่ำสุด
+      ชั้นที่สองอยู่ในโค้ดของโครงงานที่เกณฑ์เฉพาะของแต่ละคลาส ออกแบบแบบนี้เพราะคลาสที่ตรวจยากอย่าง
+      <code>needle</code> ต้องใช้เกณฑ์ต่ำกว่าคลาสอื่นจึงจะได้กรอบคืนมา แต่ถ้าลดเกณฑ์รวมของทั้งระบบลง
+      คลาสที่ตรวจง่ายจะให้กรอบผิดเพิ่มขึ้นทันที
+    </figcaption>
+  </figure>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด จ</span>
   <h2>รูปผลการทดลองที่สร้างจากข้อมูลจริง</h2>
   <p>
     รูปกลุ่มนี้ <b>ไม่ต้องวาดมือ</b> ทั้งหมดถูกสร้างโดย <code>report_training_results.py</code> จากไฟล์ผลการรันจริง
@@ -972,7 +1362,7 @@ hr.div{border:none; border-top:1px solid var(--line); margin:56px 0}
       <tbody>
         <tr><td class="nowrap">1 บทนำ</td><td><b>ก1</b> ภาพรวมกระบวนการ</td><td>—</td></tr>
         <tr><td class="nowrap">2 ทฤษฎี</td><td><b>ก4</b> สถาปัตยกรรม YOLO11 + loss</td><td>—</td></tr>
-        <tr><td class="nowrap">3 วิเคราะห์และออกแบบ</td><td><b>ก2</b> ข้อบกพร่อง label · <b>ก3</b> อนุกรมวิธานคลาส · <b>ก5</b> แบบแผนการทดลอง</td>
+        <tr><td class="nowrap">3 วิเคราะห์และออกแบบ</td><td><b>ก2</b> ข้อบกพร่อง label · <b>ก3</b> อนุกรมวิธานคลาส · <b>ก5</b> แบบแผนการทดลอง · <b>ก6</b> ผังงานล้าง label · <b>ก7</b> ผังงานการฝึก · <b>ก8</b> ผังงานการอนุมาน</td>
             <td>ข1 สถาปัตยกรรม · ข3 Context · ข5 Use Case · ข11 โครงสร้างข้อมูล · ข8 ผังงานสกัดเฟรม</td></tr>
         <tr><td class="nowrap">4 ผลการทดลอง</td><td><b>ก6</b> การกระจายคลาส · <b>ก7</b> กราฟการฝึก · <b>ก8</b> ผลรายคลาส · <b>ก9</b> วิเคราะห์ความผิดพลาด</td>
             <td>ข9 วงจรกำกับข้อมูล + ภาพหน้าจอจริง</td></tr>
