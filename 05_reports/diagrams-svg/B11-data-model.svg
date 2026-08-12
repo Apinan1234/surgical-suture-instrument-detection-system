@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 970 700" role="img" aria-label="แผนภาพโครงสร้างข้อมูลแสดง 7 กลุ่มข้อมูล ได้แก่ VIDEO EXTRACT_JOB FRAME DETECTION DETECT_JOB MODEL และ EXPORT_JOB พร้อมความสัมพันธ์แบบตีนกา"><title>โครงสร้างข้อมูล</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <g>
+        <rect x="40" y="60" width="250" height="102" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M40 90 H290" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M43 60 H287 A3 3 0 0 1 290 63 V90 H40 V63 A3 3 0 0 1 43 60 Z" fill="#dde4ef"/>
+        <text x="165" y="80" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">VIDEO</text>
+        <text x="51" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">video_id</text>
+        <text x="279" y="106" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M48 114 H282" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="51" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">filename</text>
+        <path d="M48 138 H282" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="51" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">int</text>
+        <text x="112" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">size_bytes</text>
+      </g>
+      <g>
+        <rect x="360" y="60" width="250" height="150" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M360 90 H610" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M363 60 H607 A3 3 0 0 1 610 63 V90 H360 V63 A3 3 0 0 1 363 60 Z" fill="#dde4ef"/>
+        <text x="485" y="80" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">EXTRACT_JOB</text>
+        <text x="371" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">job_id</text>
+        <text x="599" y="106" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M368 114 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">video_id</text>
+        <text x="599" y="130" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">FK</text>
+        <path d="M368 138 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">status</text>
+        <path d="M368 162 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">int</text>
+        <text x="432" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">progress</text>
+        <path d="M368 186 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="202" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="432" y="202" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">frame_ids</text>
+      </g>
+      <g>
+        <rect x="680" y="60" width="250" height="126" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M680 90 H930" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M683 60 H927 A3 3 0 0 1 930 63 V90 H680 V63 A3 3 0 0 1 683 60 Z" fill="#dde4ef"/>
+        <text x="805" y="80" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">FRAME</text>
+        <text x="691" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="106" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">frame_id</text>
+        <text x="919" y="106" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M688 114 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="130" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">path</text>
+        <path d="M688 138 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">bool</text>
+        <text x="752" y="154" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">reviewed</text>
+        <path d="M688 162 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="178" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">detections</text>
+      </g>
+      <g>
+        <rect x="40" y="280" width="250" height="78" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M40 310 H290" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M43 280 H287 A3 3 0 0 1 290 283 V310 H40 V283 A3 3 0 0 1 43 280 Z" fill="#dde4ef"/>
+        <text x="165" y="300" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">MODEL</text>
+        <text x="51" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">name</text>
+        <text x="279" y="326" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M48 334 H282" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="51" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="112" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">path</text>
+      </g>
+      <g>
+        <rect x="360" y="280" width="250" height="150" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M360 310 H610" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M363 280 H607 A3 3 0 0 1 610 283 V310 H360 V283 A3 3 0 0 1 363 280 Z" fill="#dde4ef"/>
+        <text x="485" y="300" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">DETECT_JOB</text>
+        <text x="371" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">job_id</text>
+        <text x="599" y="326" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M368 334 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">model</text>
+        <path d="M368 358 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">backend</text>
+        <path d="M368 382 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">float</text>
+        <text x="432" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">conf</text>
+        <path d="M368 406 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">bool</text>
+        <text x="432" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">skip_reviewed</text>
+      </g>
+      <g>
+        <rect x="680" y="280" width="250" height="174" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M680 310 H930" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M683 280 H927 A3 3 0 0 1 930 283 V310 H680 V283 A3 3 0 0 1 683 280 Z" fill="#dde4ef"/>
+        <text x="805" y="300" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">DETECTION</text>
+        <text x="691" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="326" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">class_name</text>
+        <path d="M688 334 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">float</text>
+        <text x="752" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">confidence</text>
+        <path d="M688 358 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="374" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">bbox</text>
+        <path d="M688 382 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="398" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">polygon</text>
+        <path d="M688 406 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">list</text>
+        <text x="752" y="422" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">keypoints</text>
+        <path d="M688 430 H922" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="691" y="446" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="752" y="446" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">source</text>
+      </g>
+      <g>
+        <rect x="360" y="500" width="250" height="126" fill="#f1f4f8" stroke="#7d95bb" stroke-width="1.4" rx="3"/>
+        <path d="M360 530 H610" stroke="#7d95bb" stroke-width="1.4" fill="none"/>
+        <path d="M363 500 H607 A3 3 0 0 1 610 503 V530 H360 V503 A3 3 0 0 1 363 500 Z" fill="#dde4ef"/>
+        <text x="485" y="520" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="12.5" font-weight="700" fill="#0f3460">EXPORT_JOB</text>
+        <text x="371" y="546" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="546" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">job_id</text>
+        <text x="599" y="546" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">PK</text>
+        <path d="M368 554 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="570" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">string</text>
+        <text x="432" y="570" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">detect_job_id</text>
+        <text x="599" y="570" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" font-weight="700" fill="#e94560">FK</text>
+        <path d="M368 578 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="594" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">float</text>
+        <text x="432" y="594" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">train_ratio</text>
+        <path d="M368 602 H602" stroke="#ccd6e4" stroke-width="1" fill="none"/>
+        <text x="371" y="618" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#5c6b7a">bool</text>
+        <text x="432" y="618" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" fill="#1a1a2e">reviewed_only</text>
+      </g>
+      <g>
+        <path d="M302 110 H334" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M296 103 V117" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M302 103 V117" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 110 L360 103" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 110 L360 110" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 110 L360 117" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="338" cy="110" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="318" y="102" text-anchor="middle" font-size="10.5" fill="#1a1a2e">ถูกใช้ใน</text>
+        <path d="M622 130 H654" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M616 123 V137" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M622 123 V137" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 130 L680 123" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 130 L680 130" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 130 L680 137" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="658" cy="130" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="638" y="122" text-anchor="middle" font-size="10.5" fill="#1a1a2e">สร้าง</text>
+        <path d="M805 198 V258" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M798 192 H812" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M798 198 H812" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M805 266 L798 280" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M805 266 L805 280" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M805 266 L812 280" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="805" cy="258" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="814" y="234" text-anchor="start" font-size="10.5" fill="#1a1a2e">มี</text>
+        <path d="M302 320 H334" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M296 313 V327" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M302 313 V327" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 320 L360 313" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 320 L360 320" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M346 320 L360 327" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="338" cy="320" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="318" y="312" text-anchor="middle" font-size="10.5" fill="#1a1a2e">ถูกใช้โดย</text>
+        <path d="M622 300 H645 V150 H654" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M616 293 V307" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M622 293 V307" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 150 L680 143" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 150 L680 150" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M666 150 L680 157" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="658" cy="150" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="652" y="232" text-anchor="start" font-size="10.5" fill="#1a1a2e">เขียนผลลงบน</text>
+        <path d="M485 442 V478" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M478 436 H492" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M478 442 H492" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M485 486 L478 500" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M485 486 L485 500" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M485 486 L492 500" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="485" cy="478" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="493" y="468" text-anchor="start" font-size="10.5" fill="#1a1a2e">เป็นแหล่งข้อมูลของ</text>
+      </g>
+      <g>
+        <path d="M46 662 H86" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M46 655 V669" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M52 655 V669" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M98 662 L112 655" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M98 662 L112 662" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <path d="M98 662 L112 669" stroke="#5c6b7a" stroke-width="1.3" fill="none"/>
+        <circle cx="90" cy="662" r="3.6" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+        <text x="126" y="666" font-size="10.5" fill="#5c6b7a">อ่านว่า “หนึ่ง ต่อ ศูนย์หรือมากกว่า” — ขีดสองขีดคือหนึ่ง · วงกลมคือศูนย์ได้ · ตีนกาคือมากกว่าหนึ่ง</text>
+      </g>
+    </svg>

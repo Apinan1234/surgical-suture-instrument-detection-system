@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 646" role="img" aria-label="แผนภาพกระบวนการพัฒนาแบบจำลองแบ่งเป็นสี่ระยะจากบนลงล่าง ได้แก่ การเตรียมข้อมูลจากวิดีโอ การเตรียมชุดข้อมูล การฝึกและประเมินสองแขนเปรียบเทียบ และการนำไปใช้งาน พร้อมลูกศรป้อนกลับจากโมเดลกลับไปยังขั้นกำกับข้อมูล"><title>ภาพรวมกระบวนการพัฒนาแบบจำลอง</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="a1h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+        <marker id="a1hr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#e94560"/>
+        </marker>
+      </defs>
+      <style>
+        .a1b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.3}
+        .a1band{fill:#f2f5fa;stroke:#dde4ef;stroke-width:1}
+        .a1t{font-size:13px;fill:#1a1a2e;font-weight:600}
+        .a1s{font-size:10.5px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .a1n{font-size:10.5px;fill:#8492a6}
+        .a1ph{font-size:11px;fill:#0f3460;font-weight:700}
+        .a1ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <!-- ระยะ 1 -->
+      <rect class="a1band" x="8" y="18" width="1004" height="112" rx="4"/>
+      <text class="a1ph" x="22" y="42">ระยะ 1</text>
+      <text class="a1n" x="22" y="58">เตรียมข้อมูล</text>
+      <rect class="a1b" x="112" y="44" width="152" height="60" rx="3"/>
+      <text class="a1t" x="188" y="70" text-anchor="middle">วิดีโอฝึกเย็บแผล</text>
+      <text class="a1s" x="188" y="88" text-anchor="middle">.mp4</text>
+      <line class="a1ln" x1="266" y1="74" x2="288" y2="74" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="292" y="44" width="152" height="60" rx="3"/>
+      <text class="a1t" x="368" y="70" text-anchor="middle">สกัดเฟรม</text>
+      <text class="a1s" x="368" y="88" text-anchor="middle">frame_extractor.py</text>
+      <line class="a1ln" x1="446" y1="74" x2="468" y2="74" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="472" y="44" width="168" height="60" rx="3"/>
+      <text class="a1t" x="556" y="70" text-anchor="middle">กำกับข้อมูล</text>
+      <text class="a1s" x="556" y="88" text-anchor="middle">webapp + Roboflow</text>
+      <line class="a1ln" x1="642" y1="74" x2="664" y2="74" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="668" y="44" width="152" height="60" rx="3"/>
+      <text class="a1t" x="744" y="70" text-anchor="middle">ส่งออกรูปแบบ YOLO</text>
+      <text class="a1s" x="744" y="88" text-anchor="middle">2,190 ภาพ</text>
+
+      <line class="a1ln" x1="188" y1="130" x2="188" y2="156" marker-end="url(#a1h)"/>
+
+      <!-- ระยะ 2 -->
+      <rect class="a1band" x="8" y="158" width="1004" height="112" rx="4"/>
+      <text class="a1ph" x="22" y="182">ระยะ 2</text>
+      <text class="a1n" x="22" y="198">เตรียมชุดข้อมูล</text>
+      <rect x="112" y="184" width="238" height="60" rx="3" fill="#fff5f6" stroke="#e94560" stroke-width="1.6"/>
+      <text class="a1t" x="231" y="210" text-anchor="middle" fill="#a8203a">ทำความสะอาด label</text>
+      <text class="a1s" x="231" y="228" text-anchor="middle" fill="#a8203a">polygons_to_bboxes.py</text>
+      <line class="a1ln" x1="352" y1="214" x2="374" y2="214" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="378" y="184" width="176" height="60" rx="3"/>
+      <text class="a1t" x="466" y="210" text-anchor="middle">แบ่ง train / val / test</text>
+      <text class="a1s" x="466" y="228" text-anchor="middle">1,575 / 400 / 215</text>
+      <text class="a1n" x="580" y="203">ตรวจพบไฟล์ที่ปนกล่องกับ polygon 623 จาก 2,190 ไฟล์</text>
+      <text class="a1n" x="580" y="221">ถ้าไม่แก้ Ultralytics จะอ่านผิด 8,047 กล่อง โดยไม่แจ้งเตือน</text>
+      <text class="a1n" x="580" y="239">ผลหลังแก้: 22,957 แถว ทุกแถวเป็นกล่อง 5 ค่า · 0 corrupt</text>
+
+      <line class="a1ln" x1="188" y1="270" x2="188" y2="296" marker-end="url(#a1h)"/>
+
+      <!-- ระยะ 3 -->
+      <rect class="a1band" x="8" y="298" width="1004" height="158" rx="4"/>
+      <text class="a1ph" x="22" y="322">ระยะ 3</text>
+      <text class="a1n" x="22" y="338">ฝึกและประเมิน</text>
+      <rect class="a1b" x="112" y="316" width="212" height="54" rx="3"/>
+      <text class="a1t" x="218" y="338" text-anchor="middle">แขน A · ปิด augmentation</text>
+      <text class="a1s" x="218" y="356" text-anchor="middle">15 พารามิเตอร์ = 0</text>
+      <rect class="a1b" x="112" y="384" width="212" height="54" rx="3"/>
+      <text class="a1t" x="218" y="406" text-anchor="middle">แขน B · เปิด augmentation</text>
+      <text class="a1s" x="218" y="424" text-anchor="middle">ค่าเริ่มต้น Ultralytics</text>
+      <path class="a1ln" d="M326 343 H352 V377 H370" marker-end="url(#a1h)"/>
+      <path class="a1ln" d="M326 411 H352 V377 H370" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="374" y="350" width="198" height="54" rx="3"/>
+      <text class="a1t" x="473" y="372" text-anchor="middle">ประเมินบน val</text>
+      <text class="a1s" x="473" y="390" text-anchor="middle">ใช้เลือกโมเดล</text>
+      <line class="a1ln" x1="574" y1="377" x2="600" y2="377" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="604" y="350" width="198" height="54" rx="3"/>
+      <text class="a1t" x="703" y="372" text-anchor="middle">วัดผลบน test</text>
+      <text class="a1s" x="703" y="390" text-anchor="middle">ตัวเลขที่รายงาน</text>
+      <text class="a1n" x="820" y="366">ชุด test ไม่เคยถูกใช้</text>
+      <text class="a1n" x="820" y="384">ระหว่างเลือกโมเดล</text>
+
+      <line class="a1ln" x1="188" y1="456" x2="188" y2="482" marker-end="url(#a1h)"/>
+
+      <!-- ระยะ 4 -->
+      <rect class="a1band" x="8" y="484" width="1004" height="112" rx="4"/>
+      <text class="a1ph" x="22" y="508">ระยะ 4</text>
+      <text class="a1n" x="22" y="524">นำไปใช้</text>
+      <rect class="a1b" x="112" y="510" width="152" height="60" rx="3"/>
+      <text class="a1t" x="188" y="536" text-anchor="middle">น้ำหนักโมเดล</text>
+      <text class="a1s" x="188" y="554" text-anchor="middle">best.pt</text>
+      <line class="a1ln" x1="266" y1="540" x2="288" y2="540" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="292" y="510" width="176" height="60" rx="3"/>
+      <text class="a1t" x="380" y="536" text-anchor="middle">เว็บแอป · ตรวจจับ</text>
+      <text class="a1s" x="380" y="554" text-anchor="middle">Detect</text>
+      <line class="a1ln" x1="470" y1="540" x2="492" y2="540" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="496" y="510" width="176" height="60" rx="3"/>
+      <text class="a1t" x="584" y="536" text-anchor="middle">ช่วยกำกับข้อมูล</text>
+      <text class="a1s" x="584" y="554" text-anchor="middle">Label Assist</text>
+
+      <!-- ป้อนกลับ -->
+      <path d="M674 540 H962 V30 H556 V38" fill="none" stroke="#e94560" stroke-width="1.4"
+            stroke-dasharray="5 4" marker-end="url(#a1hr)"/>
+      <text x="950" y="318" font-size="10.5" fill="#e94560" text-anchor="end">ป้อนกลับ · โมเดลช่วยกำกับข้อมูลรอบถัดไป</text>
+
+      <text class="a1n" x="8" y="622">ทุกตัวเลขในรูปนี้มาจาก results/class_distribution.md และบันทึกการรันจริง</text>
+    </svg>

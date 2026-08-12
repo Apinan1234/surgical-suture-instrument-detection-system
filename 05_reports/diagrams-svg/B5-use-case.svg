@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 760" role="img" aria-label="แผนภาพยูสเคสแสดงผู้ใช้งานระบบทางซ้ายเชื่อมกับยูสเคสหลัก 8 รายการ และมีตัวแสดงภายนอกคือ Roboflow Cloud API และ Tesseract OCR ทางขวา"><title>แผนภาพยูสเคส</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="uOpen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9" fill="none" stroke="currentColor" stroke-width="1.2"/>
+        </marker>
+        <marker id="uTri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="11" markerHeight="11" orient="auto-start-reverse">
+          <polygon points="0,0.5 11,6 0,11.5" fill="#fbfcfe" stroke="currentColor" stroke-width="1.2"/>
+        </marker>
+      </defs>
+
+      <!-- system boundary -->
+      <rect x="210" y="52" width="690" height="664" fill="none" stroke="#0f3460" stroke-width="1.8"/>
+      <text x="555" y="82" text-anchor="middle" font-size="13" font-weight="700" fill="#0f3460">ระบบตรวจจับเครื่องมือผ่าตัดและบริเวณแผลด้วยปัญญาประดิษฐ์ (เว็บแอปพลิเคชัน)</text>
+
+      <!-- primary actor -->
+      <g stroke="#1a1a2e" stroke-width="1.7" fill="none">
+        <circle cx="110" cy="356" r="14" fill="#ffffff"/>
+        <line x1="110" y1="370" x2="110" y2="414"/>
+        <line x1="84" y1="386" x2="136" y2="386"/>
+        <line x1="110" y1="414" x2="92" y2="444"/>
+        <line x1="110" y1="414" x2="128" y2="444"/>
+      </g>
+      <text x="110" y="466" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1a1a2e">ผู้ใช้งานระบบ</text>
+      <text x="110" y="484" text-anchor="middle" font-size="10" fill="#5c6b7a">นักวิจัย / ผู้กำกับข้อมูล</text>
+
+      <!-- secondary actors -->
+      <g stroke="#1a1a2e" stroke-width="1.5" fill="none">
+        <circle cx="985" cy="272" r="11" fill="#ffffff"/>
+        <line x1="985" y1="283" x2="985" y2="318"/>
+        <line x1="965" y1="296" x2="1005" y2="296"/>
+        <line x1="985" y1="318" x2="971" y2="342"/>
+        <line x1="985" y1="318" x2="999" y2="342"/>
+        <circle cx="985" cy="552" r="11" fill="#ffffff"/>
+        <line x1="985" y1="563" x2="985" y2="598"/>
+        <line x1="965" y1="576" x2="1005" y2="576"/>
+        <line x1="985" y1="598" x2="971" y2="622"/>
+        <line x1="985" y1="598" x2="999" y2="622"/>
+      </g>
+      <text x="985" y="362" text-anchor="middle" font-size="10" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«system»</text>
+      <text x="985" y="379" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">Roboflow</text>
+      <text x="985" y="395" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">Cloud API</text>
+      <text x="985" y="642" text-anchor="middle" font-size="10" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">«system»</text>
+      <text x="985" y="659" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">Tesseract</text>
+      <text x="985" y="675" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1a1a2e">OCR</text>
+
+      <!-- column 1 : primary use cases -->
+      <g fill="#ffffff" stroke="#0f3460" stroke-width="1.5">
+        <ellipse cx="340" cy="132" rx="118" ry="28"/>
+        <ellipse cx="340" cy="210" rx="118" ry="28"/>
+        <ellipse cx="340" cy="288" rx="118" ry="28"/>
+        <ellipse cx="340" cy="366" rx="118" ry="28"/>
+        <ellipse cx="340" cy="444" rx="118" ry="28"/>
+        <ellipse cx="340" cy="522" rx="118" ry="28"/>
+        <ellipse cx="340" cy="600" rx="118" ry="28"/>
+        <ellipse cx="340" cy="678" rx="118" ry="28"/>
+      </g>
+      <g text-anchor="middle" fill="#1a1a2e" font-size="12">
+        <text x="340" y="137">อัปโหลด / จัดการวิดีโอ</text>
+        <text x="340" y="215">สกัดเฟรมจากวิดีโอ</text>
+        <text x="340" y="286">ตรวจจับวัตถุแบบกลุ่ม</text>
+        <text x="340" y="301" font-size="9.5" fill="#586778">(bulk detect)</text>
+        <text x="340" y="371">กำกับข้อมูลภาพ</text>
+        <text x="340" y="442">ขอให้ AI ช่วยกำกับ</text>
+        <text x="340" y="457" font-size="9.5" fill="#586778">(Label Assist — รายเฟรม)</text>
+        <text x="340" y="527">ส่งออกชุดข้อมูล</text>
+        <text x="340" y="598">จัดการโมเดล</text>
+        <text x="340" y="613" font-size="9.5" fill="#586778">(อัปโหลด .pt)</text>
+        <text x="340" y="683">ดูสถิติชุดข้อมูล</text>
+      </g>
+
+      <!-- column 2 : supporting use cases -->
+      <g fill="#ffffff" stroke="#0f3460" stroke-width="1.5">
+        <ellipse cx="680" cy="150" rx="112" ry="28"/>
+        <ellipse cx="680" cy="240" rx="112" ry="28"/>
+        <ellipse cx="680" cy="330" rx="112" ry="28"/>
+        <ellipse cx="680" cy="410" rx="112" ry="28"/>
+        <ellipse cx="680" cy="490" rx="112" ry="28"/>
+        <ellipse cx="680" cy="580" rx="112" ry="28"/>
+      </g>
+      <g text-anchor="middle" fill="#1a1a2e" font-size="11.5">
+        <text x="680" y="148">กรองภาพซ้ำ / ภาพเบลอ</text>
+        <text x="680" y="163" font-size="9.5" fill="#586778">(ทางเลือก)</text>
+        <text x="680" y="245">ติดตามความคืบหน้างาน</text>
+        <text x="680" y="335">กำกับด้วยกรอบสี่เหลี่ยม</text>
+        <text x="680" y="415">กำกับด้วยรูปหลายเหลี่ยม</text>
+        <text x="680" y="495">กำกับด้วยจุดสำคัญ</text>
+        <text x="680" y="578">อ่านข้อความบนภาพ</text>
+        <text x="680" y="593" font-size="9.5" fill="#586778">(OCR)</text>
+      </g>
+
+      <!-- associations : primary actor -->
+      <g stroke="#1a1a2e" stroke-width="1.3" fill="none">
+        <line x1="130" y1="378" x2="224" y2="140"/>
+        <line x1="130" y1="380" x2="224" y2="216"/>
+        <line x1="130" y1="382" x2="224" y2="292"/>
+        <line x1="132" y1="384" x2="222" y2="366"/>
+        <line x1="132" y1="392" x2="222" y2="440"/>
+        <line x1="130" y1="396" x2="224" y2="514"/>
+        <line x1="130" y1="398" x2="224" y2="590"/>
+        <line x1="130" y1="400" x2="224" y2="668"/>
+      </g>
+
+      <!-- associations : secondary actors -->
+      <g stroke="#1a1a2e" stroke-width="1.3" fill="none">
+        <line x1="458" y1="288" x2="960" y2="288"/>
+        <path d="M458 444 H820 V300 H960"/>
+        <line x1="792" y1="580" x2="960" y2="580"/>
+      </g>
+
+      <!-- include -->
+      <g stroke="currentColor" stroke-width="1.3" fill="none" stroke-dasharray="6 4">
+        <line x1="452" y1="218" x2="572" y2="234" marker-end="url(#uOpen)"/>
+        <line x1="452" y1="282" x2="572" y2="248" marker-end="url(#uOpen)"/>
+        <line x1="440" y1="497" x2="580" y2="266" marker-end="url(#uOpen)"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="9" fill="#5c6b7a" text-anchor="middle">
+        <text x="512" y="214">«include»</text>
+        <text x="512" y="278">«include»</text>
+        <text x="470" y="400">«include»</text>
+      </g>
+
+      <!-- extend -->
+      <g stroke="#e94560" stroke-width="1.3" fill="none" stroke-dasharray="6 4">
+        <line x1="572" y1="162" x2="454" y2="196" marker-end="url(#uOpen)"/>
+        <line x1="580" y1="562" x2="440" y2="390" marker-end="url(#uOpen)"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="9" fill="#e94560" text-anchor="middle">
+        <text x="513" y="171">«extend»</text>
+        <text x="530" y="486">«extend»</text>
+      </g>
+
+      <!-- generalization -->
+      <g stroke="#0f3460" stroke-width="1.3" fill="none">
+        <line x1="570" y1="326" x2="460" y2="360" marker-end="url(#uTri)"/>
+        <line x1="570" y1="404" x2="460" y2="372" marker-end="url(#uTri)"/>
+        <line x1="572" y1="478" x2="462" y2="384" marker-end="url(#uTri)"/>
+      </g>
+      <text x="520" y="424" font-size="9" fill="#0f3460" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace">generalization</text>
+    </svg>

@@ -92,7 +92,12 @@ ul.plain li b{font-weight:700}
 figure{margin:0 0 22px; background:var(--plate); border:1px solid var(--plate-line); border-radius:4px;
   padding:22px; color:var(--plate-ink); overflow-x:auto}
 figure svg{display:block; max-width:100%; height:auto; margin:0 auto}
-figure svg text{font-family:var(--font-thai)}
+/* Only the hand-drawn SVGs, which set no font of their own. Mermaid must NOT be included:
+   it measures every label with its own font at render time and sizes the boxes to fit, so
+   swapping the family afterwards makes the text wider than the box that was drawn for it —
+   which silently clipped 'running' to 'runnin' and 'stopped' to 'stoppe' in figure 10. A
+   mermaid SVG sits inside <pre class="mermaid">, never as a direct child of <figure>. */
+figure > svg text{font-family:var(--font-thai)}
 figure .mermaid{display:flex; justify-content:center; min-width:min-content}
 
 /* ── บังคับสีของแผนภาพสถานะ (รูปที่ 10) ──

@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 592" role="img" aria-label="แผนภาพสถาปัตยกรรมแบบแบ่งชั้น 4 ชั้นของระบบ พร้อมคอลัมน์บริการภายนอกด้านขวา แสดงว่าโปรแกรมเดสก์ท็อปและเว็บแอปใช้โมดูลแกนกลางชุดเดียวกัน"><title>สถาปัตยกรรมระบบ</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+        </marker>
+        <marker id="a1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="#e94560"/>
+        </marker>
+      </defs>
+      <g fill="none" stroke="currentColor" stroke-width="1.4">
+
+        <!-- band labels -->
+        <g font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" letter-spacing="1.4" fill="#5c6b7a" stroke="none">
+          <text x="135" y="33">1 · ชั้นผู้ใช้ (CLIENT)</text>
+          <text x="135" y="165">2 · ชั้นแอปพลิเคชัน (APPLICATION)</text>
+          <text x="135" y="315">3 · ชั้นโมดูลแกนกลาง (CORE)</text>
+          <text x="135" y="447">4 · ชั้นจัดเก็บข้อมูล (STORAGE)</text>
+          <text x="775" y="165">ภายนอก / นอกระบบ</text>
+        </g>
+
+        <!-- band backgrounds -->
+        <g fill="#eef1f7" stroke="#dde4ef" stroke-width="1">
+          <rect x="135" y="40"  width="620" height="100" rx="4"/>
+          <rect x="135" y="172" width="620" height="118" rx="4"/>
+          <rect x="135" y="322" width="620" height="100" rx="4"/>
+          <rect x="135" y="454" width="620" height="100" rx="4"/>
+          <rect x="775" y="172" width="210" height="382" rx="4"/>
+        </g>
+
+        <!-- band 1 : clients -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="145" y="52" width="288" height="76" rx="3"/>
+          <rect x="457" y="52" width="288" height="76" rx="3"/>
+        </g>
+        <g stroke="none" fill="#1a1a2e" text-anchor="middle">
+          <text x="289" y="80" font-size="13.5" font-weight="700">โปรแกรมเดสก์ท็อป (เดิม)</text>
+          <text x="289" y="101" font-size="11" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">app.py — Tkinter</text>
+          <text x="601" y="80" font-size="13.5" font-weight="700">เว็บแอปพลิเคชัน (ใหม่)</text>
+          <text x="601" y="101" font-size="11" font-family="Cascadia Mono, Consolas, monospace" fill="#5c6b7a">index.html · style.css · app.js</text>
+          <text x="601" y="118" font-size="10" fill="#586778">ไม่ใช้ framework / ไม่มีขั้นตอน build</text>
+        </g>
+
+        <!-- band 2 : application -->
+        <rect x="145" y="184" width="600" height="94" rx="3" fill="#ffffff" stroke="#0f3460" stroke-width="1.6"/>
+        <text x="445" y="207" font-size="13.5" font-weight="700" fill="#1a1a2e" stroke="none" text-anchor="middle">webapp/server.py — FastAPI + Uvicorn</text>
+        <g fill="#e7ebf5" stroke="#b9c6dd" stroke-width="1">
+          <rect x="157" y="220" width="80" height="24" rx="12"/>
+          <rect x="243" y="220" width="80" height="24" rx="12"/>
+          <rect x="329" y="220" width="80" height="24" rx="12"/>
+          <rect x="415" y="220" width="80" height="24" rx="12"/>
+          <rect x="501" y="220" width="80" height="24" rx="12"/>
+          <rect x="587" y="220" width="80" height="24" rx="12"/>
+          <rect x="673" y="220" width="60" height="24" rx="12"/>
+        </g>
+        <g stroke="none" fill="#0f3460" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5">
+          <text x="197" y="236">/health·1</text>
+          <text x="283" y="236">/videos·3</text>
+          <text x="369" y="236">/extract·5</text>
+          <text x="455" y="236">/detect·4</text>
+          <text x="541" y="236">/frames·8</text>
+          <text x="627" y="236">/models*·4</text>
+          <text x="703" y="236">/export·4</text>
+        </g>
+        <text x="445" y="266" font-size="10.5" fill="#586778" stroke="none" text-anchor="middle">รวม 29 endpoint · งานหนักรันด้วย threading.Thread · ติดตามผลด้วย HTTP polling</text>
+
+        <!-- band 3 : core modules -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="145" y="334" width="186" height="76" rx="3"/>
+          <rect x="352" y="334" width="186" height="76" rx="3"/>
+          <rect x="559" y="334" width="186" height="76" rx="3"/>
+        </g>
+        <g stroke="none" text-anchor="middle">
+          <text x="238" y="362" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">frame_extractor.py</text>
+          <text x="238" y="383" font-size="11" fill="#5c6b7a">สกัดเฟรม + กรองซ้ำ/เบลอ</text>
+          <text x="445" y="362" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">detector.py</text>
+          <text x="445" y="383" font-size="11" fill="#5c6b7a">ตรวจจับวัตถุ 2 backend</text>
+          <text x="652" y="362" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">dataset_exporter.py</text>
+          <text x="652" y="383" font-size="11" fill="#5c6b7a">ส่งออก + แบ่งชุดข้อมูล</text>
+        </g>
+
+        <!-- band 4 : storage -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="145" y="466" width="186" height="76" rx="3"/>
+          <rect x="352" y="466" width="186" height="76" rx="3"/>
+          <rect x="559" y="466" width="186" height="76" rx="3"/>
+        </g>
+        <g stroke="none" text-anchor="middle">
+          <text x="238" y="494" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">state.json</text>
+          <text x="238" y="513" font-size="10.5" fill="#5c6b7a">+ .bak + backups/</text>
+          <text x="238" y="530" font-size="10" fill="#586778">ไม่มีฐานข้อมูล</text>
+          <text x="445" y="494" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">data/</text>
+          <text x="445" y="513" font-size="10.5" fill="#5c6b7a">videos · frames · exports</text>
+          <text x="652" y="494" font-size="11.5" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#1a1a2e">models/*.pt</text>
+          <text x="652" y="513" font-size="10.5" fill="#5c6b7a">ไฟล์น้ำหนักโมเดล</text>
+        </g>
+
+        <!-- right column : external -->
+        <g fill="#ffffff" stroke="#0f3460" stroke-width="1.4">
+          <rect x="790" y="210" width="180" height="68" rx="3"/>
+          <rect x="790" y="292" width="180" height="68" rx="3"/>
+          <rect x="790" y="374" width="180" height="68" rx="3"/>
+        </g>
+        <rect x="790" y="456" width="180" height="76" rx="3" fill="#ffffff" stroke="#e94560" stroke-width="1.4" stroke-dasharray="5 3"/>
+        <g stroke="none" text-anchor="middle">
+          <text x="880" y="238" font-size="12" font-weight="700" fill="#1a1a2e">Tesseract OCR</text>
+          <text x="880" y="257" font-size="10.5" fill="#5c6b7a">อ่านข้อความบนภาพ</text>
+          <text x="880" y="320" font-size="12" font-weight="700" fill="#1a1a2e">Ultralytics YOLOv11</text>
+          <text x="880" y="339" font-size="10.5" fill="#5c6b7a">ประมวลผลบนเครื่อง (CPU)</text>
+          <text x="880" y="402" font-size="12" font-weight="700" fill="#1a1a2e">Roboflow Cloud API</text>
+          <text x="880" y="421" font-size="10.5" fill="#5c6b7a">ประมวลผลบนคลาวด์</text>
+          <text x="880" y="482" font-size="11" font-weight="700" font-family="Cascadia Mono, Consolas, monospace" fill="#e94560">train_roboflow_yolo.py</text>
+          <text x="880" y="500" font-size="10.5" fill="#5c6b7a">เทรนโมเดลนอกระบบ</text>
+          <text x="880" y="517" font-size="10" fill="#586778">--task detect/segment/pose</text>
+        </g>
+
+        <!-- arrows -->
+        <path d="M601 128 V166" marker-end="url(#a1)"/>
+        <text x="611" y="152" font-size="10" fill="#5c6b7a" stroke="none">HTTP / JSON</text>
+
+        <path d="M289 128 V148 H88 V372 H131" marker-end="url(#a1r)" stroke="#e94560" stroke-dasharray="0"/>
+        <text x="188" y="142" font-size="10" fill="#e94560" stroke="none" text-anchor="middle">import ตรง (ไม่ผ่าน HTTP)</text>
+
+        <path d="M445 278 V318" marker-end="url(#a1)"/>
+        <text x="455" y="303" font-size="10" fill="#5c6b7a" stroke="none">import ตรง</text>
+
+        <path d="M445 422 V450" marker-end="url(#a1)"/>
+        <text x="455" y="441" font-size="10" fill="#5c6b7a" stroke="none">อ่าน / เขียนไฟล์</text>
+
+        <path d="M745 236 H786" marker-end="url(#a1)"/>
+        <text x="765" y="229" font-size="9.5" fill="#5c6b7a" stroke="none" text-anchor="middle">OCR</text>
+
+        <path d="M510 410 V438 H762 V326 H786" marker-end="url(#a1)"/>
+        <path d="M762 408 H786" marker-end="url(#a1)"/>
+        <text x="632" y="432" font-size="10" fill="#5c6b7a" stroke="none" text-anchor="middle">เรียกโมเดล (inference)</text>
+
+        <path d="M786 504 H749" marker-end="url(#a1r)" stroke="#e94560" stroke-dasharray="5 3"/>
+        <rect x="734" y="484" width="68" height="13" fill="#fbfcfe" stroke="none"/>
+        <text x="768" y="494" font-size="9.5" fill="#e94560" stroke="none" text-anchor="middle">อัปโหลด .pt</text>
+      </g>
+    </svg>

@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 470" role="img" aria-label="แผนภาพจับคู่คลาสระหว่างระยะที่หนึ่งซึ่งมีห้าคลาสกับระยะที่สองซึ่งมีเก้าคลาส จัดกลุ่มเป็นเครื่องมือทั้งชิ้น ปลายเครื่องมือ และร่างกายกับแผล"><title>อนุกรมวิธานคลาส 5 → 9</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="a3h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#9fb0c9"/>
+        </marker>
+      </defs>
+      <style>
+        .a3t{font-size:12px;fill:#1a1a2e}
+        .a3m{font-size:10.5px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .a3h{font-size:12.5px;fill:#0f3460;font-weight:700}
+        .a3n{font-size:10.5px;fill:#8492a6}
+        .a3b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.2}
+        .a3new{fill:#f2faf6;stroke:#2f9e78;stroke-width:1.4}
+      </style>
+
+      <text class="a3h" x="24" y="34">ระยะที่ 1 · 5 คลาส</text>
+      <text class="a3n" x="24" y="50">120 ภาพ</text>
+      <text class="a3h" x="420" y="34">ระยะที่ 2 · 9 คลาส</text>
+      <text class="a3n" x="420" y="50">2,190 ภาพ · จัดกลุ่มตามลักษณะของวัตถุ</text>
+
+      <!-- ระยะ 1 -->
+      <rect class="a3b" x="24" y="66" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="84">เข็มเย็บแผล</text><text class="a3m" x="36" y="100">needle</text>
+      <rect class="a3b" x="24" y="118" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="136">นิ้วมือ</text><text class="a3m" x="36" y="152">finger</text>
+      <rect class="a3b" x="24" y="170" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="188">คีมจับเข็ม</text><text class="a3m" x="36" y="204">needle_holder</text>
+      <rect class="a3b" x="24" y="222" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="240">บริเวณแผล</text><text class="a3m" x="36" y="256">wound</text>
+      <rect class="a3b" x="24" y="274" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="292">ปากคีบ</text><text class="a3m" x="36" y="308">forcep</text>
+
+      <!-- เส้นจับคู่ -->
+      <path d="M216 87 C300 87 320 300 416 300" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 139 C300 139 320 87 416 87" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 191 C300 191 320 139 416 139" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 243 C300 243 320 191 416 191" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 295 C300 295 320 243 416 243" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+
+      <!-- กลุ่ม 1: เครื่องมือทั้งชิ้น -->
+      <rect x="408" y="62" width="380" height="150" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="420" y="78">กลุ่ม ก · เครื่องมือทั้งชิ้น</text>
+      <rect class="a3b" x="416" y="86" width="176" height="38" rx="3"/>
+      <text class="a3m" x="426" y="104">needle_holder</text><text class="a3n" x="426" y="118">2,729 กล่อง</text>
+      <rect class="a3b" x="416" y="130" width="176" height="38" rx="3"/>
+      <text class="a3m" x="426" y="148">forcep</text><text class="a3n" x="426" y="162">1,754 กล่อง</text>
+      <rect class="a3new" x="600" y="86" width="176" height="38" rx="3"/>
+      <text class="a3m" x="610" y="104" fill="#1d6b51">Stitch Scissors</text>
+      <text class="a3n" x="610" y="118" fill="#1d6b51">29 กล่อง · ใหม่</text>
+
+      <!-- กลุ่ม 2: ปลายเครื่องมือ -->
+      <rect x="408" y="222" width="380" height="106" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="420" y="238">กลุ่ม ข · ปลายเครื่องมือ (ส่วนที่สัมผัสเนื้อเยื่อ)</text>
+      <rect class="a3new" x="416" y="246" width="176" height="38" rx="3"/>
+      <text class="a3m" x="426" y="264" fill="#1d6b51">Tip_needle_holder</text>
+      <text class="a3n" x="426" y="278" fill="#1d6b51">1,467 กล่อง · ใหม่</text>
+      <rect class="a3new" x="600" y="246" width="176" height="38" rx="3"/>
+      <text class="a3m" x="610" y="264" fill="#1d6b51">Tip_forcep</text>
+      <text class="a3n" x="610" y="278" fill="#1d6b51">803 กล่อง · ใหม่</text>
+      <text class="a3n" x="420" y="304">แยกปลายออกจากตัวเครื่องมือ เพื่อให้ระบุจุดที่ทำหัตถการได้ ไม่ใช่แค่รู้ว่ามีเครื่องมืออยู่ในภาพ</text>
+
+      <!-- กลุ่ม 3 -->
+      <rect x="408" y="338" width="380" height="106" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="420" y="354">กลุ่ม ค · ร่างกายและแผล</text>
+      <rect class="a3b" x="416" y="362" width="118" height="38" rx="3"/>
+      <text class="a3m" x="426" y="380">finger</text><text class="a3n" x="426" y="394">9,884</text>
+      <rect class="a3new" x="542" y="362" width="118" height="38" rx="3"/>
+      <text class="a3m" x="552" y="380" fill="#1d6b51">hand</text>
+      <text class="a3n" x="552" y="394" fill="#1d6b51">1,884 · ใหม่</text>
+      <rect class="a3b" x="668" y="362" width="108" height="38" rx="3"/>
+      <text class="a3m" x="678" y="380">wound</text><text class="a3n" x="678" y="394">2,463</text>
+      <text class="a3n" x="420" y="420">แยก hand ออกจาก finger เพราะทั้งสองปรากฏพร้อมกันและมีขนาดต่างกันมาก</text>
+
+      <!-- needle -->
+      <rect x="408" y="454" width="0" height="0"/>
+      <rect class="a3b" x="416" y="300" width="176" height="0" rx="3"/>
+
+      <!-- คำเตือน -->
+      <rect x="800" y="62" width="212" height="150" rx="4" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="a3n" x="812" y="82" fill="#8a5500" font-weight="700">ข้อควรระวังเวลารายงาน</text>
+      <text class="a3n" x="812" y="102" fill="#8a5500">Stitch Scissors มีเพียง</text>
+      <text class="a3n" x="812" y="118" fill="#8a5500">16 / 10 / 3 ตัวอย่าง</text>
+      <text class="a3n" x="812" y="134" fill="#8a5500">(train / val / test)</text>
+      <text class="a3n" x="812" y="156" fill="#8a5500">ให้รายงานค่าไว้ได้</text>
+      <text class="a3n" x="812" y="172" fill="#8a5500">แต่ห้ามสรุปอะไรจากมัน</text>
+      <text class="a3n" x="812" y="194" fill="#8a5500">ตัวอย่างน้อยเกินไป</text>
+
+      <rect x="800" y="222" width="212" height="106" rx="4" fill="#fff5f6" stroke="#e94560" stroke-width="1.3"/>
+      <text class="a3n" x="812" y="242" fill="#a8203a" font-weight="700">คลาสที่ยังเป็นปัญหา</text>
+      <text class="a3n" x="812" y="262" fill="#a8203a">needle · 1,944 กล่อง</text>
+      <text class="a3n" x="812" y="280" fill="#a8203a">recall เพียง 0.227</text>
+      <text class="a3n" x="812" y="300" fill="#a8203a">ไม่ใช่เพราะข้อมูลน้อย</text>
+      <text class="a3n" x="812" y="316" fill="#a8203a">แต่เพราะวัตถุเล็กมาก</text>
+
+      <rect x="800" y="338" width="212" height="106" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="812" y="358" font-weight="700">ความไม่สมดุลของคลาส</text>
+      <text class="a3n" x="812" y="378">finger = 43.6% ของกล่อง</text>
+      <text class="a3n" x="812" y="394">ทั้งหมดในชุดฝึก</text>
+      <text class="a3n" x="812" y="414">ตั้งใจไม่ลดจำนวนลง</text>
+      <text class="a3n" x="812" y="430">ดูเหตุผลในรูปที่ ก5</text>
+    </svg>

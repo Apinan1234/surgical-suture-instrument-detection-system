@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 468" role="img" aria-label="แผนภาพการทดลองแบบมีกลุ่มควบคุม แสดงชุดข้อมูลเดียวกันแยกไปสองแขนคือปิดและเปิด data augmentation โดยตัวแปรอื่นถูกตรึงเหมือนกันทุกตัว แล้วนำผลมาเปรียบเทียบ"><title>แบบแผนการทดลอง A/B</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="a6h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .a6t{font-size:12.5px;fill:#1a1a2e;font-weight:600}
+        .a6m{font-size:10.5px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .a6n{font-size:10.5px;fill:#8492a6}
+        .a6b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.3}
+        .a6ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <!-- ตัวแปรควบคุม -->
+      <rect x="16" y="20" width="300" height="220" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a6t" x="30" y="44">ตัวแปรควบคุม — ตรึงให้เหมือนกันทั้งสองแขน</text>
+      <text class="a6m" x="30" y="70">ชุดข้อมูล  D:\ml\data\ssid9_bbox</text>
+      <text class="a6m" x="30" y="90">โมเดลตั้งต้น  yolo11n.pt</text>
+      <text class="a6m" x="30" y="110">epochs  50</text>
+      <text class="a6m" x="30" y="130">batch  8</text>
+      <text class="a6m" x="30" y="150">imgsz  640</text>
+      <text class="a6m" x="30" y="170">seed  42</text>
+      <text class="a6m" x="30" y="190">workers  0</text>
+      <text class="a6m" x="30" y="210">ฮาร์ดแวร์  RTX 3050 Laptop 4 GB</text>
+      <text class="a6n" x="30" y="230">ค่าเหล่านี้คำนวณครั้งเดียวแล้วส่งให้ทั้งสองแขน จึงเพี้ยนไม่ได้</text>
+
+      <line class="a6ln" x1="318" y1="96" x2="352" y2="96" marker-end="url(#a6h)"/>
+      <line class="a6ln" x1="318" y1="176" x2="352" y2="176" marker-end="url(#a6h)"/>
+
+      <!-- แขน A -->
+      <rect x="356" y="52" width="300" height="86" rx="4" fill="#ffffff" stroke="#0f3460" stroke-width="1.5"/>
+      <text class="a6t" x="370" y="76">แขน A · กลุ่มควบคุม</text>
+      <text class="a6n" x="370" y="94">ปิด augmentation ทุกตัว ไม่ใช่แค่ปิด mosaic</text>
+      <text class="a6m" x="370" y="114" style="font-size:9.5px">hsv_h hsv_s hsv_v degrees translate scale shear</text>
+      <text class="a6m" x="370" y="130" style="font-size:9.5px">perspective flipud fliplr bgr mosaic mixup … = 0</text>
+
+      <!-- แขน B -->
+      <rect x="356" y="150" width="300" height="86" rx="4" fill="#ffffff" stroke="#e94560" stroke-width="1.5"/>
+      <text class="a6t" x="370" y="174">แขน B · กลุ่มทดลอง</text>
+      <text class="a6n" x="370" y="192">เปิด augmentation ตามค่าเริ่มต้นของ Ultralytics</text>
+      <text class="a6m" x="370" y="212" style="font-size:9.5px">mosaic · HSV jitter · scale · translate · fliplr</text>
+      <text class="a6n" x="370" y="230">ตัวแปรต้นตัวเดียวของการทดลองนี้</text>
+
+      <path class="a6ln" d="M658 95 H690 V140 H716" marker-end="url(#a6h)"/>
+      <path class="a6ln" d="M658 193 H690 V140 H716" marker-end="url(#a6h)"/>
+
+      <rect class="a6b" x="720" y="112" width="284" height="56" rx="3"/>
+      <text class="a6t" x="734" y="134">ประเมินด้วยชุดและวิธีเดียวกัน</text>
+      <text class="a6n" x="734" y="152">val 400 ภาพ · test 215 ภาพ · เกณฑ์เดียวกัน</text>
+
+      <!-- ผล -->
+      <rect x="16" y="262" width="988" height="130" rx="4" fill="#f2faf6" stroke="#2f9e78" stroke-width="1.4"/>
+      <text class="a6t" x="30" y="286" fill="#1d6b51">ผลที่ได้ (ชุด validation)</text>
+      <text class="a6n" x="30" y="308">แขน A ปิด augmentation</text>
+      <text class="a6m" x="30" y="328">mAP@50 0.5746 · recall 0.5417 · จุดสูงสุดที่ epoch 10 แล้วแย่ลงต่อเนื่องอีก 40 epochs</text>
+      <text class="a6n" x="30" y="352">แขน B เปิด augmentation</text>
+      <text class="a6m" x="30" y="372">mAP@50 0.6559 · recall 0.6641 · จุดสูงสุดที่ epoch 50 ซึ่งเป็น epoch สุดท้าย</text>
+      <text class="a6n" x="600" y="308" fill="#1d6b51">สรุป: augmentation ดีขึ้นทุกคลาส ไม่มีคลาสใดแย่ลง</text>
+      <text class="a6n" x="600" y="328" fill="#1d6b51">mAP@50 +14.2% · mAP@50-95 +23.5% · recall +22.6%</text>
+      <text class="a6n" x="600" y="348" fill="#1d6b51">แลกกับ precision ลดลง 1.6% และเวลาเทรนเพิ่ม 6 นาที</text>
+      <text class="a6n" x="600" y="372" fill="#1d6b51">แขน A แสดงอาการ overfit ชัดเจน แขน B ยังไม่ converge</text>
+
+      <rect x="16" y="404" width="988" height="48" rx="3" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="a6n" x="30" y="424" fill="#8a5500" font-weight="700">ไม่มีการปรับสมดุลจำนวนคลาส</text>
+      <text class="a6n" x="30" y="442" fill="#8a5500">finger มี 7,157 จาก 16,421 กล่องในชุดฝึก (43.6%) และตั้งใจปล่อยไว้ — การสุ่มลด finger ต้องลบทั้งภาพ ซึ่งจะพาวัตถุคลาสอื่นในภาพเดียวกันหายไปด้วย</text>
+    </svg>

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 452" role="img" aria-label="แผนภาพเปรียบเทียบก่อนและหลังการแปลง polygon เป็นกรอบสี่เหลี่ยม ฝั่งซ้ายแสดงไฟล์ที่ปนกันถูก Ultralytics อ่านผิดทำให้ได้กรอบที่ผิดตำแหน่ง ฝั่งขวาแสดงไฟล์ที่แปลงแล้วซึ่งอ่านถูกต้อง"><title>ข้อบกพร่อง polygon/bbox ก่อน-หลัง</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="a2h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .a2t{font-size:12.5px;fill:#1a1a2e;font-weight:600}
+        .a2m{font-size:10.5px;fill:#1a1a2e;font-family:'Cascadia Mono',Consolas,monospace}
+        .a2n{font-size:10.5px;fill:#5c6b7a}
+        .a2b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.3}
+        .a2ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <!-- ฝั่งซ้าย: ก่อนแก้ -->
+      <rect x="8" y="16" width="492" height="384" rx="4" fill="#fff5f6" stroke="#e94560" stroke-width="1.4"/>
+      <text x="24" y="42" font-size="13" font-weight="700" fill="#a8203a">ก่อนแก้ · ไฟล์ปนกัน</text>
+
+      <rect class="a2b" x="24" y="56" width="290" height="86" rx="3"/>
+      <text class="a2n" x="34" y="74">ไฟล์ label หนึ่งไฟล์</text>
+      <text class="a2m" x="34" y="94">8 0.5733 0.4782 0.1748 0.0357</text>
+      <text class="a2n" x="330" y="94">← แถวกรอบ 5 ค่า</text>
+      <text class="a2m" x="34" y="112">3 0.21 0.33 0.28 0.31 0.34 0.40 …</text>
+      <text class="a2n" x="330" y="112">← แถว polygon</text>
+      <text class="a2n" x="34" y="132">ปนกันอยู่ในไฟล์เดียว</text>
+
+      <line class="a2ln" x1="169" y1="146" x2="169" y2="168" marker-end="url(#a2h)"/>
+      <rect class="a2b" x="24" y="170" width="452" height="52" rx="3"/>
+      <text class="a2m" x="34" y="192">ultralytics/data/utils.py</text>
+      <text class="a2m" x="34" y="210">if any(len(x) &gt; 6 for x in lb) → ทั้งไฟล์ถือเป็น segment</text>
+
+      <line class="a2ln" x1="169" y1="226" x2="169" y2="248" marker-end="url(#a2h)"/>
+      <rect x="24" y="250" width="452" height="76" rx="3" fill="#ffffff" stroke="#e94560" stroke-width="1.3"/>
+      <text class="a2n" x="34" y="270">แถวกรอบถูกตีความใหม่เป็น polygon 2 จุด</text>
+      <text class="a2m" x="34" y="290" fill="#5c6b7a">ค่าจริง : 0.5733 0.4782 0.1748 0.0357</text>
+      <text class="a2m" x="34" y="308" fill="#a8203a">อ่านได้ : 0.3741 0.2569 0.3984 0.4425</text>
+
+      <rect x="24" y="336" width="452" height="50" rx="3" fill="#ffffff" stroke="#e94560" stroke-width="1.3"/>
+      <text class="a2t" x="34" y="356" fill="#a8203a">623 จาก 2,190 ไฟล์ปนกัน → 8,047 กล่องเพี้ยน</text>
+      <text class="a2n" x="34" y="374">ผิดทั้งตอนเทรนและตอนวัดผล และไม่มีข้อความแจ้งเตือน</text>
+
+      <!-- ลูกศรกลาง -->
+      <line class="a2ln" x1="504" y1="208" x2="530" y2="208" marker-end="url(#a2h)"/>
+      <text class="a2n" x="517" y="198" text-anchor="middle">แปลง</text>
+
+      <!-- ฝั่งขวา: หลังแก้ -->
+      <rect x="536" y="16" width="476" height="384" rx="4" fill="#f2faf6" stroke="#2f9e78" stroke-width="1.4"/>
+      <text x="552" y="42" font-size="13" font-weight="700" fill="#1d6b51">หลังแก้ · ทุกแถวเป็นกรอบ</text>
+
+      <rect class="a2b" x="552" y="56" width="444" height="86" rx="3"/>
+      <text class="a2m" x="562" y="76">polygons_to_bboxes.py --src … --dst …</text>
+      <text class="a2n" x="562" y="96">แปลง polygon ทุกวงเป็นกรอบที่ล้อมรอบมันพอดี</text>
+      <text class="a2n" x="562" y="114">เขียนลงไดเรกทอรีใหม่ ต้นทางเปิดอ่านอย่างเดียว</text>
+      <text class="a2n" x="562" y="132">จึงรันซ้ำแล้วไม่แปลงซ้ำซ้อน</text>
+
+      <line class="a2ln" x1="774" y1="146" x2="774" y2="168" marker-end="url(#a2h)"/>
+      <rect class="a2b" x="552" y="170" width="444" height="52" rx="3"/>
+      <text class="a2m" x="562" y="192">8 0.5733 0.4782 0.1748 0.0357</text>
+      <text class="a2m" x="562" y="210">3 0.2750 0.3650 0.1300 0.0700</text>
+
+      <line class="a2ln" x1="774" y1="226" x2="774" y2="248" marker-end="url(#a2h)"/>
+      <rect x="552" y="250" width="444" height="76" rx="3" fill="#ffffff" stroke="#2f9e78" stroke-width="1.3"/>
+      <text class="a2n" x="562" y="270">ทุกไฟล์เข้าเส้นทางกรอบธรรมดาของ Ultralytics</text>
+      <text class="a2n" x="562" y="290">ตัวสแกนของ Ultralytics เองรายงาน 0 corrupt</text>
+      <text class="a2n" x="562" y="310">กรอบที่ได้คือกรอบของวัตถุจริง ข้อมูลที่โมเดลใช้ไม่หายไป</text>
+
+      <rect x="552" y="336" width="444" height="50" rx="3" fill="#ffffff" stroke="#2f9e78" stroke-width="1.3"/>
+      <text class="a2t" x="562" y="356" fill="#1d6b51">22,957 แถว · ทุกแถว 5 ค่า · ไม่มีแถวถูกทิ้ง</text>
+      <text class="a2n" x="562" y="374">train 16,421 · val 4,296 · test 2,240</text>
+
+      <text class="a2n" x="8" y="428">ข้อสรุปเชิงปฏิบัติ: ชุดข้อมูลที่ส่งออกจาก Roboflow ทุกครั้งต้องผ่านสคริปต์นี้ก่อนนำไปเทรน</text>
+    </svg>

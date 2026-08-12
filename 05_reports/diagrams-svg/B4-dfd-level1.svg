@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 950 640" role="img" aria-label="แผนภาพกระแสข้อมูลระดับที่ 1 แสดง 6 โพรเซสได้แก่ จัดการวิดีโอ สกัดเฟรม ตรวจจับวัตถุ กำกับข้อมูล จัดการโมเดล และส่งออกชุดข้อมูล พร้อมแหล่งจัดเก็บข้อมูล 5 แหล่ง"><title>DFD ระดับที่ 1</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="a4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- external entity : user -->
+      <rect x="24" y="50" width="112" height="544" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="80" y="305" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ผู้ใช้งาน</text>
+      <text x="80" y="325" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ระบบ</text>
+      <text x="80" y="347" text-anchor="middle" font-size="10" fill="#5c6b7a">นักวิจัย /</text>
+      <text x="80" y="361" text-anchor="middle" font-size="10" fill="#5c6b7a">ผู้กำกับข้อมูล</text>
+
+      <!-- processes -->
+      <g fill="#ffffff" stroke="#0f3460" stroke-width="1.5">
+        <rect x="250" y="50"  width="240" height="64" rx="8"/>
+        <rect x="250" y="146" width="240" height="64" rx="8"/>
+        <rect x="250" y="242" width="240" height="64" rx="8"/>
+        <rect x="250" y="338" width="240" height="64" rx="8"/>
+        <rect x="250" y="434" width="240" height="64" rx="8"/>
+        <rect x="250" y="530" width="240" height="64" rx="8"/>
+      </g>
+      <g stroke="#0f3460" stroke-width="1.1">
+        <line x1="250" y1="72"  x2="490" y2="72"/>
+        <line x1="250" y1="168" x2="490" y2="168"/>
+        <line x1="250" y1="264" x2="490" y2="264"/>
+        <line x1="250" y1="360" x2="490" y2="360"/>
+        <line x1="250" y1="456" x2="490" y2="456"/>
+        <line x1="250" y1="552" x2="490" y2="552"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="11" font-weight="700" fill="#e94560">
+        <text x="261" y="67">1</text><text x="261" y="163">2</text><text x="261" y="259">3</text>
+        <text x="261" y="355">4</text><text x="261" y="451">5</text><text x="261" y="547">6</text>
+      </g>
+      <g text-anchor="middle" fill="#1a1a2e" font-size="13" font-weight="700">
+        <text x="370" y="96">จัดการวิดีโอ</text>
+        <text x="370" y="192">สกัดเฟรมจากวิดีโอ</text>
+        <text x="370" y="288">ตรวจจับวัตถุ</text>
+        <text x="370" y="384">กำกับข้อมูลภาพ</text>
+        <text x="370" y="480">จัดการโมเดล</text>
+        <text x="370" y="576">ส่งออกชุดข้อมูล</text>
+      </g>
+      <g text-anchor="middle" fill="#586778" font-size="9.5">
+        <text x="370" y="109">อัปโหลด · ลบ · แสดงรายการ</text>
+        <text x="370" y="205">กรองภาพซ้ำ / ภาพเบลอ</text>
+        <text x="370" y="301">แบบกลุ่ม และรายเฟรม</text>
+        <text x="370" y="397">bbox · polygon · keypoint · OCR</text>
+        <text x="370" y="493">อัปโหลด .pt · แสดงรายการ</text>
+        <text x="370" y="589">แบ่ง train / val / test</text>
+      </g>
+
+      <!-- data stores (Gane-Sarson : open right) -->
+      <g stroke="#0f3460" stroke-width="1.5" fill="none">
+        <path d="M870 64 H580 V100 H870"/><path d="M618 64 V100"/>
+        <path d="M870 160 H580 V196 H870"/><path d="M618 160 V196"/>
+        <path d="M870 352 H580 V388 H870"/><path d="M618 352 V388"/>
+        <path d="M870 448 H580 V484 H870"/><path d="M618 448 V484"/>
+        <path d="M870 572 H580 V608 H870"/><path d="M618 572 V608"/>
+      </g>
+      <g font-family="Cascadia Mono, Consolas, monospace" font-size="11" font-weight="700" fill="#e94560" text-anchor="middle">
+        <text x="599" y="87">D1</text><text x="599" y="183">D2</text><text x="599" y="375">D3</text>
+        <text x="599" y="471">D4</text><text x="599" y="595">D5</text>
+      </g>
+      <g font-size="12" fill="#1a1a2e">
+        <text x="632" y="81">ไฟล์วิดีโอ</text><text x="632" y="95" font-size="9.5" fill="#586778">data/videos/</text>
+        <text x="632" y="177">ภาพเฟรม</text><text x="632" y="191" font-size="9.5" fill="#586778">data/frames/</text>
+        <text x="632" y="369">ข้อมูลกำกับ + สถานะงาน</text><text x="632" y="383" font-size="9.5" fill="#586778">state.json</text>
+        <text x="632" y="465">ไฟล์โมเดล</text><text x="632" y="479" font-size="9.5" fill="#586778">models/*.pt</text>
+        <text x="632" y="589">ชุดข้อมูลที่ส่งออก</text><text x="632" y="603" font-size="9.5" fill="#586778">data/exports/</text>
+      </g>
+
+      <!-- external entity : roboflow -->
+      <rect x="580" y="246" width="180" height="60" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="670" y="272" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1a2e">Roboflow</text>
+      <text x="670" y="291" text-anchor="middle" font-size="12" font-weight="700" fill="#1a1a2e">Cloud Service</text>
+
+      <!-- flows -->
+      <g fill="none" stroke="currentColor" stroke-width="1.3">
+        <path d="M138 82 H246" marker-end="url(#a4)"/>
+        <path d="M138 172 H246" marker-end="url(#a4)"/>
+        <path d="M248 196 H140" marker-end="url(#a4)"/>
+        <path d="M138 274 H246" marker-end="url(#a4)"/>
+        <path d="M138 364 H246" marker-end="url(#a4)"/>
+        <path d="M248 388 H140" marker-end="url(#a4)"/>
+        <path d="M138 466 H246" marker-end="url(#a4)"/>
+        <path d="M138 556 H246" marker-end="url(#a4)"/>
+        <path d="M248 580 H140" marker-end="url(#a4)"/>
+
+        <path d="M492 82 H576" marker-end="url(#a4)"/>
+        <path d="M580 92 H545 V172 H494" marker-end="url(#a4)"/>
+        <path d="M492 178 H576" marker-end="url(#a4)"/>
+        <path d="M580 188 H545 V268 H494" marker-end="url(#a4)"/>
+        <path d="M492 258 H576" marker-end="url(#a4)"/>
+        <path d="M578 294 H494" marker-end="url(#a4)"/>
+        <path d="M470 308 V326 H555 V356 H576" marker-end="url(#a4)"/>
+        <path d="M492 372 H576" marker-end="url(#a4)"/>
+        <path d="M578 382 H494" marker-end="url(#a4)"/>
+        <path d="M492 466 H576" marker-end="url(#a4)"/>
+        <path d="M580 456 H530 V252 H494" marker-end="url(#a4)"/>
+        <path d="M872 190 H905 V540 H494" marker-end="url(#a4)"/>
+        <path d="M872 382 H920 V562 H494" marker-end="url(#a4)"/>
+        <path d="M492 590 H576" marker-end="url(#a4)"/>
+      </g>
+
+      <g font-size="8.5" fill="#5c6b7a" text-anchor="middle">
+        <text x="192" y="75">ไฟล์วิดีโอ</text>
+        <text x="192" y="165">พารามิเตอร์การสกัด</text>
+        <text x="192" y="211">ความคืบหน้า · log</text>
+        <text x="192" y="267">โมเดล + ค่า conf / iou</text>
+        <text x="192" y="357">กรอบที่แก้ไข</text>
+        <text x="192" y="403">ภาพเฟรม + กรอบ</text>
+        <text x="192" y="459">ไฟล์โมเดล .pt</text>
+        <text x="192" y="549">สัดส่วน train / val / test</text>
+        <text x="192" y="595">ไฟล์ ZIP</text>
+
+        <text x="534" y="75">บันทึกวิดีโอ</text>
+        <text x="519" y="166">อ่านวิดีโอ</text>
+        <text x="534" y="171">ภาพเฟรม</text>
+        <text x="519" y="262">อ่านภาพเฟรม</text>
+        <text x="534" y="251">ภาพ + API key</text>
+        <text x="536" y="311">ผลตรวจจับ</text>
+        <text x="512" y="320">ผลตรวจจับ</text>
+        <text x="534" y="365">บันทึกกรอบ</text>
+        <text x="536" y="399">อ่านกรอบเดิม</text>
+        <text x="534" y="459">บันทึก .pt</text>
+        <text x="566" y="246">โมเดล .pt</text>
+        <text x="700" y="534">ภาพเฟรม</text>
+        <text x="716" y="556">ข้อมูลกำกับที่รีวิวแล้ว</text>
+        <text x="534" y="583">ชุดข้อมูล YOLO</text>
+      </g>
+    </svg>
