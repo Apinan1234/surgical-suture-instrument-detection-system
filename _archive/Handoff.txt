@@ -1,33 +1,52 @@
 Handoff ล่าสุดอยู่ที่:
 
-C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-backlog-2026-08-11.md
+C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-2026-08-12b.md
+(ครึ่งแรกของวันเดียวกัน: ...\Temp\handoff-videoframeextractor-2026-08-12.md)
 
-เซสชันนี้ทำอะไร: ผู้ใช้เลือก "ทำแผน 6 ข้อที่จดไว้" จาก 4 ทางเลือก แล้วทำจนจบทั้ง 6 ข้อในเซสชันเดียว
-ตามลำดับที่แผนแนะนำ (5 -> 1 -> 2 -> 3 -> 6 -> 4) คือ freeze ฟอร์ม Export ระหว่าง build, จำ job id
-ของ Extract/Export ข้าม reload (ปุ่ม ZIP ไม่หายอีก), ปุ่ม Back/Next ท้ายทุกแท็บ, ใช้โมเดลตัวเดียวทั้งแอป
-พร้อม POST /api/models/load + ป้ายบอกสถานะ, POST /api/frames/review/bulk (confirm ทั้งช่วงที่ filter
-กรองอยู่), และ POST /api/frames/upload (อัปโหลดโฟลเดอร์เฟรมที่ extract จากที่อื่น)
+เซสชันนี้ทำอะไร: ทำ augmentation A/B ของโมเดล 9 คลาสจนจบ แล้วได้คำตอบชัด — augmentation ชนะขาด
+mAP50 0.5746 -> 0.6559 (+14.2%), mAP50-95 +23.5%, recall +22.6%, precision -1.6%, เทรนนานขึ้น 6 นาที
+และ "ทุกคลาสดีขึ้น ไม่มีคลาสไหนแย่ลง" ซึ่งค้านสมมติฐานที่ตั้งไว้ว่า mosaic น่าจะทำร้ายวัตถุเล็กอย่าง needle
+ตัวเลขเต็มอยู่ใน 01_frame-extractor-tool/results/benchmark_comparison.md — อย่าคำนวณใหม่ ให้อ่านไฟล์
 
-จากนั้นรัน code-review ก่อน push เจอบั๊กจริง 7 ข้อ แก้ทั้งหมดใน cc46665 — 2 ข้อพังฟีเจอร์ตัวเองเต็มๆ:
-(1) อัปโหลดโฟลเดอร์ใช้ไม่ได้กับโฟลเดอร์ที่เครื่องมือนี้สร้างเอง เพราะทุกโฟลเดอร์มี extraction_log.json
-    ปนอยู่ ไฟล์แรกที่ไม่ใช่รูปทำให้ 400 แล้วลบทั้ง import ทิ้ง (แก้เป็นข้ามไฟล์ที่ไม่ใช่รูป)
-(2) confirm ทั้งช่วงอาจรับกล่องที่เพิ่งลบไปเป็น ground truth เพราะเฟรมที่เปิดค้างอยู่ถูกนับรวมด้วย
-    ทั้งที่ยังไม่ได้ save (แก้เป็นเว้นเฟรมนั้นไว้ + บอกเหตุผลใน dialog)
+สองข้อค้นพบที่สำคัญกว่าตัวเลขรวม:
+- arm ที่เปิด aug peak ที่ epoch 50 = epoch สุดท้าย แปลว่ายังไม่ converge ยังมี headroom เหลือ
+  ส่วน arm ที่ปิด aug peak ตั้งแต่ epoch 10 แล้วแย่ลงอีก 40 epochs (train loss 0.23 / val loss 1.46)
+- needle คือปัญหาจริง: mAP50 0.252 recall 0.227 (precision 0.55 แปลว่า "มองไม่เห็น" ไม่ใช่เดามั่ว)
+  เป็นปัญหาข้อมูล/ความละเอียด ไม่ใช่ปัญหา augmentation
 
-สถานะตอนปิดเซสชัน (ยืนยันด้วยคำสั่งจริง ไม่ได้เชื่อจากบทสนทนา):
-- main == origin/main push ครบ 9 commit (50ade55..cc46665) working tree สะอาด
-- git push จาก shell ของ agent ใช้ได้แล้ว ถ้าใส่ GIT_TERMINAL_PROMPT=0 (ที่เคยค้างคือรอถาม
-  credential โดยไม่มี TTY) — กฎเก่า "ห้าม push จาก agent" ยกเลิกได้ แต่ควรตั้ง timeout ไว้
-- uvicorn รันที่ :8010 (PID 16432) บน .venv — ตอนเริ่มเซสชันมี 2 process และตัวที่ถือ port จริงคือ
-  Python ของระบบซึ่งไม่มี ultralytics (โหลดโมเดลไม่ได้เลย) เช็ค OwningProcess ทุกครั้ง อย่าดูแค่ 200
-- webapp/data/ + state.json = งานจริงของผู้ใช้ 2,726 เฟรม 21,127 กล่อง ** ห้ามลบ ** ไม่ถูกแตะทั้งเซสชัน
-- เฟรมแรก suture01_frame_00000.jpg ยังติดสถานะ reviewed อยู่ (แก้: R -> Ctrl+A -> Delete -> A)
-- โมเดลที่ต้องใช้: models/ssid_v6i_50ep_20260810_map50-608.pt
-- งานถัดไปเป็นของผู้ใช้เหมือนเดิม: annotate ที่ระยะ keyframe 10/30/60 แล้ววัดด้วย
-  measure_annotation.py --since snap_start.json
+เจอ defect ที่บล็อกงาน 2 ตัวระหว่างทาง แก้แล้วทั้งคู่:
+(1) Roboflow export ของ ssid มีทั้งกล่องและ polygon ปนกันในไฟล์เดียว แต่ Ultralytics ตัดสินว่า
+    "ไฟล์นี้เป็น segment ไหม" ทีละไฟล์ ไม่ใช่ทีละแถว -> ในไฟล์ที่ปนกัน แถว bbox ธรรมดาถูกอ่านเป็น
+    polygon 2 จุด กลายเป็นกล่องผิด 8,047 กล่องจาก 623/2,190 ไฟล์ ทั้งตอนเทรนและตอนวัดผล
+    ** export ชุดใหม่ทุกครั้งต้องผ่าน polygons_to_bboxes.py ก่อนเทรนเสมอ **
+(2) เครื่องมี commit limit 28.7 GB กับ pagefile 4.4 GB บน C: ที่ Windows ขยายไม่ได้ -> WinError 1455
+    ตอน spawn dataloader worker วิธีแก้คือปิด Chrome (กิน ~11 GB) + ใช้ workers=0 ห้ามไปแก้ pagefile
 
-แผนงาน 6 ข้อ: C:\Users\USER\.claude\plans\needle-snoopy-salamander.md — ทำครบแล้ว มีสถานะ DONE
-แผน execution: C:\Users\USER\.claude\plans\read-handoff-c-users-user-appdata-local-sprightly-dawn.md
+สถานะตอนปิดเซสชัน:
+- main นำ origin/main อยู่ 4 commit (6ff44aa, 32f7bcf, dc50c61, cb02989) ยังไม่ได้ push
+- ของใหม่ที่ยังไม่ commit: polygons_to_bboxes.py, report_training_results.py, results/ (47 ไฟล์),
+  notebook ต้นฉบับ + ตัวที่รันแล้ว (31 รูปฝังอยู่), และ train_roboflow_yolo.py ที่แก้ 3 จุด
+  (--no-augment, --workers, UTF-8 stdout guard)
+- environment เทรน GPU อยู่นอกรีโปทั้งหมดบน D: — venv D:\ml\ssid-gpu (torch cu126),
+  dataset ที่แก้แล้ว D:\ml\data\ssid9_bbox, ผลรัน D:\ml\runs\ssid9_{noaug,aug}
+  ** venv ของเว็บแอปเป็น torch+cpu เทรน GPU ไม่ได้ อย่าสับสนกัน **
+- webapp ไม่ได้ถูกแตะ webapp/data/ + state.json = งานจริงของผู้ใช้ ห้ามลบ
 
-ยังค้างอยู่: คู่มือผู้ใช้ (หลังเว็บเสร็จเท่านั้น), ข้อ 8 ปรับ UI/ขนาด canvas (ผู้ใช้เลือกข้ามไว้ก่อน),
-SAM, obb ของจริง, domain/hosting + auth, figure 6-9 ที่ยังไม่เคยตรวจด้วยตา, และรอบเทรนถัดไป
+แผน execution: C:\Users\USER\.claude\plans\read-handoff-c-users-user-appdata-local-resilient-stonebraker.md
+(ดูหัวข้อ AMENDMENT ที่บันทึก defect 2 ตัวข้างบนไว้ ส่วนแผน ...-eager-parnas.md ยกเลิกแล้ว ข้อมูลผิด)
+แผนงานค้าง: C:\Users\USER\.claude\plans\handoff-c-users-user-appdata-local-temp-delegated-frost.md
+
+ยังค้างอยู่: เทรน aug ต่อเกิน 50 epochs, แก้ needle recall 0.227, เอาโมเดลใหม่ขึ้นเว็บแอป
+(ต้องวัดเทียบกับตัวเก่าบน val ชุดสะอาดก่อน เพราะเลข 0.608 ของตัวเก่าวัดจาก label ที่อาจเพี้ยน),
+SAM, obb ของจริง, domain/hosting, figure 6-9 ที่ยังไม่เคยตรวจด้วยตา,
+และคู่มือผู้ใช้ (ทำหลังเว็บแอปเสร็จเท่านั้น)
+
+
+
+> หลังอัพเดทแผนงาน ต่อไปอยากให้อัพเดท diagram อยากให้แยกระหว่าง 1.model ที่เป็นงานหลัก 2.ส่วนของเว็บ
+  นี่คือรายงานโปรเจคของผมที่ทำต่อจากรายงานของอาจารย์
+  "C:\Users\USER\OneDrive\Documents\BEAM\VideoFrameExtractor\05_reports\แก้ๆๆๆ.pdf" ซึ่งเวอร์นี้ยังต้องแก้ไขอีก
+  ให้ประกอบกับรายงานของอาจารย์นี้ "C:\Users\USER\OneDrive\Documents\BEAM\VideoFrameExtractor\05_reports\Report-Phase-1-1
+  (1).pdf" ที่เป็นของมูลหลักตอนเริ่มต้น และเขียนบอกด้วยว่า diagram อันไหน ควรใส่ในรายงาน
+  "C:\Users\USER\OneDrive\Documents\BEAM\VideoFrameExtractor\05_reports\แก้ๆๆๆ.pdf" เพื่อเป็นรายงานทีจะส่งอาจารย์
+  เขียนแนวทางมาหน่อยเพื่อให้รายงานออกมาสมบูรณ์ ถูกต้อง หลักวิชาการ ละเอียดเพื่ออาจารย์เข้าใจ
