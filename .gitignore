@@ -14,3 +14,8 @@ ssid.v6i.yolov11.zip
 *.mov
 *.avi
 *.mkv
+
+# Local safety copies made before editing the thesis .docx. The tracked แก้3.docx and
+# แก้3-fixed.docx already give us the before/after pair, so these are pure duplication.
+05_reports/*.backup-*.docx
+05_reports/*.before-tidy.docx
