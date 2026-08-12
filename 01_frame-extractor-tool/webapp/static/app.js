@@ -617,6 +617,14 @@ const MODEL_PICKERS = [
 // One status chip per picker. Both show the same thing; they are on different tabs.
 const MODEL_STATUS_CHIPS = ["model-status", "assist-model-status"];
 
+// Render order for the picker, most-likely-correct first. The wording on the base group is
+// deliberate: those weights work fine, they just answer a different question than this project asks.
+const MODEL_GROUPS = [
+  ["project", "Trained for this project"],
+  ["checkpoint", "Training run outputs"],
+  ["base", "Stock COCO weights — detect person/car/dog, NOT instruments"],
+];
+
 // ── ModelState ──
 //
 // Detect and Label Assist each kept their own model path. That was deliberate at first - Assist
@@ -679,9 +687,9 @@ async function refreshModelOptions() {
   const data = await res.json();
   const list = document.getElementById("model-datalist");
   list.innerHTML = "";
-  data.models.forEach((name) => {
+  data.models.forEach((m) => {
     const opt = document.createElement("option");
-    opt.value = name;
+    opt.value = m.path;
     list.appendChild(opt);
   });
 
@@ -698,14 +706,38 @@ async function refreshModelOptions() {
     placeholder.value = "";
     placeholder.textContent = data.models.length ? "Pick a model on the server..." : "No models found";
     select.appendChild(placeholder);
-    data.models.forEach((name) => {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      select.appendChild(opt);
+
+    // Grouped and labelled, because a bare filename cannot tell you that yolo11n.pt detects
+    // person/car/dog rather than surgical instruments. Loading one of those by mistake is what put
+    // "person 0.78" on a set of screenshots.
+    MODEL_GROUPS.forEach(([kind, groupLabel]) => {
+      const inGroup = data.models.filter((m) => m.kind === kind);
+      if (!inGroup.length) return;
+      const group = document.createElement("optgroup");
+      group.label = groupLabel;
+      inGroup.forEach((m) => {
+        const opt = document.createElement("option");
+        opt.value = m.path;
+        const cls = m.classes == null ? "reading..." : `${m.classes} classes`;
+        opt.textContent = `${m.path} — ${cls} · ${m.size_mb} MB`;
+        group.appendChild(opt);
+      });
+      select.appendChild(group);
     });
     syncModelSelect(selectId, inputId);
   });
+
+  // First visit: the markup ships yolo11n.pt, a stock COCO weight, so the very first Load gave a
+  // detector that finds person/car/dog. If the user has never chosen a model and the current one is
+  // a stock weight, adopt the newest model actually trained for this project instead.
+  if (!localStorage.getItem("active_model_path")) {
+    const current = data.models.find((m) => m.path === ModelState.getPath());
+    if (!current || current.kind === "base") {
+      const project = data.models.filter((m) => m.kind === "project").sort((x, y) =>
+        x.path < y.path ? 1 : -1)[0];
+      if (project) ModelState.setPath(project.path);
+    }
+  }
 }
 
 // Never let the dropdown claim a model the request will not actually use: it shows the placeholder

@@ -37,7 +37,8 @@ sys.path.insert(0, str(TOOL_DIR))
 load_dotenv(WEBAPP_DIR / ".env")
 
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
-from detector import Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES, CLASS_COLORS_HEX  # noqa: E402
+from detector import (Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES,  # noqa: E402
+                      CLASS_COLORS_HEX, ensure_safe_load_or_raise)
 from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
 
 # ── Auth (S-1) configuration ──
@@ -1639,15 +1640,90 @@ def stop_ocr(job_id: str):
 # ────────────────────────────── S-7 Models ──────────────────────────────
 
 
-def _scan_models() -> list[str]:
+# Class counts are cached on (path, mtime, size). Reading one means unpickling a checkpoint, which
+# costs the better part of a second, and the picker refreshes on every page load — nine of them in
+# series would stall the UI. A background warm-up fills this at startup so the first render already
+# has the numbers; anything not yet read reports null and the UI shows a dash.
+_MODEL_CLASSES: dict[tuple[str, int, int], int | None] = {}
+# Serialises the reads. Without it the warm-up thread and a request thread can both be part-way
+# through importing ultralytics, and the loser reports every checkpoint as unreadable.
+_MODEL_CLASSES_LOCK = threading.Lock()
+
+
+def _model_class_count(path: Path) -> int | None:
+    """How many classes a checkpoint declares, or None if it cannot be read."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if key in _MODEL_CLASSES:
+        return _MODEL_CLASSES[key]
+    with _MODEL_CLASSES_LOCK:
+        if key in _MODEL_CLASSES:   # filled while this thread waited
+            return _MODEL_CLASSES[key]
+        return _read_model_class_count(path, key)
+
+
+def _read_model_class_count(path: Path, key: tuple[str, int, int]) -> int | None:
+    count = None
+    try:
+        ensure_safe_load_or_raise()  # a .pt is a pickle; same guard as every other load path
+        from ultralytics import YOLO
+        names = YOLO(str(path)).names
+        count = len(names) if names else None
+    except Exception as e:
+        # A foreign or half-written .pt must not break the picker, but staying silent once hid a
+        # plain NameError and made every model report "unreadable".
+        print(f"[models] could not read classes from {path.name}: {type(e).__name__}: {e}", flush=True)
+        count = None
+    _MODEL_CLASSES[key] = count
+    return count
+
+
+def _model_kind(p: Path) -> str:
+    """project = trained for this dataset, base = a stock COCO weight, checkpoint = a training run.
+
+    The distinction is the whole point of this endpoint: a stock weight detects person/car/dog and
+    is useless here, but sitting in a flat list it looks like any other option."""
+    if p.parent == MODELS_DIR:
+        return "project"
+    if p.parent == TOOL_DIR:
+        return "base"
+    return "checkpoint"
+
+
+def _scan_models() -> list[dict]:
     """Every .pt reachable for backend="local": top-level TOOL_DIR (pretrained convention, e.g.
     yolo11n.pt), MODELS_DIR (uploads), and runs/ (already-trained outputs from
     train_roboflow_yolo.py / experiment_tracking.py — surfaced automatically, no manual copying).
-    Returned as relative-to-TOOL_DIR POSIX path strings, not bare names: once runs/ is included,
-    multiple best.pt/last.pt share a filename across different run folders, so bare names would
-    collide/be ambiguous. _resolve_model_path() already resolves values like this correctly."""
+
+    `path` stays relative-to-TOOL_DIR POSIX, not a bare name: once runs/ is included, multiple
+    best.pt/last.pt share a filename across different run folders, so bare names would collide.
+    _resolve_model_path() already resolves values like this correctly."""
     paths = set(TOOL_DIR.glob("*.pt")) | set(MODELS_DIR.glob("*.pt")) | set((TOOL_DIR / "runs").rglob("*.pt"))
-    return sorted(str(p.relative_to(TOOL_DIR)).replace("\\", "/") for p in paths)
+    out = []
+    for p in sorted(paths):
+        try:
+            size_mb = round(p.stat().st_size / 1_000_000, 1)
+        except OSError:
+            continue
+        out.append({
+            "path": str(p.relative_to(TOOL_DIR)).replace("\\", "/"),
+            "kind": _model_kind(p),
+            "classes": _model_class_count(p),
+            "size_mb": size_mb,
+        })
+    return out
+
+
+def _warm_model_class_cache() -> None:
+    paths = set(TOOL_DIR.glob("*.pt")) | set(MODELS_DIR.glob("*.pt")) | set((TOOL_DIR / "runs").rglob("*.pt"))
+    for p in sorted(paths):
+        _model_class_count(p)
+
+
+threading.Thread(target=_warm_model_class_cache, daemon=True).start()
 
 
 @app.get("/api/models")
