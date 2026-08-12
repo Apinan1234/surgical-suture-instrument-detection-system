@@ -46,13 +46,27 @@ from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
 # file is executable content here (see detector.py), so an unauthenticated caller reaching
 # /api/models + /api/models/load is remote code execution - auth is that route's real mitigation.
 # .env is loaded above, before this runs, so a value there is honoured.
+# REQUIRE_AUTH exists so the app can be handed to a reviewer without a password. It defaults to ON
+# and has to be turned off deliberately, because with it off EVERY route is open to anything that can
+# reach the port - including /api/models + /api/models/load, which load a pickle and can therefore
+# execute code. Only ever run it off on an interface nobody else can reach.
+REQUIRE_AUTH = (os.environ.get("REQUIRE_AUTH", "true") or "true").strip().lower() not in {
+    "0", "false", "no", "off", "n", "f"
+}
 APP_PASSWORD = os.environ.get("APP_PASSWORD")
-if not APP_PASSWORD:
+if REQUIRE_AUTH and not APP_PASSWORD:
     raise RuntimeError(
         "APP_PASSWORD environment variable is required (see webapp/.env.example). The app refuses to "
         "start without one because every API route - including model upload/load, which can execute "
-        "code - would otherwise be open to anyone who can reach the port."
+        "code - would otherwise be open to anyone who can reach the port. Set REQUIRE_AUTH=false to "
+        "run without a password anyway."
     )
+if not REQUIRE_AUTH:
+    print("=" * 78, flush=True)
+    print("  WARNING: REQUIRE_AUTH=false - every API route is OPEN, no password required.", flush=True)
+    print("  /api/models/load loads a pickle, so anyone who can reach this port can run code.", flush=True)
+    print("  Bind to 127.0.0.1 only, and set REQUIRE_AUTH back to true when you are done.", flush=True)
+    print("=" * 78, flush=True)
 try:
     # `or "10"` handles a blank SESSION_TTL_HOURS= (a plausible edit, since every other new tunable in
     # .env.example is left blank); the try/except also catches a non-numeric value. Either falls back
@@ -242,7 +256,7 @@ class LoginBody(BaseModel):
 @app.middleware("http")
 async def auth_gate(request: Request, call_next):
     path = request.url.path
-    if path.startswith("/api/") and path not in _AUTH_ALLOWLIST:
+    if REQUIRE_AUTH and path.startswith("/api/") and path not in _AUTH_ALLOWLIST:
         if not _session_valid(request.cookies.get("session")):
             return JSONResponse({"detail": "Not authenticated"}, status_code=401)
     return await call_next(request)
@@ -316,7 +330,8 @@ def logout(request: Request, response: Response):
 def me(request: Request):
     # NOT in the allowlist: the gate 401s it when there is no valid session, which is exactly the
     # signal the frontend's boot probe wants (200 = logged in, 401 = show the login overlay).
-    return {"authenticated": True}
+    # With REQUIRE_AUTH off the gate never 401s, so this returns 200 and the overlay stays hidden.
+    return {"authenticated": True, "auth_required": REQUIRE_AUTH}
 
 
 @app.get("/api/health")
