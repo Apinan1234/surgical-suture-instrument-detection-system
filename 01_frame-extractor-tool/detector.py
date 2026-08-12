@@ -24,7 +24,14 @@ import numpy as np
 # restricted loading silently OFF there. 8.4.114 (the webapp venv) accepts both via its newer
 # env_bool(). "true" is honoured by every version. ensure_safe_load_or_raise() below is the
 # backstop that catches any remaining case where the flag is set but not actually in effect.
-os.environ.setdefault("ULTRALYTICS_SAFE_LOAD", "true")
+#
+# setdefault() alone is NOT enough: a .env that carries the key with an EMPTY value (the shape
+# .env.example shipped) puts "" into the environment, so setdefault() no-ops, ultralytics parses ""
+# as False, and _env_wants_safe_load() below then reads it as a deliberate operator opt-out -- so
+# ensure_safe_load_or_raise() stays silent on exactly the fail-open it exists to catch. Blank is
+# not a choice; treat it as unset.
+if not (os.environ.get("ULTRALYTICS_SAFE_LOAD") or "").strip():
+    os.environ["ULTRALYTICS_SAFE_LOAD"] = "true"
 
 # Truthy strings ultralytics' own env_bool() accepts (utils/__init__.py). Used only to detect an
 # operator opt-out here; whether the flag is actually *honoured* is read from ultralytics at runtime

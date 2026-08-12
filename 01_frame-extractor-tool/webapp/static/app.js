@@ -38,6 +38,61 @@ async function apiFetch(path, opts) {
   return res;
 }
 
+// A download started with window.location.href is a TOP-LEVEL NAVIGATION: it never routes through
+// apiFetch, so once the session has lapsed the browser renders the server's JSON 401 as a page and
+// the whole SPA is torn down -- taking any unsaved annotation state with it, which is exactly what
+// the login overlay exists to prevent. Pull the bytes through apiFetch instead (401 -> overlay ->
+// retry) and hand them to a synthetic <a download>.
+async function downloadViaApi(path, fallbackName) {
+  let res;
+  try {
+    res = await apiFetch(path);
+  } catch (e) {
+    alert(`Download failed: ${e}`);
+    return;
+  }
+  if (!res.ok) {
+    alert(`Download failed (HTTP ${res.status})`);
+    return;
+  }
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = /filename\*?=(?:UTF-8'')?"?([^;"]+)"?/i.exec(cd);
+  let name = fallbackName;
+  if (m) {
+    try { name = decodeURIComponent(m[1].trim()); } catch (e) { name = m[1].trim(); }
+  }
+  const objUrl = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = objUrl;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objUrl);
+}
+
+// Same problem in the other direction: an <img> load does not route through apiFetch either, so a
+// lapsed session turns every thumbnail into a broken icon with no overlay and no way back. On error,
+// probe the same URL through apiFetch -- a 401 raises the overlay and parks, and once re-logged-in
+// the probe resolves and the fetched bytes are swapped straight in (no second download). A genuine
+// 404/500 resolves not-ok and leaves the broken image, as it should. The Annotate canvas keeps its
+// own copy of this: it additionally has to check the user has not navigated to another frame while
+// the probe was in flight, which this generic version has no way to know about.
+function loadAuthedImage(img, url) {
+  img.onerror = () => {
+    img.onerror = null;  // one retry only -- never loop if the replacement also fails
+    apiFetch(url)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const objUrl = URL.createObjectURL(await res.blob());
+        img.onload = () => URL.revokeObjectURL(objUrl);
+        img.src = objUrl;
+      })
+      .catch(() => {});
+  };
+  img.src = url;
+}
+
 // ── Login gate (S-1) ──
 
 function showLoginOverlay() {
@@ -381,7 +436,7 @@ document.getElementById("extract-start-btn").addEventListener("click", async () 
 
 document.getElementById("download-zip-btn").addEventListener("click", () => {
   if (!currentExtractJobId) return;
-  window.location.href = `/api/extract/${currentExtractJobId}/zip`;
+  downloadViaApi(`/api/extract/${currentExtractJobId}/zip`, "frames.zip");
 });
 
 document.getElementById("extract-stop-btn").addEventListener("click", async () => {
@@ -948,7 +1003,8 @@ function showDetectPreview(idx) {
   if (!detectFrames.length) return;
   detectPreviewIdx = Math.max(0, Math.min(idx, detectFrames.length - 1));
   const frame = detectFrames[detectPreviewIdx];
-  document.getElementById("detect-preview-img").src = `/api/frames/${frame.id}/preview.jpg?t=${Date.now()}`;
+  loadAuthedImage(document.getElementById("detect-preview-img"),
+                  `/api/frames/${frame.id}/preview.jpg?t=${Date.now()}`);
   document.getElementById("detect-nav-label").textContent =
     `Frame ${detectPreviewIdx + 1} / ${detectFrames.length}`;
   renderDetectionChips(frame.detections || []);
@@ -2837,7 +2893,7 @@ const Filmstrip = (() => {
     entries.forEach((entry) => {
       if (!entry.isIntersecting) return;
       const img = entry.target;
-      if (img.dataset.src && img.src !== img.dataset.src) img.src = img.dataset.src;
+      if (img.dataset.src && img.src !== img.dataset.src) loadAuthedImage(img, img.dataset.src);
       observer.unobserve(img);
     });
   }, { root: document.querySelector(".annotate-filmstrip"), rootMargin: "200px" });
@@ -3902,7 +3958,7 @@ async function restoreExportJob() {
 
 document.getElementById("export-download-btn").addEventListener("click", () => {
   if (!currentExportJobId) return;
-  window.location.href = `/api/export/${currentExportJobId}/download`;
+  downloadViaApi(`/api/export/${currentExportJobId}/download`, "export.zip");
 });
 
 // ────────────────────────────── Analytics section ──────────────────────────────
