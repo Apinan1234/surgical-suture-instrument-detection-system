@@ -23,14 +23,26 @@ mAP50 0.5746 -> 0.6559 (+14.2%), mAP50-95 +23.5%, recall +22.6%, precision -1.6%
     ตอน spawn dataloader worker วิธีแก้คือปิด Chrome (กิน ~11 GB) + ใช้ workers=0 ห้ามไปแก้ pagefile
 
 สถานะตอนปิดเซสชัน:
-- main นำ origin/main อยู่ 4 commit (6ff44aa, 32f7bcf, dc50c61, cb02989) ยังไม่ได้ push
-- ของใหม่ที่ยังไม่ commit: polygons_to_bboxes.py, report_training_results.py, results/ (47 ไฟล์),
-  notebook ต้นฉบับ + ตัวที่รันแล้ว (31 รูปฝังอยู่), และ train_roboflow_yolo.py ที่แก้ 3 จุด
-  (--no-augment, --workers, UTF-8 stdout guard)
-- environment เทรน GPU อยู่นอกรีโปทั้งหมดบน D: — venv D:\ml\ssid-gpu (torch cu126),
-  dataset ที่แก้แล้ว D:\ml\data\ssid9_bbox, ผลรัน D:\ml\runs\ssid9_{noaug,aug}
-  ** venv ของเว็บแอปเป็น torch+cpu เทรน GPU ไม่ได้ อย่าสับสนกัน **
-- webapp ไม่ได้ถูกแตะ webapp/data/ + state.json = งานจริงของผู้ใช้ ห้ามลบ
+- push ครบแล้ว main == origin/main ที่ 77ec000 (9 commit: 944fed9..77ec000) working tree สะอาด
+  git push จาก shell ของ agent ใช้ได้ ถ้าใส่ GIT_TERMINAL_PROMPT=0 พร้อม timeout
+- รัน code-review ก่อน push เจอ 12 ข้อ ตรวจเองทุกข้อแล้วแก้ครบ ที่หนักสุด 2 ข้อ:
+  (1) .env.example ส่งมาพร้อมบรรทัด ULTRALYTICS_SAFE_LOAD= ว่าง ๆ ใครทำตาม README ("copy .env.example
+      to .env") จะได้ค่าว่างเข้า env -> setdefault ไม่ทำงาน -> ultralytics อ่านเป็น False -> แล้ว
+      _env_wants_safe_load() ยังตีความว่า "ผู้ดูแลตั้งใจปิดเอง" เลยไม่ raise = fail-open เต็มรูปแบบ
+      ตรงจุดที่ guard ถูกเขียนมาเพื่อกันพอดี (.env ของเครื่องนี้ไม่มีบรรทัดนั้น จึงไม่เคยโดน)
+  (2) รหัสผ่านแอปตัวจริงถูก commit ลง webapp/README.md แก้ด้วยการ amend commit ที่ใส่มันเข้าไป
+      ตอนยังไม่ push รหัสจึงไม่เคยเข้า history ของ remote
+- ผู้ใช้เปิดโน้ตบุ๊กแล้วเห็นเองว่า confusion matrix เป็นสีขาวทั้งตาราง -> เป็นบั๊กจริงที่ review มองไม่เห็น
+  report_training_results.py เรียก model.val(plots=False) แต่ ultralytics เติมเมทริกซ์เฉพาะใน
+  if self.args.plots: (detect/val.py) เลยได้ตารางศูนย์มาวาด แก้เป็น plots=True แล้วรันใหม่ทั้ง val และ test
+- เพิ่มผลบน test split (results_test/) และโน้ตบุ๊กแยกรายรัน ssid9_{noaug,aug}_RESULTS.ipynb
+  สร้างจาก make_run_report_notebooks.py (อย่าแก้ JSON ด้วยมือ)
+- ** แก้ความเข้าใจผิด ** การทดลองนี้ไม่ได้สุ่มลดจำนวน finger ให้เท่าคลาสอื่น โน้ตบุ๊กเรียก
+  YOLO().train() ตรง ๆ ไม่ผ่าน train_roboflow_yolo.py โค้ด balancing จึงไม่เคยทำงาน
+  finger = 7,157 จาก 16,421 กล่องใน train (43.6%) และตั้งใจปล่อยไว้แบบนั้น
+- YOLO11 ไม่มี objectness loss (นั่นคือ v5/v7) มีแค่ box / cls / dfl ถ้ารายงานต้องมีหัวข้อ
+  "Object Loss" ให้ใช้ DFL แล้วหมายเหตุไว้
+- webapp/data/ + state.json = งานจริงของผู้ใช้ ห้ามลบ ไม่ถูกแตะทั้งเซสชัน
 
 แผน execution: C:\Users\USER\.claude\plans\read-handoff-c-users-user-appdata-local-resilient-stonebraker.md
 (ดูหัวข้อ AMENDMENT ที่บันทึก defect 2 ตัวข้างบนไว้ ส่วนแผน ...-eager-parnas.md ยกเลิกแล้ว ข้อมูลผิด)
