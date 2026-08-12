@@ -42,6 +42,17 @@ import yaml
 from dotenv import load_dotenv
 from tqdm import tqdm
 
+# This project's console is cp874 (Thai): the em dashes in this script's own progress messages raise
+# UnicodeEncodeError there and kill the run before any training starts (and the same happens whenever
+# stdout is redirected to a file). Force UTF-8 on both streams, and fall back to replacing unmappable
+# characters rather than ever letting a log line abort a multi-hour job. Same guard as
+# export_roboflow_annotations.py.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):  # already-wrapped or non-reconfigurable stream
+        pass
+
 # Same webapp/.env file + python-dotenv already used by webapp/server.py — one shared place for
 # secrets in this project, not a second convention. A missing file is fine (find_dotenv-less load_dotenv
 # on a nonexistent path is a silent no-op); real env vars set before launch always take precedence
@@ -487,15 +498,37 @@ def write_working_data_yaml(yaml_data: dict, train_images_dir: Path, val_images_
 
 # ────────────────────────────── Training ──────────────────────────────
 
+# Every augmentation hyperparameter Ultralytics can apply to a detect task, all pinned to "off".
+# The list is deliberately exhaustive rather than only the ones non-zero in today's default.yaml
+# (hsv_h/hsv_s/hsv_v/translate/scale/fliplr/mosaic): an --no-augment run must stay augmentation-free
+# even if a future Ultralytics release turns another one on by default, and zeroing them all makes the
+# run's own args.yaml a self-documenting record of the experiment's control arm.
+NO_AUGMENT_HYPERPARAMS = {
+    "hsv_h": 0.0, "hsv_s": 0.0, "hsv_v": 0.0,
+    "degrees": 0.0, "translate": 0.0, "scale": 0.0, "shear": 0.0, "perspective": 0.0,
+    "flipud": 0.0, "fliplr": 0.0, "bgr": 0.0,
+    "mosaic": 0.0, "mixup": 0.0, "cutmix": 0.0, "copy_paste": 0.0,
+    "close_mosaic": 0,  # a no-op once mosaic is 0, set for clarity in args.yaml
+}
+
+
 def train_model(data_yaml: Path, model_weights: str, epochs: int, imgsz: int, batch: int,
-                 device: str, seed: int, output_dir: Path) -> Path:
+                 device: str, seed: int, output_dir: Path, augment: bool = True,
+                 workers: int | None = None) -> Path:
     from ultralytics import YOLO
-    print(f"[train] {model_weights} on {data_yaml} — epochs={epochs} imgsz={imgsz} batch={batch} device={device}")
-    model = YOLO(model_weights)
-    model.train(
+    print(f"[train] {model_weights} on {data_yaml} — epochs={epochs} imgsz={imgsz} batch={batch} "
+          f"device={device} augment={'on (ultralytics defaults)' if augment else 'OFF'}"
+          + (f" workers={workers}" if workers is not None else ""))
+    train_kwargs = dict(
         data=str(data_yaml), epochs=epochs, imgsz=imgsz, batch=batch,
         device=device, seed=seed, project=str(output_dir), name="train", exist_ok=True,
     )
+    if not augment:
+        train_kwargs.update(NO_AUGMENT_HYPERPARAMS)
+    if workers is not None:
+        train_kwargs["workers"] = workers
+    model = YOLO(model_weights)
+    model.train(**train_kwargs)
     best = output_dir / "train" / "weights" / "best.pt"
     if not best.exists():
         raise FileNotFoundError(f"Training finished but best.pt not found at {best}")
@@ -581,6 +614,13 @@ def main():
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--skip-train", action="store_true",
                          help="download + balance + log ground truth only; skip training/prediction (dry run)")
+    parser.add_argument("--no-augment", action="store_true",
+                         help="train with every augmentation hyperparameter zeroed (mosaic, flips, HSV, "
+                              "scale/translate). Default is Ultralytics' defaults, i.e. augmentation ON")
+    parser.add_argument("--workers", type=int, default=None,
+                         help="dataloader worker processes (default: Ultralytics' own, 8). Lower it on "
+                              "Windows+CUDA: each worker re-imports torch and maps the CUDA DLLs, and 8 "
+                              "of them overflow a small pagefile with 'WinError 1455'. 2 is safe here")
     args = parser.parse_args()
 
     args.fmt = args.fmt or ("yolov8" if args.task == "pose" else "yolov5pytorch")
@@ -654,7 +694,8 @@ def main():
 
         work_yaml = write_working_data_yaml(yaml_data, train_copy_images, val_images, test_images, output_dir)
         best_weights = train_model(work_yaml, args.model, args.epochs, args.imgsz,
-                                    args.batch, args.device, args.seed, output_dir)
+                                    args.batch, args.device, args.seed, output_dir,
+                                    augment=not args.no_augment, workers=args.workers)
         print(f"[train] done — best weights at {best_weights}")
 
         verify_and_report_outputs(output_dir)
