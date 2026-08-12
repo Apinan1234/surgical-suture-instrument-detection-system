@@ -38,7 +38,7 @@ load_dotenv(WEBAPP_DIR / ".env")
 
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
 from detector import (Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES,  # noqa: E402
-                      CLASS_COLORS_HEX, ensure_safe_load_or_raise)
+                      CLASS_COLORS_HEX, app_class_id, ensure_safe_load_or_raise)
 from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
 
 # ── Auth (S-1) configuration ──
@@ -992,8 +992,15 @@ def _run_detect_job(job_id: str, body: DetectBody):
                 job["log"].append(f"[error] cannot read {record['path']}")
                 continue
             dets = det.predict(img)
+            records, dropped = _to_records(dets)  # Detection.source defaults to "model"
+            if dropped:
+                job["log"].append(
+                    f"[skipped] {Path(record['path']).name}: {len(dropped)} box(es) from classes this "
+                    f"project does not annotate ({', '.join(sorted(set(dropped)))}) - "
+                    f"is this checkpoint the right one?"
+                )
             with _state_lock:
-                record["detections"] = [d.to_dict() for d in dets]  # Detection.source defaults to "model"
+                record["detections"] = records
                 if record.get("reviewed"):
                     # Only reachable with the explicit skip_reviewed=false override — fresh unconfirmed
                     # model output shouldn't silently keep inheriting the frame's prior review status.
@@ -1002,9 +1009,9 @@ def _run_detect_job(job_id: str, body: DetectBody):
                 # browser is now holding a stale copy — bump so their next save gets a 409, not a
                 # silent overwrite of what the model just wrote.
                 _bump_rev(record)
-            if dets:
+            if records:
                 detected_total += 1
-            job["log"].append(f"[{'detected' if dets else 'empty'}] {Path(record['path']).name}: {len(dets)} obj")
+            job["log"].append(f"[{'detected' if records else 'empty'}] {Path(record['path']).name}: {len(records)} obj")
         except Exception as e:
             job["log"].append(f"[error] {record['path']}: {e}")
 
@@ -1136,6 +1143,30 @@ def frame_preview(frame_id: str):
 
 
 # ────────────────────────────── S-5 Annotation ──────────────────────────────
+
+
+def _to_records(dets: list[Detection]) -> tuple[list[dict], list[str]]:
+    """Detections -> state records, with class ids renumbered into this app's scheme.
+
+    A Detection reports the class id of the model that produced it. The 9-class checkpoints order
+    their classes differently from CLASS_NAMES (which is pinned so that the boxes already in
+    state.json keep their meaning), and dataset_exporter.py writes `class_id` verbatim into the YOLO
+    label files -- so storing a model's own id would quietly relabel the dataset at export time.
+
+    Detections whose class this app does not know are dropped rather than stored with a broken id:
+    that is what a stock COCO checkpoint produces, and a `person` box with class_id -1 would export
+    as an unparseable label. The names are returned so the caller can say so out loud.
+    """
+    records, dropped = [], []
+    for d in dets:
+        cid = app_class_id(d.class_name)
+        if cid < 0:
+            dropped.append(d.class_name)
+            continue
+        wire = d.to_dict()
+        wire["class_id"] = cid
+        records.append(wire)
+    return records, dropped
 
 
 # Sources that mean "a model produced this and a human has not confirmed it yet". hydrate() in
@@ -1461,11 +1492,9 @@ def assist_frame(frame_id: str, body: AssistBody):
 
     # Detection defaults to source="model"; re-stamping here is what lets /api/analytics count the
     # boxes this call had accepted without also sweeping in every box a bulk detect run produced.
-    suggestions = []
-    for d in dets:
-        wire = d.to_dict()
+    suggestions, dropped = _to_records(dets)
+    for wire in suggestions:
         wire["source"] = "assist"
-        suggestions.append(wire)
 
     with _state_lock:
         _state["assist_log"].append({
@@ -1476,7 +1505,10 @@ def assist_frame(frame_id: str, body: AssistBody):
             "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
             "conf": body.conf,
             "class_conf": body.class_conf,
-            "detected_count": len(dets),
+            # Counts what was actually offered to the user, not what the model emitted: a
+            # suggestion dropped for being an unknown class was never a suggestion, and counting it
+            # would make the accept rate unreachable by construction.
+            "detected_count": len(suggestions),
             # Marks this call as one whose accepted boxes are identifiable (they will be saved as
             # source="assist"). Entries logged before the split have no such flag and are left out of
             # the accept-rate denominator rather than being compared against boxes that cannot be
@@ -1486,7 +1518,7 @@ def assist_frame(frame_id: str, body: AssistBody):
         })
     save_state()
 
-    return {"detections": suggestions}
+    return {"detections": suggestions, "skipped_unknown_classes": sorted(set(dropped))}
 
 
 # ────────────────────────────── OCR (burned-in overlay text) ──────────────────────────────

@@ -2806,11 +2806,17 @@ const Keyboard = (() => {
     { key: "b", label: "B — Draw box tool", handler: () => AnnotateState.setActiveTool("draw_box") },
     { key: "p", label: "P — Polygon tool", handler: () => AnnotateState.setActiveTool("polygon") },
     { key: "k", label: "K — Keypoint tool", handler: () => AnnotateState.setActiveTool("keypoint") },
-    { key: "1", label: "1-5 — Set class", handler: () => setClassByNumber(1) },
+    // One key per class in CLASS_NAMES order. setClassByNumber ignores a digit with no class
+    // behind it, so this stays correct if the list ever shrinks.
+    { key: "1", label: "1-9 — Set class", handler: () => setClassByNumber(1) },
     { key: "2", handler: () => setClassByNumber(2) },
     { key: "3", handler: () => setClassByNumber(3) },
     { key: "4", handler: () => setClassByNumber(4) },
     { key: "5", handler: () => setClassByNumber(5) },
+    { key: "6", handler: () => setClassByNumber(6) },
+    { key: "7", handler: () => setClassByNumber(7) },
+    { key: "8", handler: () => setClassByNumber(8) },
+    { key: "9", handler: () => setClassByNumber(9) },
     { key: "Delete", label: "Delete — Remove selected box(es)", handler: () => AnnotateState.deleteSelectedBoxes() },
     { key: "Backspace", handler: () => AnnotateState.deleteSelectedBoxes() },
     { key: "a", ctrlKey: true, label: "Ctrl+A — Select all boxes", handler: () => AnnotateState.selectBoxes(AnnotateState.getBoxes().map((b) => b.id)) },
@@ -3645,6 +3651,15 @@ async function runAssist(opts) {
     if (AnnotateState.getFrameIdx() !== idxAtRun) return; // navigated away before this resolved
     const newBoxes = (data.detections || []).map((d) => ({ ...d, id: makeId(), _pending: true }));
     if (newBoxes.length) AnnotateState.addBoxes(newBoxes);
+    const skipped = data.skipped_unknown_classes || [];
+    if (skipped.length) {
+      const msg =
+        `This model returned classes this project does not annotate ` +
+        `(${skipped.join(", ")}). Those boxes were discarded — check the model picker is on a ` +
+        `project checkpoint and not a stock one.`;
+      if (opts.silent) console.warn(msg);
+      else alert(msg);
+    }
   } finally {
     runBtn.disabled = false;
   }

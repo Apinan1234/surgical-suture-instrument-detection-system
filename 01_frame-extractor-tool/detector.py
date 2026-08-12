@@ -94,6 +94,14 @@ CLASS_COLORS_BGR: dict[str, tuple[int, int, int]] = {
     "needle":        ( 50, 220, 255),   # yellow
     "needle_holder": (160, 230, 168),   # mint-green
     "wound":         (148, 100, 240),   # violet
+    # The four classes the dataset gained when it went from 5 to 9. The two tip classes borrow their
+    # parent tool's hue at a darker value, so a tip and the instrument it belongs to read as related
+    # without being confusable; `hand` takes blue rather than another warm tone because it shares
+    # nearly every frame with `finger`.
+    "Stitch Scissors":   (240,  92, 166),   # purple
+    "Tip_forcep":        (158, 138,  31),   # deep teal   (forcep, darker)
+    "Tip_needle_holder": ( 78, 142,  62),   # forest green (needle_holder, darker)
+    "hand":              (240, 139,  77),   # blue
 }
 _DEFAULT_BGR: tuple[int, int, int] = (180, 180, 180)
 
@@ -104,10 +112,38 @@ CLASS_COLORS_HEX: dict[str, str] = {
     "needle":        "#FFE032",
     "needle_holder": "#A8E6A0",
     "wound":         "#F064A0",
+    "Stitch Scissors":   "#A65CF0",
+    "Tip_forcep":        "#1F8A9E",
+    "Tip_needle_holder": "#3E8E4E",
+    "hand":              "#4D8BF0",
 }
 _DEFAULT_HEX = "#AAAAAA"
 
-CLASS_NAMES: list[str] = ["finger", "forcep", "needle", "needle_holder", "wound"]
+# Order is an on-disk format, not a preference. dataset_exporter.py writes each detection's
+# `class_id` straight into its YOLO label file and this list straight into data.yaml, so an index
+# here IS the meaning of a number already stored in state.json. The four 9-class additions are
+# therefore APPENDED rather than merged in alphabetically: it leaves finger..wound on ids 0-4, where
+# every one of the project's existing boxes already sits.
+#
+# The consequence is that this order deliberately does NOT match the 9-class checkpoints, which list
+# `Stitch Scissors` first. Translate by name, never by index -- see app_class_id().
+CLASS_NAMES: list[str] = [
+    "finger", "forcep", "needle", "needle_holder", "wound",
+    "Stitch Scissors", "Tip_forcep", "Tip_needle_holder", "hand",
+]
+
+
+def app_class_id(name: str) -> int:
+    """This app's id for a class name, or -1 if it has no such class.
+
+    A Detection carries the class id of whichever MODEL produced it, and a model's class order is
+    its own business. Storing that id unchanged would relabel the dataset on the next export, so
+    every path that turns model output into a stored annotation goes through here first.
+    """
+    try:
+        return CLASS_NAMES.index(name)
+    except ValueError:
+        return -1
 
 
 def polygon_bbox(points: list[list[float]]) -> tuple[float, float, float, float]:
