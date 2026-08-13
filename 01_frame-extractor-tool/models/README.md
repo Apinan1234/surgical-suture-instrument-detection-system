@@ -16,7 +16,40 @@ Detect / Label Assist model pickers with no further wiring.
 
 ## Baselines
 
-### `ssid_v6i_50ep_20260810_map50-608.pt`  (current best)
+### `ssid9_960px_150ep_20260813_map50-716.pt`  (current best)
+
+The first 9-class baseline, and the run that settled what was wrong with `needle`. Copy of
+`D:\mluns\ssid9_aug_960	rain\weightsest.pt`, which is **epoch 86** — training ran the full
+150 epochs and never beat it.
+
+| | |
+|---|---|
+| Base | `yolo11n.pt`, `task=detect` |
+| Dataset | `D:\ml\data\ssid9_bbox` — 1575 train / 400 val / 215 test, 9 classes |
+| Training | 150 epochs, **`imgsz 960`**, `batch 8`, `device 0`, `seed 42`, `workers 0` |
+| Results (val) | **mAP50 0.716**, mAP50-95 0.453, precision 0.734, recall 0.717 |
+| Results (test) | mAP50 0.702, mAP50-95 0.435, precision 0.733, recall 0.693 |
+| Per-class mAP50 (val) | Tip_needle_holder 0.866, Stitch Scissors 0.851, finger 0.788, Tip_forcep 0.777, needle_holder 0.773, forcep 0.750, wound 0.661, hand 0.618, **needle 0.360** |
+
+**Run inference at `imgsz 960`.** That is not a detail — it is the whole point of the checkpoint.
+Against the otherwise identical 640 run, `needle` recall goes 0.2435 -> 0.3579 on val and
+0.2513 -> 0.3351 on test, and the share of true needles read as background drops from 0.45 to 0.37.
+The gain sorts by object size: the two smallest classes (needle at a median 12.4 px short side,
+wound at 13.9 px) gain the most, everything above 27 px moves by under 0.02. Serving it at 640 gives
+back exactly what it was trained to fix.
+
+`needle` at 0.360 mAP50 is still the weakest class by a wide margin. It is better, not solved.
+
+**This checkpoint's class order is not the app's.** It lists `Stitch Scissors` first; `CLASS_NAMES`
+in `detector.py` starts at `finger` because ids 0-4 are frozen by the boxes already in `state.json`.
+`_to_records()` in `server.py` translates by name on the way in — never store a class id this model
+emits without that step.
+
+Full curves, confusion matrix and `results.csv` stay in `D:\mluns\ssid9_aug_960	rain\` — on
+this machine only. The report figures and tables are committed, at `../results_960/` (val) and
+`../results_960_test/` (test).
+
+### `ssid_v6i_50ep_20260810_map50-608.pt`  (previous best, 5 classes)
 
 Same data and hyperparameters as the 10-epoch baseline below, trained for **50 epochs** to test
 whether that baseline was simply undertrained. It was. Copy of
@@ -35,6 +68,13 @@ class by a wide margin; needles from this footage are what the next round of ann
 Inference stays at **imgsz 640**. Re-tested on this checkpoint: 1280 drops needle from 34 boxes to 6
 and wound from 50 to 17, 1920 drops needle to 1 -- the model is trained at 640 and anything else is
 off-distribution.
+
+**The 0.608 figure can no longer be reproduced.** This run's `data.yaml` points val and test at
+`ssid.v6i.yolov11alid` and `	est`, and that dataset is no longer on disk — only its balanced
+train split survives, inside `runs/roboflow_train_50ep/`. Any comparison against the 9-class models
+has to be a fresh measurement on a split that still exists, not a comparison against this number.
+Note also that this model saw 247 unique source frames (564 files after Roboflow augmentation) and
+went through class balancing, where the 9-class runs used 1575 frames with no balancing at all.
 
 ### `ssid_v6i_20260808_map50-557.pt`
 

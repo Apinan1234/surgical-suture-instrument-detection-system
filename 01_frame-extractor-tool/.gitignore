@@ -13,3 +13,4 @@ models/*
 !models/README.md
 !models/ssid_v6i_20260808_map50-557.pt
 !models/ssid_v6i_50ep_20260810_map50-608.pt
+!models/ssid9_960px_150ep_20260813_map50-716.pt
