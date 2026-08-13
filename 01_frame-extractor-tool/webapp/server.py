@@ -38,7 +38,7 @@ load_dotenv(WEBAPP_DIR / ".env")
 
 from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
 from detector import (Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES,  # noqa: E402
-                      CLASS_COLORS_HEX, app_class_id, ensure_safe_load_or_raise)
+                      CLASS_COLORS_HEX, app_class_id, ensure_safe_load_or_raise, _effective_imgsz)
 from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
 
 # ── Auth (S-1) configuration ──
@@ -967,6 +967,22 @@ def _run_detect_job(job_id: str, body: DetectBody):
         save_state()
         return
 
+    # Recorded here rather than in the route: the job dict is built before any detector exists, and
+    # the resolution is a property of the loaded checkpoint, not of the request. It goes in the log
+    # too, because it is the one run parameter nobody chose — and because 960 is 2.25x the pixels of
+    # 640, which on CPU is felt long before it is understood.
+    imgsz = getattr(det, "imgsz", None)
+    with _state_lock:
+        job["imgsz"] = imgsz
+        # Never name a resolution this app did not set. A Roboflow workflow resizes server-side and
+        # reports none, and a local checkpoint that declares no imgsz leaves the choice inside
+        # ultralytics — printing a number for either would be the silent mismatch this line exists
+        # to prevent.
+        job["log"].append(
+            f"[info] inference resolution: {imgsz} px" if imgsz
+            else "[info] inference resolution: chosen by the backend, not set by this app"
+        )
+
     total = len(body.frame_ids)
     for idx, frame_id in enumerate(body.frame_ids):
         if _job_stop_flags.get(job_id):
@@ -1708,45 +1724,58 @@ def stop_ocr(job_id: str):
 # ────────────────────────────── S-7 Models ──────────────────────────────
 
 
-# Class counts are cached on (path, mtime, size). Reading one means unpickling a checkpoint, which
-# costs the better part of a second, and the picker refreshes on every page load — nine of them in
-# series would stall the UI. A background warm-up fills this at startup so the first render already
-# has the numbers; anything not yet read reports null and the UI shows a dash.
-_MODEL_CLASSES: dict[tuple[str, int, int], int | None] = {}
+# What each checkpoint declares about itself, cached on (path, mtime, size). Reading it means
+# unpickling a checkpoint, which costs the better part of a second, and the picker refreshes on every
+# page load — nine of them in series would stall the UI. A background warm-up fills this at startup
+# so the first render already has the numbers; anything not yet read reports null and the UI shows a
+# dash.
+#
+# Class count and training resolution are cached together because they come off the same load. The
+# resolution is here for the picker's sake: a model served at the wrong imgsz fails silently rather
+# than loudly (see _effective_imgsz in detector.py), so the one place a user chooses a model is the place
+# that has to say which resolution that choice implies.
+_MODEL_META: dict[tuple[str, int, int], dict] = {}
 # Serialises the reads. Without it the warm-up thread and a request thread can both be part-way
 # through importing ultralytics, and the loser reports every checkpoint as unreadable.
-_MODEL_CLASSES_LOCK = threading.Lock()
+_MODEL_META_LOCK = threading.Lock()
+
+# Copied at every use rather than shared: a single dict handed out for every unreadable checkpoint is
+# one accidental mutation away from rewriting them all.
+_UNREADABLE_MODEL = {"classes": None, "imgsz": None}
 
 
-def _model_class_count(path: Path) -> int | None:
-    """How many classes a checkpoint declares, or None if it cannot be read."""
+def _model_meta(path: Path) -> dict:
+    """{"classes": n, "imgsz": n} for a checkpoint; either value is None if it cannot be read."""
     try:
         st = path.stat()
     except OSError:
-        return None
+        return dict(_UNREADABLE_MODEL)
     key = (str(path), st.st_mtime_ns, st.st_size)
-    if key in _MODEL_CLASSES:
-        return _MODEL_CLASSES[key]
-    with _MODEL_CLASSES_LOCK:
-        if key in _MODEL_CLASSES:   # filled while this thread waited
-            return _MODEL_CLASSES[key]
-        return _read_model_class_count(path, key)
+    if key in _MODEL_META:
+        return _MODEL_META[key]
+    with _MODEL_META_LOCK:
+        if key in _MODEL_META:   # filled while this thread waited
+            return _MODEL_META[key]
+        return _read_model_meta(path, key)
 
 
-def _read_model_class_count(path: Path, key: tuple[str, int, int]) -> int | None:
-    count = None
+def _read_model_meta(path: Path, key: tuple[str, int, int]) -> dict:
+    meta = dict(_UNREADABLE_MODEL)
     try:
         ensure_safe_load_or_raise()  # a .pt is a pickle; same guard as every other load path
         from ultralytics import YOLO
-        names = YOLO(str(path)).names
-        count = len(names) if names else None
+        model = YOLO(str(path))
+        names = model.names
+        # The same helper the detector uses, so the picker cannot advertise a resolution the run
+        # would not actually use.
+        meta = {"classes": len(names) if names else None, "imgsz": _effective_imgsz(model)}
     except Exception as e:
         # A foreign or half-written .pt must not break the picker, but staying silent once hid a
         # plain NameError and made every model report "unreadable".
-        print(f"[models] could not read classes from {path.name}: {type(e).__name__}: {e}", flush=True)
-        count = None
-    _MODEL_CLASSES[key] = count
-    return count
+        print(f"[models] could not read metadata from {path.name}: {type(e).__name__}: {e}", flush=True)
+        meta = dict(_UNREADABLE_MODEL)
+    _MODEL_META[key] = meta
+    return meta
 
 
 def _model_kind(p: Path) -> str:
@@ -1776,22 +1805,24 @@ def _scan_models() -> list[dict]:
             size_mb = round(p.stat().st_size / 1_000_000, 1)
         except OSError:
             continue
+        meta = _model_meta(p)
         out.append({
             "path": str(p.relative_to(TOOL_DIR)).replace("\\", "/"),
             "kind": _model_kind(p),
-            "classes": _model_class_count(p),
+            "classes": meta["classes"],
+            "imgsz": meta["imgsz"],
             "size_mb": size_mb,
         })
     return out
 
 
-def _warm_model_class_cache() -> None:
+def _warm_model_meta_cache() -> None:
     paths = set(TOOL_DIR.glob("*.pt")) | set(MODELS_DIR.glob("*.pt")) | set((TOOL_DIR / "runs").rglob("*.pt"))
     for p in sorted(paths):
-        _model_class_count(p)
+        _model_meta(p)
 
 
-threading.Thread(target=_warm_model_class_cache, daemon=True).start()
+threading.Thread(target=_warm_model_meta_cache, daemon=True).start()
 
 
 @app.get("/api/models")
@@ -1858,6 +1889,10 @@ def load_model(body: DetectorConfigBody):  # plain def: build_detector blocks, a
         "backend": body.backend,
         "model_path": body.model_path.strip() if body.backend == "local" else None,
         "class_names": list(getattr(det, "class_names", [])),
+        # The resolution this detector will actually run at, inferred from the checkpoint. This
+        # endpoint exists to answer "what will the next call do", and at the wrong imgsz a model
+        # returns fewer small objects rather than an error — so it has to answer this too.
+        "imgsz": getattr(det, "imgsz", None),
         # Only ultralytics models carry a task; a Roboflow workflow has none, hence None rather than
         # a guess. This is what tells the user a segment checkpoint was loaded for a detect job.
         "task": getattr(getattr(det, "model", None), "task", None),

@@ -331,6 +331,57 @@ def _threshold_for(class_name: str, conf: float, class_conf: dict[str, float] | 
     return (class_conf or {}).get(class_name, conf)
 
 
+# Bounds on an imgsz we are willing to believe from a checkpoint's own metadata. 32 is the network
+# stride; 1920 is well past anything trained here and keeps a corrupt or hostile value -- an uploaded
+# .pt can declare anything -- from asking a 4 GB card for an 8192-pixel tensor.
+_MIN_IMGSZ, _MAX_IMGSZ = 32, 1920
+
+
+def _effective_imgsz(model) -> int | None:
+    """The resolution this checkpoint will actually be run at, or None if we have no opinion.
+
+    READ THIS BEFORE ASSUMING THIS FUNCTION CHANGES ANY RESOLUTION. It usually does not.
+    ultralytics already applies a checkpoint's own imgsz without being asked: YOLO._load sets
+    `self.overrides = self.model.args`, keeping imgsz, and Model.predict merges
+    `{**self.overrides, **custom, **kwargs}`. Verified on ultralytics 8.4.114 (the webapp venv) with
+    ssid9_960px_150ep: predict() with no imgsz argument runs at 960, not at ultralytics' 640
+    default, and returns box-for-box what an explicit imgsz=960 returns. Any claim that this app
+    "serves the 960 model at 640" is false and was checked, not assumed.
+
+    So this exists for the two things that were genuinely missing:
+
+    1. Reporting. The resolution was applied but invisible -- nothing in the picker, the API or a
+       job log said which one a run used, and at the wrong one a model returns fewer small objects
+       rather than an error. self.imgsz is passed explicitly by predict(), so what is reported is
+       guaranteed to be what runs.
+    2. A bound that actually binds. Omitting the kwarg does NOT reject a bad value -- ultralytics
+       reads the same number back out of overrides. Rejecting therefore means overriding: an
+       out-of-range declaration is replaced with ultralytics' own default and said out loud.
+
+    Returns None for "no opinion" (nothing declared, or a rectangular [h, w] pair), and predict()
+    then omits the argument so ultralytics behaves exactly as it did before this function existed.
+    """
+    args = getattr(getattr(model, "model", None), "args", None)
+    raw = None
+    if args is not None:
+        raw = args.get("imgsz") if isinstance(args, dict) else getattr(args, "imgsz", None)
+    if raw is None:
+        return None  # nothing declared; a checkpoint need not carry training args
+    # Rectangular runs store [h, w]. Collapsing that to its long side would turn rectangular
+    # inference into square inference -- a real geometry change -- so hand it back to ultralytics
+    # untouched instead. No checkpoint here is rect-trained; this is here so a future one is safe.
+    if isinstance(raw, (list, tuple)):
+        return None
+    # bool is an int subclass and would sail through the range check as 1 -- reject it explicitly.
+    if not isinstance(raw, int) or isinstance(raw, bool) or not (_MIN_IMGSZ <= raw <= _MAX_IMGSZ):
+        from ultralytics.utils import DEFAULT_CFG  # read, not hardcoded, so it tracks ultralytics
+        fallback = int(DEFAULT_CFG.imgsz)
+        print(f"[detector] checkpoint declares imgsz={raw!r}, outside {_MIN_IMGSZ}-{_MAX_IMGSZ}; "
+              f"overriding with ultralytics' default {fallback}", flush=True)
+        return fallback
+    return raw
+
+
 # ─────────────────────────────────────────────
 #  YOLOv11 Detector  (local .pt weights)
 # ─────────────────────────────────────────────
@@ -344,6 +395,7 @@ class YOLOv11Detector(BaseDetector):
         iou:    float = 0.45,
         device: str   = "cpu",
         class_conf: dict[str, float] | None = None,
+        imgsz: int | None = None,
     ):
         from ultralytics import YOLO  # lazy import (หลีกเลี่ยงหน้าจอช้า)
         ensure_safe_load_or_raise()  # fail closed if weights_only loading isn't actually active
@@ -353,6 +405,10 @@ class YOLOv11Detector(BaseDetector):
         self.device      = device
         self.class_conf  = dict(class_conf or {})
         self.class_names: list[str] = list(self.model.names.values())
+        # Last parameter, and defaulted, so every existing call site keeps working. Note this does
+        # not normally change the resolution -- see _effective_imgsz -- it makes it knowable. Pass an
+        # explicit value only to deliberately run a model off-distribution.
+        self.imgsz       = imgsz if imgsz is not None else _effective_imgsz(self.model)
 
     # ── Inference ─────────────────────────────
     def predict(self, image_bgr: np.ndarray) -> list[Detection]:
@@ -363,12 +419,18 @@ class YOLOv11Detector(BaseDetector):
         # default (agnostic_nms=False), so the extra low-confidence boxes this admits for one class
         # cannot suppress another class's box.
         floor = min([self.conf, *self.class_conf.values()])
+        # Passed explicitly whenever we have a value, because a kwarg is the only thing that beats
+        # model.overrides -- omitting it lets ultralytics read the checkpoint's own number back,
+        # including one _effective_imgsz just rejected. Omitted when None, both because ultralytics
+        # rejects imgsz=None and because None means "no opinion, behave as before".
+        size = {"imgsz": self.imgsz} if self.imgsz else {}
         results = self.model.predict(
             image_bgr,
             conf=floor,
             iou=self.iou,
             device=self.device,
             verbose=False,
+            **size,
         )
         dets: list[Detection] = []
         for r in results:

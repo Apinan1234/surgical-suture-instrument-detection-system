@@ -719,7 +719,14 @@ async function refreshModelOptions() {
         const opt = document.createElement("option");
         opt.value = m.path;
         const cls = m.classes == null ? "reading..." : `${m.classes} classes`;
-        opt.textContent = `${m.path} — ${cls} · ${m.size_mb} MB`;
+        // Resolution sits beside the class count because it is the same kind of fact: something the
+        // checkpoint decided, that every run with it will follow, and that is otherwise invisible -
+        // a model served at the wrong imgsz returns fewer small objects rather than an error. Left
+        // out entirely when unknown, so an unreadable .pt never reads "undefined px".
+        const bits = [cls];
+        if (m.imgsz) bits.push(`${m.imgsz} px`);
+        bits.push(`${m.size_mb} MB`);
+        opt.textContent = `${m.path} — ${bits.join(" · ")}`;
         group.appendChild(opt);
       });
       select.appendChild(group);
@@ -812,7 +819,10 @@ async function loadModelFrom(panel) {
   const data = await res.json();
   const label = backend === "roboflow" ? body.workflow_id : data.model_path;
   const task = data.task ? data.task + ", " : "";
-  ModelState.setStatus("ready", `✓ Ready — ${label} (${task}${describeClasses(data.class_names || [])})`);
+  // Roboflow runs server-side and reports no resolution, so this is absent for that backend rather
+  // than guessed at.
+  const size = data.imgsz ? ` @ ${data.imgsz} px` : "";
+  ModelState.setStatus("ready", `✓ Ready — ${label} (${task}${describeClasses(data.class_names || [])})${size}`);
 }
 
 document.getElementById("model-load-btn").addEventListener("click", () => loadModelFrom("detect"));

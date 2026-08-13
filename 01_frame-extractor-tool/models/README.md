@@ -39,11 +39,35 @@ The gain sorts by object size: the two smallest classes (needle at a median 12.4
 wound at 13.9 px) gain the most, everything above 27 px moves by under 0.02. Serving it at 640 gives
 back exactly what it was trained to fix.
 
-**The webapp cannot do that yet.** `YOLOv11Detector.predict()` calls `model.predict()` without an
-`imgsz` argument (`detector.py:366`), so ultralytics falls back to its default of 640, and the word
-`imgsz` does not appear anywhere in `webapp/`. Selecting this checkpoint in the model picker today
-would run it at 640 and hand back the small-object gain. Wiring an `imgsz` through the detector and
-the detect/assist request bodies is a prerequisite for serving it, not a nice-to-have.
+**The webapp already served it at 960 — an earlier claim to the contrary was wrong.** Commit
+`d1f65ac` and the note in `05_reports/model-results-2026-08-13.md` said the app had no way to pass
+`imgsz` and so would serve this checkpoint at 640. That was reasoned from `predict()` taking no
+`imgsz` argument; it was never measured, and it is false. ultralytics applies a checkpoint's own
+`imgsz` unasked: `YOLO._load` sets `self.overrides = self.model.args` (imgsz included) and
+`Model.predict` merges `{**self.overrides, **custom, **kwargs}`.
+
+Measured on ultralytics 8.4.114 (the webapp venv), 30 real frames from `webapp/data/`, conf 0.25,
+this checkpoint three ways:
+
+| call | resolution used | total boxes | needle |
+|---|---|---|---|
+| `predict(img, …)` — the old code | **960** | 267 | 6 |
+| `predict(img, …, imgsz=960)` | 960 | 267 | 6 |
+| `predict(img, …, imgsz=640)` | 640 | 255 | 5 |
+
+The first two are identical box for box. **No small-object gain was ever being given back.**
+
+What was actually missing, and what `_effective_imgsz()` in `detector.py` now adds, is that the
+resolution was invisible: nothing in the picker, in `POST /api/models/load` or in a Detect job log
+said which one a run used, and at the wrong one a model returns fewer small objects rather than an
+error. The picker now reads `… · 9 classes · 960 px · 5.5 MB`, and `predict()` passes the value
+explicitly so what is reported is guaranteed to be what runs. The one behaviour change is a bound
+that binds: a checkpoint declaring an absurd `imgsz` (an uploaded `.pt` can) is overridden with
+ultralytics' default and logged, where before it would simply have been obeyed.
+
+Resolution is deliberately **not** an app-wide setting. The 5-class checkpoint below is hurt by
+anything other than 640, so a single shared knob would be wrong for one model or the other. Passing
+`imgsz=` to the constructor overrides it, for deliberately running a model off-distribution.
 
 `needle` at 0.360 mAP50 is still the weakest class by a wide margin. It is better, not solved.
 

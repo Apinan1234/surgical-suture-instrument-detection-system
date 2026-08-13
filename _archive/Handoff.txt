@@ -1,3 +1,56 @@
+═══════════════════════════════════════════════════════════════════════════════
+2026-08-14 — pagefile ปิดจ็อบ + แก้ข้อสมมติเรื่อง imgsz ที่ผิด
+═══════════════════════════════════════════════════════════════════════════════
+
+** อ่านข้อนี้ก่อน: ข้อความที่เคยเขียนไว้ว่า "เว็บแอปเสิร์ฟโมเดล 960 ที่ 640 ไม่ได้" ผิด **
+
+commit d1f65ac, models/README.md ฉบับเดิม, 05_reports/model-results-2026-08-13.md บรรทัด 132
+และ memory ล้วนเคยบอกว่า YOLOv11Detector.predict() ไม่ส่ง imgsz ทำให้ ultralytics ถอยไปใช้ 640
+และเสียผลของคลาสเล็กไป — อนุมานจากการอ่านโค้ด ไม่เคยวัด และไม่จริง
+
+ultralytics ใช้ imgsz ของ checkpoint เองอยู่แล้ว: YOLO._load ตั้ง self.overrides = self.model.args
+(มี imgsz ติดมา) แล้ว Model.predict merge {**self.overrides, **custom, **kwargs}
+วัดบน ultralytics 8.4.114 (venv ของเว็บแอป) เฟรมจริง 30 เฟรม conf 0.25:
+    predict(img, ...)              -> รันที่ 960, 267 กล่อง, needle 6
+    predict(img, ..., imgsz=960)   -> รันที่ 960, 267 กล่อง, needle 6   (เท่ากันทุกกล่อง)
+    predict(img, ..., imgsz=640)   -> รันที่ 640, 255 กล่อง, needle 5
+commit d1f65ac ที่ push ไปแล้วยังมีข้อความผิดอยู่ใน history — ตั้งใจไม่ rewrite ไฟล์ในโปรเจกต์แก้ครบแล้ว
+
+สิ่งที่ขาดจริงคือความละเอียด "มองไม่เห็น" ไม่ใช่ผิด ตอนนี้ _effective_imgsz() ใน detector.py
+รายงานค่าออกมา (picker, POST /api/models/load, log ของ detect job) และ predict() ส่งค่านั้นอย่าง
+ชัดเจน สิ่งที่เปลี่ยนพฤติกรรมจริงมีอย่างเดียว: ค่านอกช่วง 32-1920 ถูกทับด้วย default ของ ultralytics
+(เดิมการ "ไม่ส่ง kwarg" ไม่ได้ปฏิเสธอะไรเลย เพราะ ultralytics อ่านค่ากลับจาก overrides — พิสูจน์แล้ว
+checkpoint ที่ประกาศ imgsz=8192 เคยรันที่ 8192 จริง)
+
+บทเรียนที่ควรเก็บ: ข้ออ้างว่า library ถอยไปใช้ค่า default อะไร ตรวจได้ด้วยคำสั่งเดียว — ตรวจ
+
+--- pagefile: จบแล้ว เครื่องไม่ต้องทำอะไรเพิ่ม ---
+
+fixed 16384/16384 MB บน C: (AutomaticManagedPagefile=False), commit limit 39.71 GB (เดิม 27.0)
+C: เหลือ 70.9 GB — ที่หายไป 12.7 GB คือ pagefile ที่โตขึ้น 12.75 GB พอดี ไม่ใช่รั่ว
+ข้อ (2) ของ handoff 2026-08-12 ข้างล่าง ("commit limit 28.7 GB ... ห้ามไปแก้ pagefile") ตกยุคแล้ว
+
+วัด dataloader จริง 4 workers (ssid9, imgsz 960, batch 8, ไม่มีโมเดล/optimizer/ไม่เขียน runs/):
+spawn ผ่าน 160 ภาพ 13.5 วิ peak commit 16.59 GB เหลือว่าง 23.12 GB — worker กินเอง 6.67 GB
+ซึ่งอธิบายว่าทำไมเพดาน 27 GB เดิมถึงพังเป็น WinError 1455
+
+** workers=0 ยังเป็นค่า default ทั้ง train_ssid9_v2.py และ train_ssid9_960.py ตามเดิม **
+พิสูจน์แล้วแค่ว่า worker spawn ได้ ยังไม่ได้พิสูจน์ว่ารอด 150 epoch คู่กับ CUDA context บนการ์ด 4 GB
+ถ้าจะเปิด ให้เปิดในรอบที่นั่งเฝ้า ไม่ใช่รอบที่เดินหนี
+
+--- สถานะ ---
+
+branch report-2026-08-13, main ยังไม่ merge, ยังไม่ push รอบนี้
+state.json = 1ca42d3a2cfb (2,726 เฟรม / 21,127 กล่อง) ตรวจแล้วไม่เปลี่ยน — detect job ทดสอบเขียนจริง
+แล้วกู้กลับ byte-identical
+02_web-app/10k-websites-skill.zip ยัง untracked ตั้งใจไม่เอาเข้า commit
+ยังค้าง: ตั้งโมเดล 9 คลาสเป็น default ของ picker (app.js:733), 15 จาก 24 screenshot,
+session อยู่ใน RAM, HTTPS + SESSION_COOKIE_SECURE, domain/hosting, คู่มือผู้ใช้
+
+═══════════════════════════════════════════════════════════════════════════════
+2026-08-12 (เก่ากว่า — บางข้อตกยุคแล้ว ดูหมายเหตุ pagefile ข้างบน)
+═══════════════════════════════════════════════════════════════════════════════
+
 Handoff ล่าสุดอยู่ที่:
 
 C:\Users\USER\AppData\Local\Temp\handoff-videoframeextractor-2026-08-12c.md
