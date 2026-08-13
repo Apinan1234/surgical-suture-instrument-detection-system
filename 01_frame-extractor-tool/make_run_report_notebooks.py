@@ -46,6 +46,16 @@ RUN_TITLES = {
     "aug": ("Run B - augmentation ON",
             "Ultralytics' default augmentation pipeline (mosaic, HSV, scale, translate, horizontal "
             "flip). Everything else is identical to Run A, including the seed."),
+    "aug150": ("Run C - 640 px, trained to convergence",
+               "Run B's settings carried to 150 epochs instead of 50, to find out whether that arm "
+               "was simply still climbing when it ran out. It was: the best epoch moved from 50 to "
+               "120. This is the 640 px ceiling."),
+    "aug960": ("Run D - 960 px",
+               "Run C with one thing changed: imgsz 640 -> 960. Same weights, data, seed, epochs "
+               "and augmentation, and the batch stayed at 8. It exists to test whether `needle` was "
+               "failing because its boxes are too small to survive the network's stride -- the "
+               "label files put its median short side at 12.4 px at 640, with 80.9% of its boxes "
+               "below COCO's small-object cut-off."),
 }
 
 

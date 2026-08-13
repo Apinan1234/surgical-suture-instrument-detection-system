@@ -14,3 +14,17 @@ models/*
 !models/ssid_v6i_20260808_map50-557.pt
 !models/ssid_v6i_50ep_20260810_map50-608.pt
 !models/ssid9_960px_150ep_20260813_map50-716.pt
+# results_all*/ is built by re-running report_training_results.py over all four runs at once, so it
+# re-renders each run's own figures beside the comparison. Those per-run files are byte-duplicates of
+# what results/, results_150/ and results_960/ already carry -- ~30 MB of them. Only the
+# comparison-level outputs are new here, so only those are kept.
+results_all/*
+results_all_test/*
+!results_all/benchmark_comparison.*
+!results_all/comparison_*
+!results_all/class_distribution.*
+!results_all/hyperparameter_summary.*
+!results_all_test/benchmark_comparison.*
+!results_all_test/comparison_*
+!results_all_test/class_distribution.*
+!results_all_test/hyperparameter_summary.*
