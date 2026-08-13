@@ -25,12 +25,14 @@ was the constraint. If it does not, stop buying GPU hours and go audit needle's 
 Run it with the GPU venv:
 
     D:\ml\ssid-gpu\Scripts\python.exe train_ssid9_960.py
+    D:\ml\ssid-gpu\Scripts\python.exe train_ssid9_960.py --resume   # continue an interrupted run
 
 Close Chrome first. This machine has a 28.7 GB commit limit and a pagefile Windows will not grow;
 a dataloader worker that cannot be spawned surfaces as WinError 1455, which is why workers=0 here.
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -61,6 +63,11 @@ PARAMS = dict(
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--resume", action="store_true",
+                    help="continue from the run's last.pt instead of starting over")
+    args = ap.parse_args()
+
     if not DATA.exists():
         sys.exit(f"[error] dataset yaml not found: {DATA}")
 
@@ -74,10 +81,19 @@ def main() -> None:
 
     from ultralytics import YOLO
 
-    print(f"[train] imgsz={PARAMS['imgsz']} batch={PARAMS['batch']} epochs={PARAMS['epochs']} "
-          f"-> {PROJECT}")
-    model = YOLO("yolo11n.pt")
-    model.train(**PARAMS)
+    if args.resume:
+        # ultralytics reads epochs/imgsz/batch back out of the checkpoint's own args, so passing
+        # PARAMS again here would be ignored at best and conflicting at worst. resume=True is the
+        # whole instruction.
+        last = PROJECT / "train" / "weights" / "last.pt"
+        if not last.exists():
+            sys.exit(f"[error] nothing to resume: {last} does not exist")
+        print(f"[train] resuming from {last}")
+        YOLO(str(last)).train(resume=True)
+    else:
+        print(f"[train] imgsz={PARAMS['imgsz']} batch={PARAMS['batch']} epochs={PARAMS['epochs']} "
+              f"-> {PROJECT}")
+        YOLO("yolo11n.pt").train(**PARAMS)
 
     # report_training_results.py refuses to run validation without a data.yaml at the RUN root, and
     # returns None quietly when it is missing -- which is how the 150-epoch run ended up with only
