@@ -27,8 +27,11 @@ Run it with the GPU venv:
     D:\ml\ssid-gpu\Scripts\python.exe train_ssid9_960.py
     D:\ml\ssid-gpu\Scripts\python.exe train_ssid9_960.py --resume   # continue an interrupted run
 
-Close Chrome first. This machine has a 28.7 GB commit limit and a pagefile Windows will not grow;
-a dataloader worker that cannot be spawned surfaces as WinError 1455, which is why workers=0 here.
+Close Chrome first. workers=0 here is a leftover from when the commit limit was 27.0 GB and a
+dataloader worker that could not be spawned surfaced as WinError 1455. Since 2026-08-14 the pagefile
+is a fixed 16 GB and the limit is 39.7 GB; a 4-worker dataloader over this dataset was measured
+spawning fine at a 16.6 GB peak. See train_ssid9_v2.py's docstring before changing it -- this script
+reproduces a published checkpoint, so leave it at 0 unless you are deliberately re-measuring.
 """
 from __future__ import annotations
 

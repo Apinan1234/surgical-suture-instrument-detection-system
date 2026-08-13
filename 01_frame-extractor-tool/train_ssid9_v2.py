@@ -65,9 +65,18 @@ Usage
     D:\ml\ssid-gpu\Scripts\python.exe train_ssid9_v2.py --model yolo11s.pt --name s960
     D:\ml\ssid-gpu\Scripts\python.exe train_ssid9_v2.py --name s960 --resume
 
-Close Chrome first: this machine has a 28.7 GB commit limit and a pagefile Windows will not grow, so
-a dataloader worker that cannot spawn surfaces as WinError 1455. That is why workers=0 is fixed here
-rather than exposed as a flag.
+Close Chrome first. The commit limit used to be the binding constraint here: with a 3.3 GB
+auto-managed pagefile it sat at 27.0 GB, and a dataloader worker that could not commit its share
+surfaced as WinError 1455 -- which is why workers=0 is fixed here rather than exposed as a flag.
+
+That premise expired on 2026-08-14. The pagefile is now a fixed 16 GB (initial = maximum, so Windows
+neither grows nor shrinks it) and the commit limit is 39.7 GB. Measured after the change: a real
+4-worker dataloader over this dataset at imgsz 960, batch 8, spawns and delivers batches with a peak
+commit of 16.6 GB -- the workers themselves cost 6.7 GB, and 23.1 GB was still free.
+
+workers=0 is therefore a conservative leftover, not a live constraint. What is proven is that the
+workers spawn; what is NOT proven is that they survive 150 epochs beside a CUDA context on a 4 GB
+card. Raise it on a run you are watching, not on the run you walk away from.
 """
 from __future__ import annotations
 
