@@ -19,7 +19,8 @@ Detect / Label Assist model pickers with no further wiring.
 ### `ssid9_960px_150ep_20260813_map50-716.pt`  (current best)
 
 The first 9-class baseline, and the run that settled what was wrong with `needle`. Copy of
-`D:\mluns\ssid9_aug_960	rain\weightsest.pt`, which is **epoch 86** — training ran the full
+`D:\ml
+uns\ssid9_aug_960	rain\weightsest.pt`, which is **epoch 86** — training ran the full
 150 epochs and never beat it.
 
 | | |
@@ -38,6 +39,12 @@ The gain sorts by object size: the two smallest classes (needle at a median 12.4
 wound at 13.9 px) gain the most, everything above 27 px moves by under 0.02. Serving it at 640 gives
 back exactly what it was trained to fix.
 
+**The webapp cannot do that yet.** `YOLOv11Detector.predict()` calls `model.predict()` without an
+`imgsz` argument (`detector.py:366`), so ultralytics falls back to its default of 640, and the word
+`imgsz` does not appear anywhere in `webapp/`. Selecting this checkpoint in the model picker today
+would run it at 640 and hand back the small-object gain. Wiring an `imgsz` through the detector and
+the detect/assist request bodies is a prerequisite for serving it, not a nice-to-have.
+
 `needle` at 0.360 mAP50 is still the weakest class by a wide margin. It is better, not solved.
 
 **This checkpoint's class order is not the app's.** It lists `Stitch Scissors` first; `CLASS_NAMES`
@@ -45,7 +52,8 @@ in `detector.py` starts at `finger` because ids 0-4 are frozen by the boxes alre
 `_to_records()` in `server.py` translates by name on the way in — never store a class id this model
 emits without that step.
 
-Full curves, confusion matrix and `results.csv` stay in `D:\mluns\ssid9_aug_960	rain\` — on
+Full curves, confusion matrix and `results.csv` stay in `D:\ml
+uns\ssid9_aug_960	rain\` — on
 this machine only. The report figures and tables are committed, at `../results_960/` (val) and
 `../results_960_test/` (test).
 
