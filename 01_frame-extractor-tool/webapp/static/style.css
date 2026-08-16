@@ -859,33 +859,3 @@ body.annotate-fill .annotate-props {
   margin-right: 8px;
 }
 
-/* ────────────────────────────── Login gate (S-1) ──────────────────────────────
- * A full-screen cover over the app, not a replacement for it: the app DOM and all in-memory
- * annotation state stay mounted underneath, so a session that expires mid-annotation costs nothing
- * but a re-login. .hidden (display:none !important) wins over the flex here, which is how it stays
- * out of the way until a 401 shows it. */
-.login-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(3px);
-}
-.login-card {
-  width: 100%;
-  max-width: 360px;
-}
-.login-sub {
-  color: var(--muted);
-  margin: 0 0 16px;
-  font-size: 0.9em;
-}
-.login-error {
-  color: var(--highlight);
-  margin-top: 10px;
-  font-size: 0.9em;
-}

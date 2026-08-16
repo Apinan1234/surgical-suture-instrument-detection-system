@@ -13,17 +13,15 @@ From the repo root (`VideoFrameExtractor/`):
   --host 127.0.0.1 --port 8010 --app-dir 01_frame-extractor-tool
 ```
 
-Then open http://127.0.0.1:8010 and log in.
+Then open http://127.0.0.1:8010 — no login, the app loads straight in.
 
-**`APP_PASSWORD` is required — the server refuses to start without it.** Set it in
-`01_frame-extractor-tool/webapp/.env` (gitignored). Copy `.env.example` to `.env` and fill it in. This
-machine's `.env` already holds a local development password; pick a new one before the app is
-reachable by anyone but you. Never write the real value into a tracked file — `.env` is gitignored
-precisely so it stays out of the history.
-
-Why it is mandatory: every API route is otherwise open, and `POST /api/models` + `POST /api/models/load`
-load a `.pt`, which is a pickle — an unauthenticated caller reaching them is remote code execution.
-Auth is that route's real mitigation (see `detector.py` for the load-time hardening that backs it up).
+**No auth gate.** Every route is open to anything that can reach the port. That's fine on
+`127.0.0.1`/LAN; once this is reachable from the open internet (see "Deploying it publicly" below),
+what stands in for auth is: `ULTRALYTICS_SAFE_LOAD` (restricted/weights_only model loading — see
+`detector.py`, blocks arbitrary code execution from a malicious uploaded `.pt`) plus the abuse
+guardrails in `.env.example` (disk-space floor, per-IP rate limits on expensive routes, a request-body
+size cap). There is deliberately no per-user isolation: anyone who reaches the app can see, edit, or
+delete anyone else's uploaded videos/frames/annotations — an accepted tradeoff, not an oversight.
 
 ## Dependencies
 
@@ -48,10 +46,10 @@ Set in `webapp/.env` (see `.env.example` for the full annotated list). The impor
 
 | Var | Default | Notes |
 |---|---|---|
-| `APP_PASSWORD` | — | **Required.** Single shared login password. No default; server won't start without it. |
-| `SESSION_COOKIE_SECURE` | off | Set `true` **only** when served over HTTPS, so the session cookie is flagged Secure. Leave off for plain-HTTP localhost/LAN or login silently won't stick. |
-| `SESSION_TTL_HOURS` | 10 | How long a login lasts. |
-| `ULTRALYTICS_SAFE_LOAD` | `true` | Restricted (weights_only) model loading, so a malicious `.pt` is rejected instead of executed. Set `0` only if you fully trust every model file. |
+| `ULTRALYTICS_SAFE_LOAD` | `true` | Restricted (weights_only) model loading, so a malicious `.pt` is rejected instead of executed. This is the real defence on the model-upload/model-load routes now that there's no login gate — do not turn it off on a public deployment. |
+| `MIN_FREE_DISK_MB` | 2048 | Write-heavy routes (upload, extract) refuse new work with a `507` below this much free disk. |
+| `RATE_LIMIT_EXPENSIVE_MAX` / `RATE_LIMIT_EXPENSIVE_WINDOW_SEC` | 20 / 300 | Per-IP cap on assist/ocr/detect/extract/export requests. |
+| `MAX_REQUEST_BODY_MB` | 64 | Ceiling on non-multipart (JSON) request bodies. |
 | `DATA_DIR` | `webapp/data` | Where the workspace lives (see below). |
 | `ROBOFLOW_API_KEY` | — | Only used by `../train_roboflow_yolo.py`, not the server. |
 
@@ -63,42 +61,47 @@ Set in `webapp/.env` (see `.env.example` for the full annotated list). The impor
   backup** (short window, same disk). Before any deploy, migration, or risky change, use the Export tab
   to download a dataset zip, or copy `state.json` + `data/` somewhere safe.
 
-## Behind a reverse proxy (if you must expose it)
+## Deploying it publicly
 
-Terminate TLS at the proxy (nginx/Caddy) and run uvicorn bound to loopback with proxy headers trusted,
-so client IPs (used by login rate-limiting) and the HTTPS scheme are read correctly:
+The app now runs with no login, by decision — it's meant to be reachable like any other open web
+tool. **`deploy/DEPLOY.md` is the ordered command list** (provision → copy code → app setup → systemd
+→ Caddy → verify), with ready-to-copy `deploy/frame-extractor.service` and `deploy/Caddyfile`. The
+reasoning behind the choices those files encode:
 
-```
-uvicorn webapp.server:app --host 127.0.0.1 --port 8010 --app-dir 01_frame-extractor-tool \
-  --proxy-headers --forwarded-allow-ips="127.0.0.1"
-```
+- **Single uvicorn worker, always.** State (`_state` in `server.py`) is a plain in-process dict,
+  persisted to `state.json` on mutation. A second worker process gets its own copy and the two
+  clobber each other's writes to `state.json` — never run this with `--workers > 1` or behind a
+  multi-process manager. A process restart also drops any job that was mid-run (marked `"error":
+  "Interrupted by a server restart"` on the next load), which is expected, not a bug to route around.
+- **VPS sizing**: a small CPU box is enough — CPU inference already works (`device=cpu` default), no
+  GPU needed. The venvs alone are GB-scale once torch/opencv/ultralytics are installed, and `data/`
+  grows from public uploads with no cap other than `MIN_FREE_DISK_MB` — size disk with headroom.
+  Plain Ubuntu LTS + `apt`, no Docker — a venv, a systemd unit, and a reverse proxy are enough for
+  this app's shape.
+- **`--proxy-headers --forwarded-allow-ips=<proxy>`** (in the shipped unit file) matters even with no
+  login: `_client_ip()` in `server.py` is what the per-IP rate limiter keys on, and without this flag
+  every request looks like it came from the proxy's own address, making the limiter useless. Never
+  set `--forwarded-allow-ips` to `*` — that lets a client spoof its own IP past the limiter.
+- **Caddy** over nginx+certbot: automatic Let's-Encrypt HTTPS from a one-line config, no manual cert
+  renewal to maintain. Needs a real domain (or subdomain) pointed at the server's IP first; Caddy
+  can't issue a cert for a bare IP.
+- **Firewall**: only 22/80/443 open. uvicorn stays on `127.0.0.1` — never bind it to a public
+  interface directly, even behind the proxy.
+- **Code transfer**: this repo isn't pushed to `origin/main` (and the webapp changes are typically
+  uncommitted locally) — a `git clone`/`pull`-based deploy won't have the latest work. Use `rsync -a`
+  (or `scp -p`) to copy the app directory directly; `-a`/`-p` matters because model file `mtime`
+  drives the default-model picker (`_scan_models()` in `server.py` / `app.js`'s first-visit logic) —
+  a plain copy without it re-stamps every `.pt` to the copy time and silently breaks that ordering.
+- **Data**: don't copy the local `webapp/data/` (videos/frames/exports — this machine's real
+  annotated dataset) to a public instance. Start a public deployment with an empty `data/` (created
+  automatically on first run) and only the trained `.pt` files under `models/`, so inference and the
+  default-model picker work from the start.
 
-Set `SESSION_COOKIE_SECURE=true` once TLS is in front of it. `--forwarded-allow-ips` must name the
-proxy's address, not `*` — trusting `X-Forwarded-For` from anyone lets a client spoof its IP past the
-rate limiter.
+## Hosting: the two apps
 
-## Hosting: the two apps go separately
-
-`02_web-app/` (the React landing page) is static, carries no secrets, and needs no compute — it
-belongs on free static hosting. **This annotation tool stays local or LAN-only**, behind the login,
-for three concrete reasons:
-
-1. With one shared password, everyone who can log in can load a model — i.e. run code on the host.
-   That is fine for a trusted local user, not for the open internet.
-2. It needs torch + opencv + the Tesseract binary: a multi-GB install and a host with real RAM, for
-   CPU inference.
-3. Its entire value is the workspace on this machine (thousands of frames, `state.json`, `models/*.pt`).
-   A public instance would be an empty second copy.
-
-When the landing page has a real URL and the tool has a reachable one, point the landing page at it via
-`02_web-app/.env`'s `VITE_TOOL_URL` (falls back to `http://localhost:8010`).
-
-### Decisions still open (yours to make)
-
-- **Whether to expose the tool publicly at all.** Recommendation: no — keep it local/LAN behind the
-  login. Revisit only with a concrete need and a per-user auth model, not one shared password.
-- **Domain.** Recommendation: a free subdomain from the static host for the landing page; don't buy a
-  domain yet.
-- **If the tool must be public:** cheapest CPU VPS with ≥4 GB RAM, and only after auth is in place.
+`02_web-app/` (the React landing page) is a separate, unrelated static app — it carries no secrets and
+needs no compute, so it belongs on free static hosting, deployed independently of the annotation tool
+above. When both have real URLs, point the landing page at the tool via `02_web-app/.env`'s
+`VITE_TOOL_URL` (falls back to `http://localhost:8010`).
 
 Create any hosting account and enter any credentials yourself — those steps are not automated here.

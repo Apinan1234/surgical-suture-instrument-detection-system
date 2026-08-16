@@ -1,0 +1,15 @@
+[Unit]
+Description=Frame Extractor webapp
+After=network.target
+
+[Service]
+User=deploy
+WorkingDirectory=/opt/frame-extractor
+ExecStart=/opt/frame-extractor/webapp/.venv/bin/python -m uvicorn webapp.server:app \
+  --host 127.0.0.1 --port 8010 --app-dir /opt/frame-extractor \
+  --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -3,25 +3,23 @@ Web version of app.py — Phase 1 (Extract pipeline only).
 FastAPI + in-memory state + threading.Thread jobs + HTTP polling, no DB, no framework frontend.
 """
 
-import hmac
 import io
 import json
 import os
-import secrets
 import shutil
 import sys
 import threading
 import time
 import uuid
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
 import cv2
 import pytesseract
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -41,46 +39,6 @@ from detector import (Detection, BaseDetector, YOLOv11Detector, RoboflowDetector
                       CLASS_COLORS_HEX, app_class_id, ensure_safe_load_or_raise, _effective_imgsz)
 from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
 
-# ── Auth (S-1) configuration ──
-# Required, and fail-closed: refuse to start with no password rather than come up wide open. A model
-# file is executable content here (see detector.py), so an unauthenticated caller reaching
-# /api/models + /api/models/load is remote code execution - auth is that route's real mitigation.
-# .env is loaded above, before this runs, so a value there is honoured.
-# REQUIRE_AUTH exists so the app can be handed to a reviewer without a password. It defaults to ON
-# and has to be turned off deliberately, because with it off EVERY route is open to anything that can
-# reach the port - including /api/models + /api/models/load, which load a pickle and can therefore
-# execute code. Only ever run it off on an interface nobody else can reach.
-REQUIRE_AUTH = (os.environ.get("REQUIRE_AUTH", "true") or "true").strip().lower() not in {
-    "0", "false", "no", "off", "n", "f"
-}
-APP_PASSWORD = os.environ.get("APP_PASSWORD")
-if REQUIRE_AUTH and not APP_PASSWORD:
-    raise RuntimeError(
-        "APP_PASSWORD environment variable is required (see webapp/.env.example). The app refuses to "
-        "start without one because every API route - including model upload/load, which can execute "
-        "code - would otherwise be open to anyone who can reach the port. Set REQUIRE_AUTH=false to "
-        "run without a password anyway."
-    )
-if not REQUIRE_AUTH:
-    print("=" * 78, flush=True)
-    print("  WARNING: REQUIRE_AUTH=false - every API route is OPEN, no password required.", flush=True)
-    print("  /api/models/load loads a pickle, so anyone who can reach this port can run code.", flush=True)
-    print("  Bind to 127.0.0.1 only, and set REQUIRE_AUTH back to true when you are done.", flush=True)
-    print("=" * 78, flush=True)
-try:
-    # `or "10"` handles a blank SESSION_TTL_HOURS= (a plausible edit, since every other new tunable in
-    # .env.example is left blank); the try/except also catches a non-numeric value. Either falls back
-    # to the documented default rather than crashing startup with an opaque int() traceback.
-    _session_ttl_hours = int(os.environ.get("SESSION_TTL_HOURS") or "10")
-except ValueError:
-    _session_ttl_hours = 10
-SESSION_TTL = timedelta(hours=_session_ttl_hours)
-RATE_LIMIT_WINDOW_SEC = 5 * 60
-RATE_LIMIT_MAX_FAILURES = 5
-# Off by default so localhost/plain-HTTP dev keeps working; set true once the app is served over
-# HTTPS (behind a TLS-terminating proxy) so the session cookie is never sent in clear text.
-SESSION_COOKIE_SECURE = (os.environ.get("SESSION_COOKIE_SECURE", "") or "").strip().lower() in {"1", "true", "yes", "on"}
-
 DATA_DIR = Path(os.environ.get("DATA_DIR", WEBAPP_DIR / "data")).resolve()
 MAX_UPLOAD_SIZE_MB = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "8192"))
 MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
@@ -98,6 +56,16 @@ MAX_BULK_REVIEW_FRAMES = int(os.environ.get("MAX_BULK_REVIEW_FRAMES", "20000"))
 # Starlette caps a multipart body at 1000 files and FastAPI never raises that cap, so a folder of
 # extracted frames - this workspace alone is 2,726 - was refused before the handler even ran.
 MAX_UPLOAD_FILES = int(os.environ.get("MAX_UPLOAD_FILES", "20000"))
+# Below this many free bytes on DATA_DIR's filesystem, write-heavy routes refuse new work with a
+# clear 507 instead of failing mid-write (a truncated video, a half-written state.json snapshot).
+MIN_FREE_DISK_MB = int(os.environ.get("MIN_FREE_DISK_MB", "2048"))
+# Per-IP throttle for routes that run CPU inference/OCR synchronously in the request handler and
+# therefore aren't covered by MAX_CONCURRENT_JOBS (which only gates the background-job routes).
+RATE_LIMIT_EXPENSIVE_MAX = int(os.environ.get("RATE_LIMIT_EXPENSIVE_MAX", "20"))
+RATE_LIMIT_EXPENSIVE_WINDOW_SEC = int(os.environ.get("RATE_LIMIT_EXPENSIVE_WINDOW_SEC", "300"))
+# Ceiling on JSON request bodies, checked from Content-Length before Starlette reads the body.
+# Multipart uploads (videos/frames/models) have their own, larger, already-enforced limits above.
+MAX_REQUEST_BODY_MB = int(os.environ.get("MAX_REQUEST_BODY_MB", "64"))
 
 VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
@@ -205,60 +173,71 @@ load_state()
 app = FastAPI()
 
 
-# ────────────────────────────── S-1 Auth ──────────────────────────────
-#
-# Token -> expiry. In memory only, and deliberately NOT persisted into state.json: that file is the
-# user's dataset, not a session store, and a process restart logging everyone out is the correct,
-# safe behaviour. Both dicts are mutated from Starlette's threadpool, so a lock guards them, the same
-# lesson _state_lock encodes for the workspace state.
-_sessions: dict[str, datetime] = {}
-_login_failures: dict[str, list[float]] = {}
-_auth_lock = threading.Lock()
-
-# Reachable without a session. Everything else under /api/ requires one. The static mount (the login
-# page, app.js, style.css - none of them secret) is not under /api/ and stays public so the login
-# form can render before a session exists.
-_AUTH_ALLOWLIST = frozenset({"/api/health", "/api/login", "/api/logout"})
-
-
 def _client_ip(request: Request) -> str:
-    # This is the peer address as the ASGI server reports it, which is the login rate-limiter's bucket
-    # key. Behind a reverse proxy that is the PROXY's address unless uvicorn is run with
-    # --proxy-headers --forwarded-allow-ips=<proxy> (documented in README.md), which rewrites it to
-    # the real client from X-Forwarded-For. Parsing XFF here in app code instead would be worse: it is
-    # trivially spoofable unless the trusted-hop count is configured, which is exactly what
-    # --forwarded-allow-ips exists to handle at the server layer.
+    # This is the peer address as the ASGI server reports it, which is the rate-limiter's bucket key
+    # (see the expensive-route limiter below). Behind a reverse proxy that is the PROXY's address
+    # unless uvicorn is run with --proxy-headers --forwarded-allow-ips=<proxy> (documented in
+    # README.md), which rewrites it to the real client from X-Forwarded-For. Parsing XFF here in app
+    # code instead would be worse: it is trivially spoofable unless the trusted-hop count is
+    # configured, which is exactly what --forwarded-allow-ips exists to handle at the server layer.
     return request.client.host if request.client else "unknown"
 
 
-def _session_valid(token: str | None) -> bool:
-    """True iff the token names a live, unexpired session. Prunes it if expired."""
-    if not token:
-        return False
-    with _auth_lock:
-        expiry = _sessions.get(token)
-        if expiry is None:
-            return False
-        if expiry < datetime.now():
-            _sessions.pop(token, None)  # lazy eviction of an expired token on use
-            return False
-        return True
+# ────────────────────────────── Abuse mitigation ──────────────────────────────
+# No login gate (removed — the tool is now open to the public), so these two middlewares are what
+# stand between an anonymous visitor and unbounded CPU/bandwidth use. Multipart upload routes
+# (/api/videos, /api/frames/upload, /api/models) already stream-check their own, larger limits
+# (MAX_UPLOAD_SIZE_MB etc., enforced where the body is actually read) and are exempted here.
+
+_EXPENSIVE_PATH_PREFIXES = ("/api/detect", "/api/extract", "/api/export", "/api/ocr")
+_EXPENSIVE_PATH_SUFFIXES = ("/assist", "/ocr")
+
+_rate_limit_hits: dict[str, list[float]] = {}
+_rate_limit_lock = threading.Lock()
 
 
-class LoginBody(BaseModel):
-    password: str
+def _is_expensive_path(path: str) -> bool:
+    return path.startswith(_EXPENSIVE_PATH_PREFIXES) or path.endswith(_EXPENSIVE_PATH_SUFFIXES)
 
 
-# Registered BEFORE security_headers below on purpose. Starlette applies the last-registered
-# middleware outermost, so registering auth first leaves security_headers outermost - which means its
-# headers are present even on the 401s this gate returns. The gate cannot raise HTTPException (that is
-# handled inside the router, which is inner to middleware); it returns a Response directly.
 @app.middleware("http")
-async def auth_gate(request: Request, call_next):
+async def expensive_route_rate_limit(request: Request, call_next):
     path = request.url.path
-    if REQUIRE_AUTH and path.startswith("/api/") and path not in _AUTH_ALLOWLIST:
-        if not _session_valid(request.cookies.get("session")):
-            return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+    if request.method in ("POST", "PUT") and _is_expensive_path(path):
+        ip = _client_ip(request)
+        now = time.time()
+        with _rate_limit_lock:
+            # Same stale-entry sweep pattern the old login limiter used: drop IPs with nothing left
+            # in the window so the dict cannot grow without bound over a long-running process.
+            for k in [k for k, v in _rate_limit_hits.items()
+                      if not any(now - t < RATE_LIMIT_EXPENSIVE_WINDOW_SEC for t in v)]:
+                _rate_limit_hits.pop(k, None)
+            recent = [t for t in _rate_limit_hits.get(ip, []) if now - t < RATE_LIMIT_EXPENSIVE_WINDOW_SEC]
+            if len(recent) >= RATE_LIMIT_EXPENSIVE_MAX:
+                return JSONResponse({"detail": "Too many requests, slow down and try again shortly"},
+                                     status_code=429)
+            recent.append(now)
+            _rate_limit_hits[ip] = recent
+    return await call_next(request)
+
+
+_BODY_SIZE_EXEMPT_PATHS = frozenset({"/api/videos", "/api/frames/upload", "/api/models"})
+
+
+@app.middleware("http")
+async def body_size_limit(request: Request, call_next):
+    # Content-Length is checked, not the body itself, so an oversized request is rejected before
+    # Starlette reads any of it into memory.
+    if request.method in ("POST", "PUT") and request.url.path not in _BODY_SIZE_EXEMPT_PATHS:
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                too_big = int(content_length) > MAX_REQUEST_BODY_MB * 1024 * 1024
+            except ValueError:
+                too_big = False
+            if too_big:
+                return JSONResponse({"detail": f"Request body exceeds {MAX_REQUEST_BODY_MB}MB limit"},
+                                     status_code=413)
     return await call_next(request)
 
 
@@ -270,68 +249,14 @@ async def security_headers(request: Request, call_next):
     return response
 
 
-@app.post("/api/login")
-def login(body: LoginBody, request: Request, response: Response):
-    ip = _client_ip(request)
-    now = time.time()
-    token = None
-    # One locked section covers check -> compare -> record, so a burst of concurrent wrong guesses
-    # from the same IP cannot each start from the same `recent` snapshot and lose each other's
-    # appends (which would let the lockout be outrun), and none can pass the len() check before an
-    # in-flight failure is recorded. hmac.compare_digest is microseconds and login is rare, so holding
-    # the lock across it costs nothing. secrets.token_urlsafe is likewise cheap.
-    with _auth_lock:
-        # Drop stale failure timestamps everywhere (in place, no rebind), so neither a per-IP list nor
-        # the dict itself grows without bound. Keep only IPs that still have a failure in the window.
-        for k in [k for k, v in _login_failures.items()
-                  if not any(now - t < RATE_LIMIT_WINDOW_SEC for t in v)]:
-            _login_failures.pop(k, None)
-        recent = [t for t in _login_failures.get(ip, []) if now - t < RATE_LIMIT_WINDOW_SEC]
-        if len(recent) >= RATE_LIMIT_MAX_FAILURES:
-            _login_failures[ip] = recent
-            raise HTTPException(status_code=401, detail="Too many failed attempts, try again later")
-
-        # compare_digest on str raises TypeError on any non-ASCII character, so a Thai password would
-        # 500 instead of logging in - compare bytes. Still constant-time.
-        if not hmac.compare_digest(body.password.encode("utf-8"), APP_PASSWORD.encode("utf-8")):
-            recent.append(now)
-            _login_failures[ip] = recent
-            raise HTTPException(status_code=401, detail="Invalid password")
-
-        _login_failures.pop(ip, None)
-        token = secrets.token_urlsafe(32)
-        cutoff = datetime.now()
-        # Prune expired sessions on each successful login so the dict cannot grow without bound.
-        for t in [t for t, exp in _sessions.items() if exp < cutoff]:
-            _sessions.pop(t, None)
-        _sessions[token] = cutoff + SESSION_TTL
-    response.set_cookie(
-        key="session",
-        value=token,
-        httponly=True,
-        secure=SESSION_COOKIE_SECURE,
-        samesite="strict",
-        max_age=int(SESSION_TTL.total_seconds()),
-    )
-    return {"authenticated": True}
-
-
-@app.post("/api/logout")
-def logout(request: Request, response: Response):
-    token = request.cookies.get("session")
-    if token:
-        with _auth_lock:
-            _sessions.pop(token, None)
-    response.delete_cookie("session")
-    return {"authenticated": False}
-
-
-@app.get("/api/me")
-def me(request: Request):
-    # NOT in the allowlist: the gate 401s it when there is no valid session, which is exactly the
-    # signal the frontend's boot probe wants (200 = logged in, 401 = show the login overlay).
-    # With REQUIRE_AUTH off the gate never 401s, so this returns 200 and the overlay stays hidden.
-    return {"authenticated": True, "auth_required": REQUIRE_AUTH}
+def _check_disk_headroom() -> None:
+    """Raises 507 if DATA_DIR's filesystem is below MIN_FREE_DISK_MB free. Called explicitly at each
+    write-heavy entry point (not as global middleware) so cheap/read-only routes are never slowed by
+    a disk_usage() syscall that only matters right before new bytes hit disk."""
+    free_mb = shutil.disk_usage(DATA_DIR).free / 1_000_000
+    if free_mb < MIN_FREE_DISK_MB:
+        raise HTTPException(status_code=507,
+                             detail=f"Server disk space low ({free_mb:.0f}MB free), try again later")
 
 
 @app.get("/api/health")
@@ -348,6 +273,7 @@ def health():
 # runs — it doesn't.
 @app.post("/api/videos")
 def upload_videos(files: list[UploadFile] = File(...)):
+    _check_disk_headroom()
     uploaded = []
     with _state_lock:
         current_total = sum(v.get("size_bytes", 0) for v in _state["videos"].values())
@@ -585,6 +511,7 @@ def _run_extract_job(job_id: str, body: ExtractBody):
 
 @app.post("/api/extract")
 def start_extract(body: ExtractBody):
+    _check_disk_headroom()
     for video_id in body.video_ids:
         if video_id not in _state["videos"]:
             raise HTTPException(status_code=404, detail=f"Unknown video id: {video_id}")
@@ -759,12 +686,13 @@ async def upload_frames(request: Request):
     # a large body transiently occupies temp disk during the request (Starlette frees it when the
     # request ends). A Content-Length precheck was considered and rejected: it only catches an honest
     # client that declares an over-cap size (a chunked/lying client spools anyway), and only above
-    # MAX_TOTAL_UPLOAD_MB — a 50 GB default that a disk-filling upload stays under — so it would add a
-    # limit the project has declined (see the 2026-08-01 review's accepted DoS-shaped gaps) while
-    # returning a 413 the browser usually never sees (connection reset mid-upload → "Failed to
-    # fetch"). This is now an authenticated route (S-1), which is the intended mitigation; the
-    # incremental MAX_TOTAL_UPLOAD_BYTES guard inside _import_uploaded_frames remains the real cap on
-    # what actually lands in the workspace.
+    # MAX_TOTAL_UPLOAD_MB — a 50 GB default that a disk-filling upload stays under. There is no auth
+    # gate on this route anymore (removed — the tool is public now), so the checks that remain are:
+    # _check_disk_headroom() below refuses new uploads once free space is already low, and the
+    # incremental MAX_TOTAL_UPLOAD_BYTES guard inside _import_uploaded_frames is the real cap on what
+    # actually lands permanently in the workspace. A single request can still transiently spool up to
+    # MAX_UPLOAD_FILES worth of temp data before either check runs — an accepted gap, not a full fix.
+    _check_disk_headroom()
     try:
         form = await request.form(max_files=MAX_UPLOAD_FILES, max_fields=MAX_UPLOAD_FILES)
     except Exception as e:  # starlette raises MultiPartException on a malformed or over-cap body
@@ -1802,7 +1730,7 @@ def _scan_models() -> list[dict]:
     out = []
     for p in sorted(paths):
         try:
-            size_mb = round(p.stat().st_size / 1_000_000, 1)
+            st = p.stat()
         except OSError:
             continue
         meta = _model_meta(p)
@@ -1811,7 +1739,8 @@ def _scan_models() -> list[dict]:
             "kind": _model_kind(p),
             "classes": meta["classes"],
             "imgsz": meta["imgsz"],
-            "size_mb": size_mb,
+            "size_mb": round(st.st_size / 1_000_000, 1),
+            "mtime": st.st_mtime,
         })
     return out
 
@@ -1832,6 +1761,7 @@ def list_models():
 
 @app.post("/api/models")
 def upload_model(file: UploadFile = File(...)):  # plain def: blocking writes belong on the threadpool
+    _check_disk_headroom()
     ext = Path(file.filename).suffix.lower()
     if ext != ".pt":
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext or '(none)'}")

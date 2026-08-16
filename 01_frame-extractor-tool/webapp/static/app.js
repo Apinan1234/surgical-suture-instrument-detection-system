@@ -1,48 +1,15 @@
 // ────────────────────────────── F-2: shared fetch helper + theme ──────────────────────────────
 
-// One promise, shared by every request that 401s at the same time, resolved when the user logs back
-// in. Requests await it and then retry, so nothing that was in flight is lost - which is the whole
-// point on a workspace holding thousands of unsaved boxes: a session that expires mid-save shows the
-// login overlay, and the save completes itself the instant you log in again.
-let _loginPending = null;
-let _loginResolve = null;
-
-function requireLogin() {
-  showLoginOverlay();
-  if (!_loginPending) {
-    _loginPending = new Promise((resolve) => {
-      _loginResolve = resolve;
-    });
-  }
-  return _loginPending;
-}
-
-function onLoggedIn() {
-  hideLoginOverlay();
-  if (_loginResolve) _loginResolve();
-  _loginPending = null;
-  _loginResolve = null;
-}
-
+// No login gate anymore (the tool is public, no session to lose) — plain passthrough. Kept as a
+// named wrapper rather than inlined because it's called throughout this file.
 async function apiFetch(path, opts) {
-  opts = opts || {};
-  let res = await fetch(path, opts);
-  // A 401 on anything but the auth endpoints means the session is gone. Show the gate, wait for a
-  // fresh login, then replay the exact same request once. /api/login and /api/logout handle their
-  // own 401s (a wrong password is not a reason to loop the overlay). opts is re-passed verbatim, and
-  // a FormData/string body is re-sendable, so the retry is a faithful repeat.
-  if (res.status === 401 && !path.startsWith("/api/login") && !path.startsWith("/api/logout")) {
-    await requireLogin();
-    res = await fetch(path, opts);
-  }
-  return res;
+  return fetch(path, opts || {});
 }
 
 // A download started with window.location.href is a TOP-LEVEL NAVIGATION: it never routes through
-// apiFetch, so once the session has lapsed the browser renders the server's JSON 401 as a page and
-// the whole SPA is torn down -- taking any unsaved annotation state with it, which is exactly what
-// the login overlay exists to prevent. Pull the bytes through apiFetch instead (401 -> overlay ->
-// retry) and hand them to a synthetic <a download>.
+// apiFetch, so any error response (a 404, a 500) renders as a full-page JSON body and the whole SPA
+// is torn down -- taking any unsaved annotation state with it. Pull the bytes through apiFetch
+// instead and hand them to a synthetic <a download>, so a failure just shows an alert() in place.
 async function downloadViaApi(path, fallbackName) {
   let res;
   try {
@@ -71,13 +38,11 @@ async function downloadViaApi(path, fallbackName) {
   URL.revokeObjectURL(objUrl);
 }
 
-// Same problem in the other direction: an <img> load does not route through apiFetch either, so a
-// lapsed session turns every thumbnail into a broken icon with no overlay and no way back. On error,
-// probe the same URL through apiFetch -- a 401 raises the overlay and parks, and once re-logged-in
-// the probe resolves and the fetched bytes are swapped straight in (no second download). A genuine
-// 404/500 resolves not-ok and leaves the broken image, as it should. The Annotate canvas keeps its
-// own copy of this: it additionally has to check the user has not navigated to another frame while
-// the probe was in flight, which this generic version has no way to know about.
+// One retry, via fetch+blob instead of the <img>'s own retry, for a thumbnail that failed to load
+// (a transient network blip, not an auth failure -- there's no login gate to recover from anymore).
+// A genuine 404/500 resolves not-ok and leaves the broken image, as it should. The Annotate canvas
+// keeps its own copy of this: it additionally has to check the user has not navigated to another
+// frame while the retry was in flight, which this generic version has no way to know about.
 function loadAuthedImage(img, url) {
   img.onerror = () => {
     img.onerror = null;  // one retry only -- never loop if the replacement also fails
@@ -93,60 +58,6 @@ function loadAuthedImage(img, url) {
   img.src = url;
 }
 
-// ── Login gate (S-1) ──
-
-function showLoginOverlay() {
-  const overlay = document.getElementById("login-overlay");
-  if (!overlay || !overlay.classList.contains("hidden")) return;
-  overlay.classList.remove("hidden");
-  const pw = document.getElementById("login-password");
-  if (pw) {
-    pw.value = "";
-    pw.focus();
-  }
-}
-
-function hideLoginOverlay() {
-  const overlay = document.getElementById("login-overlay");
-  if (overlay) overlay.classList.add("hidden");
-  const err = document.getElementById("login-error");
-  if (err) err.classList.add("hidden");
-}
-
-document.getElementById("login-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const err = document.getElementById("login-error");
-  err.classList.add("hidden");
-  const password = document.getElementById("login-password").value;
-  let res;
-  try {
-    res = await apiFetch("/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
-    });
-  } catch (netErr) {
-    err.textContent = "Could not reach the server.";
-    err.classList.remove("hidden");
-    return;
-  }
-  if (res.ok) {
-    onLoggedIn(); // resolves every request that was parked on the 401, which then retries itself
-    return;
-  }
-  const body = await res.json().catch(() => ({}));
-  err.textContent = body.detail || "Login failed";
-  err.classList.remove("hidden");
-});
-
-document.getElementById("logout-btn").addEventListener("click", async () => {
-  try {
-    await apiFetch("/api/logout", { method: "POST" });
-  } catch (e) {
-    /* logging out locally matters more than the round-trip succeeding */
-  }
-  showLoginOverlay();
-});
 
 // ── Job pointers ──
 //
@@ -741,7 +652,7 @@ async function refreshModelOptions() {
     const current = data.models.find((m) => m.path === ModelState.getPath());
     if (!current || current.kind === "base") {
       const project = data.models.filter((m) => m.kind === "project").sort((x, y) =>
-        x.path < y.path ? 1 : -1)[0];
+        y.mtime - x.mtime)[0];
       if (project) ModelState.setPath(project.path);
     }
   }
@@ -3262,11 +3173,10 @@ function loadAnnotateImage(frame, idxAtLoad) {
     if (AnnotateState.getFrameIdx() !== idxAtLoad) return; // user navigated away before this finished loading
     Canvas.setImage(img);
   };
-  // An <img> load does NOT route through apiFetch, so a session that lapsed mid-annotation would show
-  // this frame as a broken image with no login overlay - the one surface where "resume exactly where
-  // you were" matters most. On error, probe the same URL through apiFetch: a 401 raises the overlay
-  // and parks, and once re-logged-in the probe resolves and we swap in the fetched bytes directly (no
-  // second download). A genuine 404/500 resolves not-ok and leaves the broken image, as it should.
+  // Same one-retry-via-fetch pattern as the generic loadAuthedImage above (a transient load failure,
+  // not an auth failure -- there's no login gate to recover from anymore), duplicated here because
+  // this copy also has to check the user hasn't navigated to another frame before swapping the image
+  // in, which the generic version has no way to know about. A genuine 404/500 leaves the broken image.
   img.onerror = () => {
     if (AnnotateState.getFrameIdx() !== idxAtLoad) return;
     apiFetch(url)
@@ -4095,16 +4005,7 @@ async function refreshAnalytics() {
 
 buildStepNav();
 
-// One explicit auth probe (GET /api/me) before any data call. With no session it yields a single
-// clean 401 -> apiFetch shows the login overlay and parks -> after login it resolves and the rest of
-// boot runs. Without this, every refresh below would 401 independently, a burst of overlays-worth of
-// requests instead of one. When already authenticated /api/me returns 200 and boot just continues.
 (async function boot() {
-  try {
-    await apiFetch("/api/me");
-  } catch (e) {
-    console.warn("Auth probe failed:", e);
-  }
   refreshVideoList();
   refreshModelOptions();
   refreshClasses();

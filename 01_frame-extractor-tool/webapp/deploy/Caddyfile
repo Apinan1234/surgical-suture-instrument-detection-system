@@ -1,0 +1,6 @@
+# Replace with the real domain before use. Caddy issues/renews the Let's Encrypt cert automatically
+# on first request -- the domain must already resolve (A record) to this server's IP before that
+# will succeed; it cannot issue a certificate for a bare IP address.
+your-domain.example.com {
+    reverse_proxy 127.0.0.1:8010
+}
