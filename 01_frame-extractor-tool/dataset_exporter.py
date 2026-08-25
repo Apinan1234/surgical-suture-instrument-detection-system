@@ -52,6 +52,7 @@ def export_dataset_pipeline(
     augment_config: dict = None,
     progress_callback = None,
     task: str = "detect",   # "detect" (bbox) | "segment" (polygon) | "pose" (bbox + keypoints) — Ultralytics label formats
+    yolo_version: str = "v11",   # "v8" | "v11" | "v26" — cosmetic only, see _write_yaml: label bytes are identical across versions
 ) -> str:
     random.seed(seed)
 
@@ -95,7 +96,13 @@ def export_dataset_pipeline(
     
     transform = None
     if do_augment:
-        import albumentations as A
+        try:
+            import albumentations as A
+        except ImportError:
+            raise ValueError(
+                "Augmentation multiplier > 1 requires the albumentations package, which isn't "
+                "installed on this server — export with multiplier=1x, or ask to have it installed."
+            )
         aug_list = []
         if augment_config.get("flip"):
             aug_list.append(A.HorizontalFlip(p=0.5))
@@ -237,7 +244,7 @@ def export_dataset_pipeline(
                     done += 1
                     if progress_callback: progress_callback(done, total_ops)
 
-    _write_yaml(out / "data.yaml", class_names, out, task, n_kpts)
+    _write_yaml(out / "data.yaml", class_names, out, task, n_kpts, yolo_version)
 
     summary = {
         "total_exported":  total_exported,
@@ -246,6 +253,7 @@ def export_dataset_pipeline(
         "test":            test_count,
         "class_names":     class_names,
         "task":            task,
+        "yolo_version":    yolo_version,
         "kpt_shape":       [n_kpts, 3] if task == "pose" else None,
         "has_attributes":  bool(attributes_index),
     }
@@ -282,22 +290,33 @@ def export_dataset_pipeline(
 
     return str(out)
 
-def _write_yaml(path: Path, class_names: list[str], dataset_root: Path, task: str = "detect", n_kpts: int = 0) -> None:
+# Checkpoint base name per YOLO version — v11/v26 dropped the "v" that v8 still carries (verified
+# against docs.ultralytics.com/models/yolo26 and yolo11; yolov8 keeps yolov8n.pt).
+_CKPT_BASE = {"v8": "yolov8n", "v11": "yolo11n", "v26": "yolo26n"}
+
+
+def _write_yaml(path: Path, class_names: list[str], dataset_root: Path, task: str = "detect",
+                 n_kpts: int = 0, yolo_version: str = "v11") -> None:
     # NOTE: Ultralytics data.yaml has no `task:` key — it infers detect/segment/pose from the model
     # checkpoint / CLI command used at train time, not from this file. This comment is informational
     # only, never a structural YAML key (a real `task:` key risks an "unknown key" warning). Pose is
     # the one exception that DOES need an extra structural key — `kpt_shape` — verified against
     # Ultralytics docs (https://docs.ultralytics.com/datasets/pose).
+    ckpt_base = _CKPT_BASE.get(yolo_version, "yolo11n")
+    ckpt = ckpt_base + {"segment": "-seg.pt", "pose": "-pose.pt"}.get(task, ".pt")
     comment = (
         "# Labels in this dataset are in Ultralytics segmentation polygon format "
         "(class x1 y1 x2 y2 ...). Train with the segment task/model, e.g. "
-        "`yolo segment train data=data.yaml model=yolov8n-seg.pt` — Ultralytics infers the task "
+        f"`yolo segment train data=data.yaml model={ckpt}` — Ultralytics infers the task "
         "from the model/CLI command, not from this file.\n"
         if task == "segment" else
         "# Labels in this dataset are in Ultralytics pose format (bbox + keypoints). Train with "
-        "`yolo pose train data=data.yaml model=yolov8n-pose.pt` — Ultralytics infers the task from "
+        f"`yolo pose train data=data.yaml model={ckpt}` — Ultralytics infers the task from "
         "the model/CLI command, not from this file.\n"
-        if task == "pose" else ""
+        if task == "pose" else
+        "# Labels in this dataset are in Ultralytics detection bbox format (class x_center y_center "
+        f"width height). Train with `yolo detect train data=data.yaml model={ckpt}` — Ultralytics "
+        "infers the task from the model/CLI command, not from this file.\n"
     )
     try:
         import yaml  # type: ignore
