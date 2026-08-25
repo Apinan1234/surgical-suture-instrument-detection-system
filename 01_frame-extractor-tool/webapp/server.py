@@ -5,6 +5,7 @@ FastAPI + in-memory state + threading.Thread jobs + HTTP polling, no DB, no fram
 
 import io
 import json
+import importlib.util
 import os
 import shutil
 import sys
@@ -34,7 +35,7 @@ sys.path.insert(0, str(TOOL_DIR))
 # — would be silently ignored (the setdefault would already have won).
 load_dotenv(WEBAPP_DIR / ".env")
 
-from frame_extractor import extract_frames  # noqa: E402  (needs sys.path set up first)
+from frame_extractor import extract_frames, compute_phash  # noqa: E402  (needs sys.path set up first)
 from detector import (Detection, BaseDetector, YOLOv11Detector, RoboflowDetector, CLASS_NAMES,  # noqa: E402
                       CLASS_COLORS_HEX, app_class_id, ensure_safe_load_or_raise, _effective_imgsz)
 from dataset_exporter import export_dataset_pipeline, count_stats  # noqa: E402
@@ -46,6 +47,11 @@ MAX_TOTAL_UPLOAD_MB = int(os.environ.get("MAX_TOTAL_UPLOAD_MB", "51200"))
 MAX_TOTAL_UPLOAD_BYTES = MAX_TOTAL_UPLOAD_MB * 1024 * 1024
 MAX_CONCURRENT_JOBS = int(os.environ.get("MAX_CONCURRENT_JOBS", "2"))
 MAX_FRAMES_ALL_MODE = int(os.environ.get("MAX_FRAMES_ALL_MODE", "20000"))
+# Caps how many matched frames a single Find Class run will save. Unlike Extract's target_frames,
+# Find Class's match count is driven by video content the caller does not control ahead of time — a
+# loose match_conf/target_classes pair on a long video could otherwise write an unbounded number of
+# frames to disk before anyone notices.
+MAX_FINDCLASS_MATCHES = int(os.environ.get("MAX_FINDCLASS_MATCHES", "2000"))
 # Upper bound on one bulk detections write, i.e. on how long an interpolated span may be. The whole
 # batch is applied under a single _state_lock, so this is really a cap on how long that lock is held.
 MAX_BULK_FRAMES = int(os.environ.get("MAX_BULK_FRAMES", "500"))
@@ -71,11 +77,12 @@ VIDEOS_DIR = DATA_DIR / "videos"
 FRAMES_DIR = DATA_DIR / "frames"
 BACKUPS_DIR = DATA_DIR / "backups"
 EXPORTS_DIR = DATA_DIR / "exports"
+ZIPS_DIR = DATA_DIR / "zips"
 # Deliberately under TOOL_DIR, not DATA_DIR: _resolve_model_path()'s containment check (below) is
 # anchored to TOOL_DIR, and DATA_DIR is env-overridable for deployment — keeping MODELS_DIR under the
 # same root the security check already trusts means that check needs zero changes for uploaded models.
 MODELS_DIR = TOOL_DIR / "models"
-for d in (VIDEOS_DIR, FRAMES_DIR, BACKUPS_DIR, EXPORTS_DIR, MODELS_DIR):
+for d in (VIDEOS_DIR, FRAMES_DIR, BACKUPS_DIR, EXPORTS_DIR, ZIPS_DIR, MODELS_DIR):
     d.mkdir(parents=True, exist_ok=True)
 
 STATE_PATH = WEBAPP_DIR / "state.json"
@@ -99,7 +106,7 @@ _state_lock = threading.RLock()
 # Serialises only the DISK half of save_state(). Deliberately separate so a slow copy/write/replace
 # never blocks annotation requests. Lock order is always _state_lock -> _save_io_lock, never reversed.
 _save_io_lock = threading.Lock()
-_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "export_jobs": {}, "ocr_jobs": {}, "assist_log": []}
+_state: dict = {"videos": {}, "extract_jobs": {}, "frames": {}, "detect_jobs": {}, "findclass_jobs": {}, "export_jobs": {}, "zip_jobs": {}, "ocr_jobs": {}, "assist_log": []}
 _last_snapshot_time = 0.0
 # Serialising and writing are no longer one atomic step, so two concurrent saves could reach the disk
 # out of order and let an older snapshot overwrite a newer one. Stamp each payload and skip any write
@@ -113,14 +120,14 @@ def load_state():
     if STATE_PATH.exists():
         with open(STATE_PATH, "r", encoding="utf-8") as f:
             _state = json.load(f)
-    for key in ("videos", "extract_jobs", "frames", "detect_jobs", "export_jobs", "ocr_jobs"):
+    for key in ("videos", "extract_jobs", "frames", "detect_jobs", "findclass_jobs", "export_jobs", "zip_jobs", "ocr_jobs"):
         _state.setdefault(key, {})
     _state.setdefault("assist_log", [])
     # Jobs are threads, so none of them survive the process. A status left at "running" by a
     # restart or a crash is therefore a lie, and one that costs something now that the client
     # persists job ids: restoring such a job disables Start and polls a job nothing will ever
     # finish, with no way out from the UI. Retire them here, where the fact is known.
-    for key in ("extract_jobs", "detect_jobs", "export_jobs", "ocr_jobs"):
+    for key in ("extract_jobs", "detect_jobs", "findclass_jobs", "export_jobs", "zip_jobs", "ocr_jobs"):
         for job in _state[key].values():
             if job.get("status") == "running":
                 job["status"] = "error"
@@ -189,7 +196,7 @@ def _client_ip(request: Request) -> str:
 # (/api/videos, /api/frames/upload, /api/models) already stream-check their own, larger limits
 # (MAX_UPLOAD_SIZE_MB etc., enforced where the body is actually read) and are exempted here.
 
-_EXPENSIVE_PATH_PREFIXES = ("/api/detect", "/api/extract", "/api/export", "/api/ocr")
+_EXPENSIVE_PATH_PREFIXES = ("/api/detect", "/api/extract", "/api/export", "/api/ocr", "/api/findclass")
 _EXPENSIVE_PATH_SUFFIXES = ("/assist", "/ocr")
 
 _rate_limit_hits: dict[str, list[float]] = {}
@@ -571,6 +578,14 @@ def _paged_frames(job: dict, limit: int | None, offset: int) -> dict:
         }
 
 
+def _find_frame_job(job_id: str) -> dict | None:
+    """A frame-producing job by id, whichever family made it. Detect and Find Class jobs are both
+    shaped like {"frame_ids": [...], ...}, so Export/Annotate — which only need "the pool of frames
+    this job id produced" — can treat a Find Class job id exactly like a Detect job id and gain both
+    features with no code of their own. Caller must hold _state_lock (matches _paged_frames)."""
+    return _state["detect_jobs"].get(job_id) or _state["findclass_jobs"].get(job_id)
+
+
 @app.get("/api/extract/{job_id}/frames")
 def extract_frames_list(
     job_id: str,
@@ -592,37 +607,98 @@ def stop_extract(job_id: str):
     return {"stopping": True}
 
 
-@app.get("/api/extract/{job_id}/zip")
-def download_zip(job_id: str):
+def _run_zip_job(job_id: str, extract_job_id: str):
+    """Build the zip on disk, updating job["progress"] per frame - mirrors _run_export_job's
+    prog(done, total) closure. Building in memory (the old shape) meant no bytes at all left the
+    server until the whole archive was done; a job the client can poll is what actually lets a
+    progress bar be honest."""
     with _state_lock:
-        job = _state["extract_jobs"].get(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        # Snapshot the paths under the lock; the zip building below is slow I/O and must not hold it.
-        frames = [dict(_state["frames"][fid]) for fid in job.get("frame_ids", []) if fid in _state["frames"]]
+        job = _state["zip_jobs"][job_id]
+    try:
+        with _state_lock:
+            src_job = _state["extract_jobs"].get(extract_job_id)
+            if not src_job:
+                raise ValueError(f"Unknown extract job: {extract_job_id}")
+            frames = [dict(_state["frames"][fid]) for fid in src_job.get("frame_ids", []) if fid in _state["frames"]]
+        if not frames:
+            raise ValueError("No frames to download for this job")
 
-    job_dir = FRAMES_DIR / job_id
-    if not frames:
+        job_dir = FRAMES_DIR / extract_job_id
+        zip_path = ZIPS_DIR / f"{job_id}.zip"
+        total = len(frames)
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for i, frame in enumerate(frames):
+                path = Path(frame["path"])
+                if path.exists():
+                    try:
+                        arcname = str(path.relative_to(job_dir))
+                    except ValueError:
+                        arcname = path.name
+                    zf.write(path, arcname=arcname)
+                with _state_lock:
+                    job["progress"] = round((i + 1) / total * 100, 1)
+        with _state_lock:
+            job["zip_path"] = str(zip_path)
+            job["status"] = "done"
+            job["progress"] = 100
+    except Exception as e:
+        with _state_lock:
+            job["status"] = "error"
+            job["error"] = str(e)
+        Path(ZIPS_DIR / f"{job_id}.zip").unlink(missing_ok=True)
+    save_state()
+
+
+@app.post("/api/extract/{job_id}/zip")
+def start_zip(job_id: str):
+    with _state_lock:
+        src_job = _state["extract_jobs"].get(job_id)
+        if not src_job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        has_frames = any(fid in _state["frames"] for fid in src_job.get("frame_ids", []))
+    if not has_frames:
         raise HTTPException(status_code=404, detail="No frames to download for this job")
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for frame in frames:
-            path = Path(frame["path"])
-            if not path.exists():
-                continue
-            try:
-                arcname = str(path.relative_to(job_dir))
-            except ValueError:
-                arcname = path.name
-            zf.write(path, arcname=arcname)
-    buf.seek(0)
+    if not _acquire_job_slot():
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many jobs running (max {MAX_CONCURRENT_JOBS}); wait for one to finish",
+        )
 
-    return StreamingResponse(
-        buf,
-        media_type="application/zip",
-        headers={"Content-Disposition": f'attachment; filename="frames_{job_id}.zip"'},
-    )
+    zip_job_id = uuid.uuid4().hex
+    with _state_lock:
+        _state["zip_jobs"][zip_job_id] = {
+            "id": zip_job_id,
+            "status": "running",
+            "progress": 0,
+            "extract_job_id": job_id,
+            "zip_path": None,
+            "error": None,
+        }
+    threading.Thread(target=_run_job_and_release, args=(_run_zip_job, zip_job_id, job_id), daemon=True).start()
+    return {"job_id": zip_job_id}
+
+
+@app.get("/api/extract/zip/{job_id}")
+def zip_status(job_id: str):
+    with _state_lock:
+        job = _state["zip_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _job_snapshot(job)
+
+
+@app.get("/api/extract/zip/{job_id}/download")
+def download_zip_result(job_id: str):
+    job = _state["zip_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job["status"] != "done" or not job.get("zip_path"):
+        raise HTTPException(status_code=400, detail="Zip not finished yet")
+    zip_path = Path(job["zip_path"])
+    if not zip_path.exists():
+        raise HTTPException(status_code=404, detail="Zip file missing on disk")
+    return FileResponse(zip_path, media_type="application/zip", filename=f"frames_{job['extract_job_id']}.zip")
 
 
 # ────────────────────────────── S-4 Detection ──────────────────────────────
@@ -706,6 +782,25 @@ async def upload_frames(request: Request):
     return await run_in_threadpool(_import_uploaded_frames, uploads)
 
 
+def _save_stream_capped(read_chunk, dest_path: Path, request_total: int, label: str) -> int:
+    """Copy a readable stream to dest_path in 1MB chunks, enforcing MAX_UPLOAD_SIZE_BYTES per file and
+    MAX_TOTAL_UPLOAD_BYTES across the whole request as bytes are actually read, never from a declared
+    size. Shared by a plain uploaded file and a member pulled out of an uploaded .zip, so an extracted
+    image is bound by the exact same caps as one uploaded directly - a zip's own file_size/compress_size
+    metadata is never consulted, which is what defeats a zip bomb here."""
+    size = 0
+    with open(dest_path, "wb") as out:
+        while chunk := read_chunk(1024 * 1024):
+            size += len(chunk)
+            request_total += len(chunk)
+            if size > MAX_UPLOAD_SIZE_BYTES:
+                raise HTTPException(status_code=413, detail=f"File too large: {label}")
+            if request_total > MAX_TOTAL_UPLOAD_BYTES:
+                raise HTTPException(status_code=413, detail="Total upload size exceeded")
+            out.write(chunk)
+    return request_total
+
+
 def _import_uploaded_frames(uploads: list) -> dict:
     """Write uploaded images into a new job dir and register them. Blocking; threadpool only."""
     job_id = uuid.uuid4().hex
@@ -723,6 +818,42 @@ def _import_uploaded_frames(uploads: list) -> dict:
             # security review found in the Extract prefix field).
             safe_name = os.path.basename(f.filename or "")
             ext = Path(safe_name).suffix.lower()
+
+            if ext == ".zip":
+                # A folder of frames zipped up before upload - handled inline rather than by
+                # skipping/rejecting it, same rationale as accepting a bare folder below.
+                f.file.seek(0)
+                try:
+                    zf = zipfile.ZipFile(f.file)
+                except zipfile.BadZipFile:
+                    skipped.append(safe_name or "unnamed file")
+                    continue
+                with zf:
+                    members = [i for i in zf.infolist() if not i.is_dir()]
+                    if len(members) > MAX_UPLOAD_FILES:
+                        raise HTTPException(status_code=413, detail=f"Too many files inside {safe_name}")
+                    for info in members:
+                        # Zip-slip: never trust the member's stored path, only its basename - the same
+                        # fix already applied to safe_name above and to the Extract prefix field
+                        # (2026-08-01 security review).
+                        member_name = os.path.basename(info.filename)
+                        if Path(member_name).suffix.lower() not in IMAGE_EXTS:
+                            skipped.append(member_name or "unnamed file")  # __MACOSX/, .DS_Store, etc.
+                            continue
+                        m_stem, m_suffix = Path(member_name).stem, Path(member_name).suffix
+                        n = 2
+                        while member_name in used_names:
+                            member_name = f"{m_stem}_{n}{m_suffix}"
+                            n += 1
+                        used_names.add(member_name)
+                        dest_path = job_dir / member_name
+                        with zf.open(info) as member_fp:
+                            request_total = _save_stream_capped(
+                                member_fp.read, dest_path, request_total, member_name
+                            )
+                        saved.append((member_name, dest_path))
+                continue
+
             if ext not in IMAGE_EXTS:
                 # Skipped, not rejected. Every frames folder this tool produces holds an
                 # extraction_log.json, and real folders carry .DS_Store / Thumbs.db / desktop.ini
@@ -742,19 +873,7 @@ def _import_uploaded_frames(uploads: list) -> dict:
             used_names.add(safe_name)
 
             dest_path = job_dir / safe_name
-            size = 0
-            with open(dest_path, "wb") as out:
-                while chunk := f.file.read(1024 * 1024):
-                    size += len(chunk)
-                    request_total += len(chunk)
-                    if size > MAX_UPLOAD_SIZE_BYTES:
-                        raise HTTPException(status_code=413, detail=f"File too large: {safe_name}")
-                    # Bounds this request, where the video route's identical constant bounds total
-                    # stored video. Frames carry no per-file size in state, and extracted frames are
-                    # generated locally rather than uploaded, so there is no running total to add to.
-                    if request_total > MAX_TOTAL_UPLOAD_BYTES:
-                        raise HTTPException(status_code=413, detail="Total upload size exceeded")
-                    out.write(chunk)
+            request_total = _save_stream_capped(f.file.read, dest_path, request_total, safe_name)
             saved.append((safe_name, dest_path))
 
         if not saved:
@@ -1017,7 +1136,7 @@ def start_detect(body: DetectBody):
 @app.get("/api/detect/{job_id}")
 def detect_status(job_id: str):
     with _state_lock:
-        job = _state["detect_jobs"].get(job_id)
+        job = _find_frame_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         return _job_snapshot(job)
@@ -1030,7 +1149,7 @@ def detect_frames_list(
     offset: int = Query(0, ge=0),
 ):
     with _state_lock:
-        job = _state["detect_jobs"].get(job_id)
+        job = _find_frame_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return _paged_frames(job, limit, offset)
@@ -1084,6 +1203,299 @@ def frame_preview(frame_id: str):
         raise HTTPException(status_code=500, detail="Failed to encode image")
 
     return StreamingResponse(io.BytesIO(buf.tobytes()), media_type="image/jpeg")
+
+
+# ────────────────────────────── S-4b Find Class ──────────────────────────────
+# Given an already-trained model and a video, walk the video and keep only the frames where a
+# user-chosen class actually appears — the tool for mining more examples of a rare/underrepresented
+# class (e.g. `needle`) without scrubbing through the footage by hand. Deliberately its own job family
+# rather than a Detect variant: Detect's input is frame_ids of frames that already exist on disk,
+# Find Class's input is video_ids, like Extract — and unlike Extract, it never saves a frame to disk
+# unless the model actually found the target class in it.
+
+
+class FindClassBody(DetectorConfigBody):
+    video_ids: list[str] = Field(min_length=1)
+    target_classes: list[str] = Field(min_length=1)
+    # Separate from `conf`/`class_conf` above: those control what predict() returns to us at all, this
+    # controls which returned detections make a FRAME count as a match. Kept independent so a low
+    # `conf` can be used to give a weak/rare class every chance to be seen, while match_conf still only
+    # surfaces frames worth a human's time.
+    match_conf: float = Field(default=0.25, ge=0.01, le=0.99)
+    sample_interval_sec: float = Field(default=0.5, gt=0.0)
+    start_sec: float = Field(default=0.0, ge=0)
+    end_sec: float | None = Field(default=None, gt=0)
+    # Hamming distance below which a new match is considered a near-duplicate of a recent one and
+    # skipped. None disables dedup. Reuses frame_extractor.compute_phash — no new dependency.
+    dedup_threshold: float | None = Field(default=8.0, ge=0.0)
+    max_matches: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _check_target_classes(self):
+        for name in self.target_classes:
+            if name not in CLASS_NAMES:
+                raise ValueError(f"Unknown class in target_classes: {name!r} (expected one of {CLASS_NAMES})")
+        return self
+
+    @model_validator(mode="after")
+    def _check_time_range(self):
+        if self.end_sec is not None and self.end_sec <= self.start_sec:
+            raise ValueError("end_sec must be greater than start_sec")
+        return self
+
+
+# Bounded window of recently-accepted matches' pHashes to dedup against — comparing against every
+# match ever saved this run would grow without bound on a long video; recent matches are the ones a
+# near-duplicate is actually likely to follow.
+_FINDCLASS_DEDUP_WINDOW = 5
+
+
+def _run_findclass_job(job_id: str, body: FindClassBody):
+    with _state_lock:
+        job = _state["findclass_jobs"][job_id]
+
+    def log_cb(msg):
+        # No lock around the append — see the identical comment on _run_extract_job's log_cb.
+        job["log"].append(msg)
+        if len(job["log"]) > 500:
+            with _state_lock:
+                del job["log"][: len(job["log"]) - 500]
+
+    try:
+        det = _get_cached_detector(body)
+    except Exception as e:
+        with _state_lock:
+            job["log"].append(f"[error] failed to load detector: {e}")
+            job["status"] = "stopped"
+        _job_stop_flags.pop(job_id, None)
+        save_state()
+        return
+
+    imgsz = getattr(det, "imgsz", None)
+    with _state_lock:
+        job["imgsz"] = imgsz
+        job["log"].append(
+            f"[info] inference resolution: {imgsz} px" if imgsz
+            else "[info] inference resolution: chosen by the backend, not set by this app"
+        )
+
+    frame_ids: list[str] = []
+    matched_total = 0
+    hit_cap = False
+
+    for video_id in body.video_ids:
+        if _job_stop_flags.get(job_id) or hit_cap:
+            break
+
+        with _state_lock:
+            record = _state["videos"].get(video_id)
+        if not record:
+            log_cb(f"[error] unknown video id {video_id}")
+            continue
+
+        video_path = record["path"]
+        video_stem = Path(record["filename"]).stem
+        out_dir = FRAMES_DIR / job_id / video_stem
+
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            log_cb(f"[error] {record['filename']}: cannot open video")
+            cap.release()
+            continue
+
+        recent_match_hashes: list = []
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30
+            total_frames_full = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            start_frame = max(0, int(round(body.start_sec * fps)))
+            end_frame = total_frames_full
+            if body.end_sec is not None:
+                end_frame = min(total_frames_full, int(round(body.end_sec * fps)))
+            total_frames = max(0, end_frame - start_frame)
+            frame_step = max(1, int(fps * body.sample_interval_sec))
+
+            log_cb(
+                f"[info] {record['filename']}: fps={fps:.1f} frames={total_frames_full} "
+                f"sampling every {frame_step} frame(s) (~{body.sample_interval_sec:.2f}s)"
+            )
+
+            if total_frames <= 0:
+                log_cb(f"[warn] {record['filename']}: start_sec is beyond the video's length — skipped")
+                continue
+
+            if start_frame > 0:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+
+            out_dir_created = False
+            frame_idx = 0
+            while frame_idx < total_frames:
+                if _job_stop_flags.get(job_id):
+                    break
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                if total_frames:
+                    job["progress"] = round(frame_idx / total_frames * 100, 1)
+
+                if frame_idx % frame_step == 0:
+                    abs_frame_idx = start_frame + frame_idx
+                    time_sec = abs_frame_idx / fps if fps else 0.0
+                    dets = det.predict(frame)
+                    matches = [
+                        d for d in dets
+                        if d.class_name in body.target_classes and d.confidence >= body.match_conf
+                    ]
+
+                    if matches:
+                        is_dup = False
+                        h = None
+                        if body.dedup_threshold is not None:
+                            h = compute_phash(frame)
+                            is_dup = any((h - prev) < body.dedup_threshold for prev in recent_match_hashes)
+
+                        if is_dup:
+                            log_cb(f"[dedup]   {record['filename']} @ {time_sec:.1f}s -> near-duplicate of a recent match, skipped")
+                        else:
+                            if h is not None:
+                                recent_match_hashes.append(h)
+                                if len(recent_match_hashes) > _FINDCLASS_DEDUP_WINDOW:
+                                    recent_match_hashes.pop(0)
+
+                            if not out_dir_created:
+                                out_dir.mkdir(parents=True, exist_ok=True)
+                                out_dir_created = True
+
+                            filename = f"frame_{abs_frame_idx:06d}.jpg"
+                            save_path = out_dir / filename
+                            # Thai-filename-safe write, matching benchmark_inference.py's
+                            # imread_unicode() pattern for reads: cv2.imwrite/imread silently fail on
+                            # non-ASCII paths, and video_stem above comes straight from a user-uploaded
+                            # filename that can contain them.
+                            ok, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                            if not ok:
+                                log_cb(f"[error] {record['filename']} @ {time_sec:.1f}s: failed to encode frame")
+                            else:
+                                buf.tofile(str(save_path))
+                                records, dropped = _to_records(dets)  # ALL detections on the frame, not just the matches
+                                frame_id = uuid.uuid4().hex
+                                with _state_lock:
+                                    _state["frames"][frame_id] = {
+                                        "id": frame_id,
+                                        "video_id": video_id,
+                                        "job_id": job_id,
+                                        "path": str(save_path),
+                                        "filename": filename,
+                                        "reviewed": False,
+                                        "rev": 0,
+                                        "detections": records,
+                                        "video_time_sec": round(time_sec, 2),
+                                        "video_frame_index": abs_frame_idx,
+                                        "target_match_conf": round(max(d.confidence for d in matches), 4),
+                                    }
+                                frame_ids.append(frame_id)
+                                matched_total += 1
+                                match_classes = ", ".join(sorted({d.class_name for d in matches}))
+                                note = f" (+{len(dropped)} box(es) from unrecognised classes)" if dropped else ""
+                                log_cb(f"[matched] {record['filename']} @ {time_sec:.1f}s -> {filename}: {match_classes}{note}")
+
+                        if body.max_matches is not None and matched_total >= body.max_matches:
+                            log_cb(f"[info] reached max_matches={body.max_matches} for this run, stopping")
+                            hit_cap = True
+                        elif matched_total >= MAX_FINDCLASS_MATCHES:
+                            log_cb(f"[warn] reached server cap MAX_FINDCLASS_MATCHES={MAX_FINDCLASS_MATCHES}, stopping")
+                            hit_cap = True
+                        if hit_cap:
+                            break
+
+                frame_idx += 1
+        except Exception as e:
+            log_cb(f"[error] {record['filename']}: {e}")
+        finally:
+            cap.release()
+
+    with _state_lock:
+        job["status"] = "stopped" if _job_stop_flags.get(job_id) else "done"
+        if job["status"] == "done":
+            job["progress"] = 100
+        job["frame_ids"] = frame_ids
+        job["matched_total"] = matched_total
+    _job_stop_flags.pop(job_id, None)
+    save_state()
+
+
+@app.post("/api/findclass")
+def start_findclass(body: FindClassBody):
+    _check_disk_headroom()
+    for video_id in body.video_ids:
+        if video_id not in _state["videos"]:
+            raise HTTPException(status_code=404, detail=f"Unknown video id: {video_id}")
+
+    try:
+        _validate_detect_backend(body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if not _acquire_job_slot():
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many jobs running (max {MAX_CONCURRENT_JOBS}); wait for one to finish",
+        )
+
+    job_id = uuid.uuid4().hex
+    with _state_lock:
+        _state["findclass_jobs"][job_id] = {
+            "id": job_id,
+            "status": "running",
+            "progress": 0,
+            "log": [],
+            "frame_ids": [],
+            "matched_total": 0,
+            "target_classes": body.target_classes,
+            "backend": body.backend,
+            "model_path": body.model_path if body.backend == "local" else None,
+            "workspace_name": body.workspace_name if body.backend == "roboflow" else None,
+            "workflow_id": body.workflow_id if body.backend == "roboflow" else None,
+            "conf": body.conf,
+            "iou": body.iou,
+            "device": body.device,
+            "match_conf": body.match_conf,
+            "sample_interval_sec": body.sample_interval_sec,
+            "created_at": datetime.now().isoformat(),
+        }
+    _job_stop_flags[job_id] = False
+    threading.Thread(target=_run_job_and_release, args=(_run_findclass_job, job_id, body), daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.get("/api/findclass/{job_id}")
+def findclass_status(job_id: str):
+    with _state_lock:
+        job = _state["findclass_jobs"].get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return _job_snapshot(job)
+
+
+@app.get("/api/findclass/{job_id}/frames")
+def findclass_frames_list(
+    job_id: str,
+    limit: int | None = Query(None, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+):
+    with _state_lock:
+        job = _state["findclass_jobs"].get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return _paged_frames(job, limit, offset)
+
+
+@app.post("/api/findclass/{job_id}/stop")
+def stop_findclass(job_id: str):
+    if job_id not in _state["findclass_jobs"]:
+        raise HTTPException(status_code=404, detail="Job not found")
+    _job_stop_flags[job_id] = True
+    return {"stopping": True}
 
 
 # ────────────────────────────── S-5 Annotation ──────────────────────────────
@@ -1957,6 +2369,7 @@ class ExportBody(BaseModel):
     version_name: str = Field(default="v1", max_length=64)
     reviewed_only: bool = False
     task: Literal["detect", "segment", "pose"] = "detect"
+    yolo_version: Literal["v8", "v11", "v26"] = "v11"
     splits: SplitsIn = Field(default_factory=SplitsIn)
     preprocess: PreprocessIn = Field(default_factory=PreprocessIn)
     augment: AugmentIn = Field(default_factory=AugmentIn)
@@ -1966,7 +2379,7 @@ def _export_pool(detect_job_id: str, reviewed_only: bool) -> list[dict]:
     # The {**f} spread below copies each record, so the pool the export worker then spends minutes
     # writing to disk is a snapshot — annotations saved mid-export can't mutate it underneath.
     with _state_lock:
-        job = _state["detect_jobs"].get(detect_job_id)
+        job = _find_frame_job(detect_job_id)
         if job is None:
             raise ValueError(f"Unknown detect_job_id: {detect_job_id}")
         frames = [_state["frames"][fid] for fid in job.get("frame_ids", []) if fid in _state["frames"]]
@@ -1983,7 +2396,8 @@ def export_preview(detect_job_id: str, reviewed_only: bool = False):
         raise HTTPException(status_code=404, detail=str(e))
     stats = count_stats(pool)
     unreviewed = sum(1 for item in pool if not item.get("reviewed"))
-    return {**stats, "unreviewed": unreviewed, "class_count": len(CLASS_NAMES)}
+    augment_available = importlib.util.find_spec("albumentations") is not None
+    return {**stats, "unreviewed": unreviewed, "class_count": len(CLASS_NAMES), "augment_available": augment_available}
 
 
 def _run_export_job(job_id: str, body: ExportBody):
@@ -2010,6 +2424,7 @@ def _run_export_job(job_id: str, body: ExportBody):
             augment_config=augment_config,
             progress_callback=prog,
             task=body.task,
+            yolo_version=body.yolo_version,
         )
         summary_path = out_dir / "export_summary.json"
         summary = json.loads(summary_path.read_text(encoding="utf-8")) if summary_path.exists() else None

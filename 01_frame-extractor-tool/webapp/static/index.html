@@ -20,6 +20,7 @@
   <div class="tabs">
     <button class="tab active" data-tab="extract">Extract</button>
     <button class="tab" data-tab="detect">Detect</button>
+    <button class="tab" data-tab="findclass">Find Class</button>
     <button class="tab" data-tab="annotate">Annotate</button>
     <button class="tab" data-tab="export">Export</button>
     <button class="tab" data-tab="analytics">Analytics</button>
@@ -146,6 +147,10 @@
         <div id="extract-progress-label" style="font-size:13px; color:var(--muted);"></div>
         <div id="extract-log" class="log-panel"></div>
         <button id="download-zip-btn" class="btn-download hidden" style="margin-top:12px;">Download frames as ZIP</button>
+        <div id="zip-progress-wrap" class="hidden" style="margin-top:12px;">
+          <div class="progress-bar"><div id="zip-progress-fill" class="progress-bar-fill"></div></div>
+          <div id="zip-progress-label" style="font-size:13px; color:var(--muted);"></div>
+        </div>
       </div>
     </div>
 
@@ -187,11 +192,6 @@
         <input class="input" type="text" id="rf-workflow-id" value="ssid-v5-logic" />
       </div>
 
-      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
-        <button class="btn-download" id="model-load-btn">Load model</button>
-        <span class="chip" id="model-status">Not loaded yet</span>
-      </div>
-
       <label>Device</label>
       <div class="checkbox-row">
         <input type="radio" name="device" value="cpu" id="device-cpu" checked />
@@ -204,6 +204,16 @@
       <div class="checkbox-row">
         <input type="radio" name="device" value="mps" id="device-mps" />
         <label for="device-mps" style="margin:0;">MPS</label>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin:4px 0 0;">
+        CPU works on any machine, slowest. CUDA uses an NVIDIA GPU — much faster, needs an NVIDIA card
+        with CUDA-enabled PyTorch (this machine has one). MPS uses Apple Silicon GPU acceleration —
+        macOS only, will not work on Windows.
+      </p>
+
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+        <button class="btn-download" id="model-load-btn">Load model</button>
+        <span class="chip" id="model-status">Not loaded yet</span>
       </div>
     </div>
 
@@ -229,9 +239,10 @@
     <div class="card">
       <h2 style="margin-top:0;">Frames to Detect</h2>
       <div id="detect-frames-info" style="font-size:13px; color:var(--muted);">No frames yet — run Extract first.</div>
+      <button id="use-extract-frames-btn" class="btn-download" style="margin-top:8px;" disabled>Use frames from Extract</button>
 
-      <label for="frames-upload-input" style="margin-top:14px;">Or upload a folder of frames</label>
-      <input class="input" type="file" id="frames-upload-input" webkitdirectory multiple accept="image/*" />
+      <label for="frames-upload-input" style="margin-top:14px;">Or upload a folder of frames (or a .zip)</label>
+      <input class="input" type="file" id="frames-upload-input" webkitdirectory multiple accept="image/*,.zip" />
       <div style="font-size:12px; color:var(--muted); margin-top:6px;">
         For frames extracted elsewhere. Non-image files in the folder are ignored. The uploaded
         folder becomes the active workspace; the previous one stays saved and is reached again by
@@ -262,6 +273,136 @@
         </div>
         <div id="detect-chips" style="margin-top:12px; display:flex; flex-wrap:wrap; gap:6px;"></div>
       </div>
+    </div>
+
+  </section>
+
+  <section id="findclass-section" class="hidden">
+
+    <div class="card">
+      <h2 style="margin-top:0;">Model</h2>
+
+      <div class="checkbox-row">
+        <input type="radio" name="findclass-backend" value="local" id="findclass-backend-local" checked />
+        <label for="findclass-backend-local" style="margin:0;">Local (.pt)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="radio" name="findclass-backend" value="roboflow" id="findclass-backend-roboflow" />
+        <label for="findclass-backend-roboflow" style="margin:0;">Roboflow Cloud API</label>
+      </div>
+
+      <div id="findclass-local-fields">
+        <label for="findclass-model-select">Model</label>
+        <select class="input" id="findclass-model-select"></select>
+        <input class="input" type="text" id="findclass-model-path" list="model-datalist" value="yolo11n.pt"
+               style="margin-top:6px;" aria-label="Model path" />
+      </div>
+
+      <div id="findclass-roboflow-fields" class="hidden">
+        <label for="findclass-rf-api-key">Roboflow API Key</label>
+        <input class="input" type="password" id="findclass-rf-api-key" placeholder="rf_..." autocomplete="off" />
+
+        <label for="findclass-rf-workspace">Workspace</label>
+        <input class="input" type="text" id="findclass-rf-workspace" value="fhasai-khuanpan" />
+
+        <label for="findclass-rf-workflow-id">Workflow ID</label>
+        <input class="input" type="text" id="findclass-rf-workflow-id" value="ssid-v5-logic" />
+      </div>
+
+      <label>Device</label>
+      <div class="checkbox-row">
+        <input type="radio" name="findclass-device" value="cpu" id="findclass-device-cpu" checked />
+        <label for="findclass-device-cpu" style="margin:0;">CPU</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="radio" name="findclass-device" value="cuda" id="findclass-device-cuda" />
+        <label for="findclass-device-cuda" style="margin:0;">CUDA</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="radio" name="findclass-device" value="mps" id="findclass-device-mps" />
+        <label for="findclass-device-mps" style="margin:0;">MPS</label>
+      </div>
+
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:10px;">
+        <button class="btn-download" id="findclass-model-load-btn">Load model</button>
+        <span class="chip" id="findclass-model-status">Not loaded yet</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Target class(es)</h2>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">
+        A frame is kept whenever ANY checked class is detected above the match confidence below.
+      </div>
+      <div id="findclass-target-classes"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Videos &amp; sampling</h2>
+      <div id="findclass-video-info" style="font-size:13px; color:var(--muted);">No videos yet — upload one on the Extract tab.</div>
+
+      <label for="findclass-sample-interval" style="margin-top:10px;">Sample every (seconds)</label>
+      <input class="input" type="number" id="findclass-sample-interval" value="0.5" min="0.1" step="0.1" />
+      <div style="font-size:12px; color:var(--muted); margin-top:4px;">
+        Smaller = fewer chances to miss a brief appearance of the class, but slower.
+      </div>
+
+      <div class="section-label">Trim (optional)</div>
+      <div class="field-row">
+        <div>
+          <label for="findclass-start-sec">Start time (seconds)</label>
+          <input class="input" type="number" id="findclass-start-sec" value="0" min="0" step="0.1" />
+        </div>
+        <div>
+          <label for="findclass-end-sec">End time (seconds)</label>
+          <input class="input" type="number" id="findclass-end-sec" min="0" step="0.1" placeholder="until end of video" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Match settings</h2>
+
+      <label for="findclass-match-conf">Match confidence threshold: <span id="findclass-match-conf-label">0.25</span></label>
+      <input type="range" id="findclass-match-conf" min="0.01" max="0.99" step="0.01" value="0.25" />
+      <div style="font-size:12px; color:var(--muted); margin:-4px 0 10px;">
+        How confident the model must be in the target class for a frame to count as a match.
+      </div>
+
+      <label for="findclass-conf">Detector confidence threshold: <span id="findclass-conf-label">0.25</span></label>
+      <input type="range" id="findclass-conf" min="0.01" max="0.99" step="0.01" value="0.25" />
+
+      <label for="findclass-iou">IoU threshold: <span id="findclass-iou-label">0.45</span></label>
+      <input type="range" id="findclass-iou" min="0.01" max="0.99" step="0.01" value="0.45" />
+
+      <div class="checkbox-row" style="margin-top:10px;">
+        <input type="checkbox" id="findclass-dedup" checked />
+        <label for="findclass-dedup" style="margin:0;">Skip near-duplicate matches</label>
+      </div>
+
+      <label for="findclass-max-matches">Max matches (optional)</label>
+      <input class="input" type="number" id="findclass-max-matches" min="1" step="1" placeholder="no limit" />
+
+      <div style="margin-top:20px;">
+        <button id="findclass-start-btn" class="btn-primary" disabled>Start Find Class</button>
+        <button id="findclass-stop-btn" class="btn-stop hidden">Stop</button>
+      </div>
+
+      <div id="findclass-progress-wrap" class="hidden">
+        <div class="progress-bar"><div id="findclass-progress-fill" class="progress-bar-fill"></div></div>
+        <div id="findclass-progress-label" style="font-size:13px; color:var(--muted);"></div>
+        <div id="findclass-log" class="log-panel"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-top:0;">Matched frames</h2>
+      <div id="findclass-results-info" style="font-size:13px; color:var(--muted);">No results yet — run Find Class above.</div>
+      <div id="findclass-results-actions" class="hidden" style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+        <button id="findclass-view-annotate-btn" class="btn-download">View in Annotate</button>
+        <button id="findclass-export-btn" class="btn-download">Export matched frames</button>
+      </div>
+      <ul id="findclass-gallery" class="filmstrip-list" style="margin-top:12px;"></ul>
     </div>
 
   </section>
@@ -313,6 +454,12 @@
           <button id="annotate-bulk-delete-btn" class="btn-stop" style="padding:6px 12px; font-size:12px; white-space:nowrap;">Delete Selected</button>
         </div>
         <button id="annotate-copy-prev-btn" class="btn-download" style="width:100%;">⬅ Copy from previous frame</button>
+
+        <label for="annotate-class-select">New Class</label>
+        <select class="input" id="annotate-class-select"></select>
+        <button id="annotate-save-next-btn" class="btn-primary" style="margin-top:20px; width:100%;">Save &amp; Next →</button>
+        <button id="annotate-save-btn" class="btn-download" style="margin-top:8px; width:100%;">Save (stay on frame)</button>
+        <button id="annotate-clear-btn" class="btn-stop" style="margin-top:8px; width:100%;">Clear All Boxes</button>
 
         <div class="section-label">AI suggestions (dashed)</div>
         <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">
@@ -386,12 +533,6 @@
         <button id="ocr-batch-btn" class="btn-download" style="margin-top:8px; width:100%;">Run OCR on all frames</button>
         <button id="ocr-batch-stop-btn" class="btn-stop hidden" style="margin-top:4px; width:100%;">Stop</button>
         <div id="ocr-batch-status" style="font-size:11px; color:var(--muted); margin-top:4px;"></div>
-
-        <label for="annotate-class-select">New Class</label>
-        <select class="input" id="annotate-class-select"></select>
-        <button id="annotate-save-next-btn" class="btn-primary" style="margin-top:20px; width:100%;">Save &amp; Next →</button>
-        <button id="annotate-save-btn" class="btn-download" style="margin-top:8px; width:100%;">Save (stay on frame)</button>
-        <button id="annotate-clear-btn" class="btn-stop" style="margin-top:8px; width:100%;">Clear All Boxes</button>
       </div>
     </div>
 
@@ -443,6 +584,13 @@
         <label for="export-task-pose" style="margin:0;">Pose (keypoints — Ultralytics YOLO-pose format)</label>
       </div>
       <div style="font-size:12px; color:var(--muted); margin-top:4px;">Bbox-only detections export as their rectangle's 4 corners when Segment is selected, or as bbox-only with all-zero (unlabeled) keypoint slots when Pose is selected — so a mixed dataset still trains either way.</div>
+
+      <label for="export-yolo-version" style="display:block; margin-top:10px;">YOLO Version</label>
+      <select class="input" id="export-yolo-version">
+        <option value="v11" selected>YOLOv11</option>
+        <option value="v8">YOLOv8</option>
+        <option value="v26">YOLO26</option>
+      </select>
     </div>
 
     <div class="card">
@@ -492,14 +640,14 @@
       </div>
       <label for="export-aug-multiplier">Augmentation Multiplier: <span id="export-aug-multiplier-label">1</span></label>
       <input type="range" id="export-aug-multiplier" min="1" max="10" step="1" value="1" />
-      <div style="font-size:12px; color:var(--muted); margin-top:4px;">Multiplier above 1x requires the <code>albumentations</code> package (not installed by default).</div>
+      <div id="export-aug-availability-note" style="font-size:12px; color:var(--muted); margin-top:4px;">Multiplier above 1x requires the <code>albumentations</code> package (not installed by default).</div>
     </div>
 
     <div class="card">
       <h2 style="margin-top:0;">Create Version</h2>
       <div id="export-max-size-label" style="font-size:16px; font-weight:600; color:var(--highlight); margin-bottom:12px;">Maximum Version Size: — images</div>
 
-      <button id="export-start-btn" class="btn-primary" disabled>🚀 Create Version</button>
+      <button id="export-start-btn" class="btn-primary" disabled>Create Version</button>
 
       <div id="export-progress-wrap" class="hidden">
         <div class="progress-bar"><div id="export-progress-fill" class="progress-bar-fill"></div></div>
@@ -558,19 +706,25 @@
 
     <div class="card">
       <h2 style="margin-top:0;">Detections by Class</h2>
-      <table class="data-table" id="analytics-class-table">
-        <thead><tr><th>Class</th><th>Count</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="data-table" id="analytics-class-table">
+          <thead><tr><th>Class</th><th>Count</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="card">
       <h2 style="margin-top:0;">Model / Detect-Job History</h2>
-      <table class="data-table" id="analytics-jobs-table">
-        <thead><tr><th>When</th><th>Backend</th><th>Model</th><th>Frames</th><th>Detected</th><th>Status</th></tr></thead>
-        <tbody></tbody>
-      </table>
+      <div class="table-scroll">
+        <table class="data-table" id="analytics-jobs-table">
+          <thead><tr><th>When</th><th>Backend</th><th>Model</th><th>Frames</th><th>Detected</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
+
+    <button id="analytics-scroll-top" title="Scroll to top">↑</button>
 
   </section>
 

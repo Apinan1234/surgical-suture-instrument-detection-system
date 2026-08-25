@@ -756,6 +756,26 @@ body.annotate-fill .annotate-props {
   font-family: inherit;
 }
 
+#analytics-scroll-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--highlight);
+  color: #fff;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .context-menu {
   position: fixed;
   background: var(--bg-panel);
@@ -807,8 +827,8 @@ body.annotate-fill .annotate-props {
 }
 
 .stat-tile-row {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 16px;
   margin-top: 8px;
 }
@@ -830,6 +850,18 @@ body.annotate-fill .annotate-props {
   font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.cell-truncate {
+  display: block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .data-table {

@@ -159,7 +159,7 @@ function switchTab(name) {
   document.querySelectorAll("main > section").forEach((section) => {
     section.classList.toggle("hidden", section.id !== `${name}-section`);
   });
-  document.querySelector("main").classList.toggle("wide", name === "annotate");
+  document.querySelector("main").classList.toggle("wide", name === "annotate" || name === "analytics");
   document.body.classList.toggle("annotate-fill", name === "annotate");
   // The resize has to happen here rather than on the tab button, because the footer step nav below
   // calls switchTab() directly. Reading clientWidth forces the layout the class change just asked
@@ -259,6 +259,22 @@ async function refreshVideoList() {
     li.appendChild(delBtn);
     list.appendChild(li);
   });
+  updateFindclassVideoInfo();
+}
+
+// Find Class scans every uploaded video, same as Extract's video_ids: uploadedVideos.map(...) — no
+// per-video picker, matching the existing convention that Extract itself has none either.
+function updateFindclassVideoInfo() {
+  const info = document.getElementById("findclass-video-info");
+  const startBtn = document.getElementById("findclass-start-btn");
+  if (!info || !startBtn) return;
+  if (uploadedVideos.length) {
+    info.textContent = `${uploadedVideos.length} video(s) ready (uploaded on the Extract tab). Find Class scans all of them.`;
+    startBtn.disabled = false;
+  } else {
+    info.textContent = "No videos yet — upload one on the Extract tab.";
+    startBtn.disabled = true;
+  }
 }
 
 // Mode field toggling — "All Frames" mode ignores compare/blur/max-attempts server-side,
@@ -302,6 +318,13 @@ function setExtractJobId(id) {
 }
 let pollTimer = null;
 
+// currentExtractJobId doubles as "whatever is the active Detect input" and gets overwritten by a
+// manual frame-folder upload (see the frames-upload-input handler below) - so it cannot answer "what
+// was my last real Extract run" once an upload has happened. This tracks only genuine Extract runs,
+// letting the "Use frames from Extract" button undo an upload's takeover.
+let lastRealExtractJobId = null;
+const lastRealExtractJobPointer = makeJobPointer("last_real_extract_job_id", "/api/extract");
+
 document.getElementById("extract-start-btn").addEventListener("click", async () => {
   const mode = document.querySelector('input[name="mode"]:checked').value;
   const endSecValue = document.getElementById("end-sec").value;
@@ -337,18 +360,61 @@ document.getElementById("extract-start-btn").addEventListener("click", async () 
 
   const data = await res.json();
   setExtractJobId(data.job_id);
+  lastRealExtractJobId = data.job_id;
+  lastRealExtractJobPointer.set(data.job_id);
   document.getElementById("extract-start-btn").disabled = true;
   document.getElementById("extract-stop-btn").classList.remove("hidden");
   document.getElementById("extract-progress-wrap").classList.remove("hidden");
   document.getElementById("extract-log").innerHTML = "";
   document.getElementById("download-zip-btn").classList.add("hidden");
+  document.getElementById("zip-progress-wrap").classList.add("hidden");
   startPolling();
 });
 
-document.getElementById("download-zip-btn").addEventListener("click", () => {
+// The zip is built as a job (not returned from one request) specifically so this can show real
+// progress: the old single GET built the whole archive in memory before any byte of the response
+// went out, so there was nothing to poll and nothing to show while the slow part happened.
+let currentZipJobId = null;
+let zipPollTimer = null;
+
+document.getElementById("download-zip-btn").addEventListener("click", async () => {
   if (!currentExtractJobId) return;
-  downloadViaApi(`/api/extract/${currentExtractJobId}/zip`, "frames.zip");
+  const btn = document.getElementById("download-zip-btn");
+  btn.disabled = true;
+  const res = await apiFetch(`/api/extract/${currentExtractJobId}/zip`, { method: "POST" });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    alert(errBody.detail || "Failed to start zip build");
+    btn.disabled = false;
+    return;
+  }
+  const data = await res.json();
+  currentZipJobId = data.job_id;
+  document.getElementById("zip-progress-wrap").classList.remove("hidden");
+  startZipPolling();
 });
+
+function startZipPolling() {
+  zipPollTimer = setInterval(async () => {
+    const res = await apiFetch(`/api/extract/zip/${currentZipJobId}`);
+    if (!res.ok) return;
+    const job = await res.json();
+    document.getElementById("zip-progress-fill").style.width = job.progress + "%";
+    document.getElementById("zip-progress-label").textContent = job.status + " — " + job.progress + "%";
+
+    if (job.status === "done" || job.status === "error") {
+      clearInterval(zipPollTimer);
+      zipPollTimer = null;
+      document.getElementById("download-zip-btn").disabled = false;
+      if (job.status === "done") {
+        document.getElementById("zip-progress-label").textContent = "done — starting download...";
+        downloadViaApi(`/api/extract/zip/${currentZipJobId}/download`, "frames.zip");
+      } else {
+        alert(job.error || "Zip build failed");
+      }
+    }
+  }, 1000);
+}
 
 document.getElementById("extract-stop-btn").addEventListener("click", async () => {
   if (!currentExtractJobId) return;
@@ -356,8 +422,8 @@ document.getElementById("extract-stop-btn").addEventListener("click", async () =
 });
 
 function classifyLogLine(line) {
-  if (line.includes("[saved]") || line.includes("[detected]") || line.includes("เสร็จ")) return "log-ok";
-  if (line.includes("[skip]") || line.includes("[empty]")) return "log-skip";
+  if (line.includes("[saved]") || line.includes("[detected]") || line.includes("[matched]") || line.includes("เสร็จ")) return "log-ok";
+  if (line.includes("[skip]") || line.includes("[empty]") || line.includes("[dedup]")) return "log-skip";
   if (line.includes("[blur]")) return "log-blur";
   if (line.includes("[error]")) return "log-skip";
   return "log-info";
@@ -419,6 +485,15 @@ async function restoreExtractJob() {
   claimActiveFrames(job.frame_ids, restored.at);
 }
 
+// Deliberately not derived from restoreExtractJob()'s result - that restores whatever was last
+// active, which may be an upload. This restores only the last genuine Extract run.
+async function restoreLastRealExtractJobPointer() {
+  const restored = await lastRealExtractJobPointer.restore();
+  if (restored) lastRealExtractJobId = restored.id;
+  const btn = document.getElementById("use-extract-frames-btn");
+  if (btn) btn.disabled = !lastRealExtractJobId;
+}
+
 // ────────────────────────────── F-4: Detect section ──────────────────────────────
 
 let lastExtractedFrameIds = [];
@@ -443,6 +518,12 @@ function setDetectJobId(id) {
   detectJobPointer.set(id);
 }
 
+// currentDetectJobId can now point at a Find Class job too (see "View in Annotate" below) — that job
+// shape has matched_total where a Detect job has detected_total. Same idea, different key.
+function frameJobHitCount(job) {
+  return job.detected_total != null ? job.detected_total : job.matched_total || 0;
+}
+
 async function restoreDetectJob() {
   const restored = await detectJobPointer.restore();
   if (!restored) return;
@@ -463,7 +544,7 @@ async function restoreDetectJob() {
   }
   document.getElementById("detect-progress-fill").style.width = job.progress + "%";
   document.getElementById("detect-progress-label").textContent =
-    job.status + " — " + job.detected_total + "/" + job.frame_ids.length + " frames with objects";
+    job.status + " — " + frameJobHitCount(job) + "/" + job.frame_ids.length + " frames with objects";
   await loadDetectFrames(job.frame_ids);
 }
 
@@ -506,9 +587,35 @@ document.getElementById("frames-upload-input").addEventListener("change", async 
   }
 });
 
+// A manual upload above overwrites currentExtractJobId/lastExtractedFrameIds, and there is otherwise
+// no way back to "use my Extract run's frames" short of re-running Extract. lastRealExtractJobId is
+// never touched by an upload, so re-fetching from it always recovers the real run.
+document.getElementById("use-extract-frames-btn").addEventListener("click", async () => {
+  if (!lastRealExtractJobId) return;
+  const btn = document.getElementById("use-extract-frames-btn");
+  btn.disabled = true;
+  try {
+    const res = await apiFetch(`/api/extract/${lastRealExtractJobId}/frames`);
+    if (!res.ok) {
+      alert("Could not load frames from that Extract run.");
+      return;
+    }
+    const data = await res.json();
+    const ids = data.frames.map((f) => f.id);
+    setExtractJobId(lastRealExtractJobId); // also realigns the ZIP-download button to this job
+    claimActiveFrames(ids, Date.now());
+    document.getElementById("frames-upload-status").textContent =
+      `Restored ${ids.length} frame(s) from the Extract run.`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function updateDetectFramesInfo() {
   const info = document.getElementById("detect-frames-info");
   const startBtn = document.getElementById("detect-start-btn");
+  const useExtractBtn = document.getElementById("use-extract-frames-btn");
+  if (useExtractBtn) useExtractBtn.disabled = !lastRealExtractJobId;
   if (lastExtractedFrameIds.length) {
     info.textContent = `${lastExtractedFrameIds.length} frames ready from the last Extract run.`;
     startBtn.disabled = false;
@@ -523,10 +630,11 @@ function updateDetectFramesInfo() {
 const MODEL_PICKERS = [
   ["model-select", "model-path"],
   ["assist-model-select", "assist-model-path"],
+  ["findclass-model-select", "findclass-model-path"],
 ];
 
-// One status chip per picker. Both show the same thing; they are on different tabs.
-const MODEL_STATUS_CHIPS = ["model-status", "assist-model-status"];
+// One status chip per picker. All three show the same thing; they are on different tabs.
+const MODEL_STATUS_CHIPS = ["model-status", "assist-model-status", "findclass-model-status"];
 
 // Render order for the picker, most-likely-correct first. The wording on the base group is
 // deliberate: those weights work fine, they just answer a different question than this project asks.
@@ -535,6 +643,17 @@ const MODEL_GROUPS = [
   ["checkpoint", "Training run outputs"],
   ["base", "Stock COCO weights — detect person/car/dog, NOT instruments"],
 ];
+
+// Which of everything _scan_models() reports actually belongs in front of someone reviewing this
+// project. Server-side stays a plain inventory of every .pt on disk on purpose; this is a display
+// decision, made here the same way MODEL_GROUPS already decides display grouping. Reversible by
+// deleting these two constants alone - nothing on disk changes, and every hidden model stays loadable
+// through the text input + datalist below, which stay unfiltered on purpose.
+const CURATED_MODEL_PATHS = ["models/ssid9_960px_150ep_20260813_map50-716.pt"];
+const MODEL_DISPLAY_NAMES = {
+  "models/ssid9_960px_150ep_20260813_map50-716.pt":
+    "Surgical Instrument Detector — 9 classes, mAP50 71.6% (recommended)",
+};
 
 // ── ModelState ──
 //
@@ -596,6 +715,7 @@ async function refreshModelOptions() {
   const res = await apiFetch("/api/models");
   if (!res.ok) return;
   const data = await res.json();
+  const curatedModels = data.models.filter((m) => CURATED_MODEL_PATHS.includes(m.path));
   const list = document.getElementById("model-datalist");
   list.innerHTML = "";
   data.models.forEach((m) => {
@@ -622,7 +742,7 @@ async function refreshModelOptions() {
     // person/car/dog rather than surgical instruments. Loading one of those by mistake is what put
     // "person 0.78" on a set of screenshots.
     MODEL_GROUPS.forEach(([kind, groupLabel]) => {
-      const inGroup = data.models.filter((m) => m.kind === kind);
+      const inGroup = curatedModels.filter((m) => m.kind === kind);
       if (!inGroup.length) return;
       const group = document.createElement("optgroup");
       group.label = groupLabel;
@@ -637,7 +757,7 @@ async function refreshModelOptions() {
         const bits = [cls];
         if (m.imgsz) bits.push(`${m.imgsz} px`);
         bits.push(`${m.size_mb} MB`);
-        opt.textContent = `${m.path} — ${bits.join(" · ")}`;
+        opt.textContent = MODEL_DISPLAY_NAMES[m.path] || `${m.path} — ${bits.join(" · ")}`;
         group.appendChild(opt);
       });
       select.appendChild(group);
@@ -647,12 +767,13 @@ async function refreshModelOptions() {
 
   // First visit: the markup ships yolo11n.pt, a stock COCO weight, so the very first Load gave a
   // detector that finds person/car/dog. If the user has never chosen a model and the current one is
-  // a stock weight, adopt the newest model actually trained for this project instead.
+  // a stock weight, adopt the curated project model instead - sorting `kind === "project"` by mtime
+  // used to do this, but any newer file dropped into models/ (e.g. a test upload) would silently
+  // outrank the documented current-best checkpoint. Curation fixes both problems at once.
   if (!localStorage.getItem("active_model_path")) {
     const current = data.models.find((m) => m.path === ModelState.getPath());
     if (!current || current.kind === "base") {
-      const project = data.models.filter((m) => m.kind === "project").sort((x, y) =>
-        y.mtime - x.mtime)[0];
+      const project = curatedModels.sort((x, y) => y.mtime - x.mtime)[0];
       if (project) ModelState.setPath(project.path);
     }
   }
@@ -739,6 +860,71 @@ async function loadModelFrom(panel) {
 document.getElementById("model-load-btn").addEventListener("click", () => loadModelFrom("detect"));
 document.getElementById("assist-model-load-btn").addEventListener("click", () => loadModelFrom("assist"));
 
+// Not routed through loadModelFrom(): that helper's two panels ("detect"/"assist") are already a
+// binary pick(a, b) shape, and Find Class's fields are fully "findclass-"-prefixed (unlike Detect's
+// bare rf-*/device ids) — a third branch would need its own id lookups anyway, so a small dedicated
+// function is less risk than reshaping a helper two other panels depend on.
+async function loadFindclassModel() {
+  const backend = document.querySelector('input[name="findclass-backend"]:checked').value;
+  const body = {
+    backend: backend,
+    model_path: ModelState.getPath(),
+    conf: parseFloat(document.getElementById("findclass-conf").value),
+    iou: parseFloat(document.getElementById("findclass-iou").value),
+    device: document.querySelector('input[name="findclass-device"]:checked').value,
+  };
+  if (backend === "roboflow") {
+    const apiKey = document.getElementById("findclass-rf-api-key").value.trim();
+    if (!apiKey) {
+      alert("Please enter a Roboflow API Key first");
+      return;
+    }
+    body.api_key = apiKey;
+    body.workspace_name = document.getElementById("findclass-rf-workspace").value.trim();
+    body.workflow_id = document.getElementById("findclass-rf-workflow-id").value.trim();
+  }
+
+  ModelState.setStatus("loading", "Loading...");
+  const res = await apiFetch("/api/models/load", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    ModelState.setStatus("error", errBody.detail || `Failed to load (HTTP ${res.status})`);
+    return;
+  }
+  const data = await res.json();
+  const label = backend === "roboflow" ? body.workflow_id : data.model_path;
+  const task = data.task ? data.task + ", " : "";
+  const size = data.imgsz ? ` @ ${data.imgsz} px` : "";
+  ModelState.setStatus("ready", `✓ Ready — ${label} (${task}${describeClasses(data.class_names || [])})${size}`);
+  updateFindclassTargetClassAvailability(data.class_names || []);
+}
+
+document.getElementById("findclass-model-load-btn").addEventListener("click", () => loadFindclassModel());
+
+function updateFindclassBackendFields() {
+  const backend = document.querySelector('input[name="findclass-backend"]:checked').value;
+  document.getElementById("findclass-local-fields").classList.toggle("hidden", backend !== "local");
+  document.getElementById("findclass-roboflow-fields").classList.toggle("hidden", backend !== "roboflow");
+}
+document.querySelectorAll('input[name="findclass-backend"]').forEach((el) => {
+  el.addEventListener("change", updateFindclassBackendFields);
+});
+updateFindclassBackendFields();
+
+document.getElementById("findclass-match-conf").addEventListener("input", (e) => {
+  document.getElementById("findclass-match-conf-label").textContent = e.target.value;
+});
+document.getElementById("findclass-conf").addEventListener("input", (e) => {
+  document.getElementById("findclass-conf-label").textContent = e.target.value;
+});
+document.getElementById("findclass-iou").addEventListener("input", (e) => {
+  document.getElementById("findclass-iou-label").textContent = e.target.value;
+});
+
 document.getElementById("model-upload-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
@@ -772,6 +958,7 @@ async function refreshClasses() {
   populateAnnotateClassSelect();
   buildClassConfInputs("detect-class-conf");
   buildClassConfInputs("assist-class-conf");
+  buildFindclassTargetClasses();
 }
 
 // One number input per class, generated from the same `classNames` list the class dropdowns use, so
@@ -818,6 +1005,59 @@ function readClassConf(containerId) {
     if (!Number.isNaN(value)) out[input.dataset.className] = value;
   });
   return out;
+}
+
+// One checkbox per class, same data source as buildClassConfInputs. Unlike a per-class conf
+// override (blank = inherit), a target class is opt-in: nothing checked means nothing to look for.
+function buildFindclassTargetClasses() {
+  const container = document.getElementById("findclass-target-classes");
+  if (!container) return;
+  const previouslyChecked = new Set(readFindclassTargetClasses());
+  container.innerHTML = "";
+  classNames.forEach((name) => {
+    const row = document.createElement("div");
+    row.className = "checkbox-row";
+
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = `findclass-class-${name}`;
+    input.dataset.className = name;
+    if (previouslyChecked.has(name)) input.checked = true;
+
+    const label = document.createElement("label");
+    label.htmlFor = input.id;
+    label.style.margin = "0";
+    label.style.display = "flex";
+    label.style.alignItems = "center";
+    label.style.gap = "6px";
+    const swatch = document.createElement("span");
+    swatch.style.cssText = `display:inline-block; width:10px; height:10px; border-radius:2px; background:${classColors[name] || "#AAAAAA"};`;
+    label.appendChild(swatch);
+    label.appendChild(document.createTextNode(name));
+
+    row.appendChild(input);
+    row.appendChild(label);
+    container.appendChild(row);
+  });
+}
+
+function readFindclassTargetClasses() {
+  return Array.from(document.querySelectorAll("#findclass-target-classes input[data-class-name]:checked")).map(
+    (el) => el.dataset.className
+  );
+}
+
+// Grays out (and unchecks) a target class the just-loaded model doesn't actually have, rather than
+// letting the run silently never match it. An empty list (no model loaded yet, or a Roboflow backend
+// that reports none) leaves every class enabled — "unknown" is not the same as "unavailable".
+function updateFindclassTargetClassAvailability(modelClassNames) {
+  const available = new Set(modelClassNames || []);
+  document.querySelectorAll("#findclass-target-classes input[data-class-name]").forEach((input) => {
+    const ok = available.size === 0 || available.has(input.dataset.className);
+    input.disabled = !ok;
+    input.closest(".checkbox-row").style.opacity = ok ? "1" : "0.4";
+    if (!ok) input.checked = false;
+  });
 }
 
 function updateBackendFields() {
@@ -924,7 +1164,7 @@ function startDetectPolling() {
       document.getElementById("detect-start-btn").disabled = false;
       document.getElementById("detect-stop-btn").classList.add("hidden");
       document.getElementById("detect-progress-label").textContent =
-        job.status + " — " + job.detected_total + "/" + job.frame_ids.length + " frames with objects";
+        job.status + " — " + frameJobHitCount(job) + "/" + job.frame_ids.length + " frames with objects";
       await loadDetectFrames(job.frame_ids);
     }
   }, 1000);
@@ -1000,6 +1240,226 @@ function renderDetectionChips(detections) {
     container.appendChild(warn);
   }
 }
+
+// ────────────────────────────── F-4b: Find Class section ──────────────────────────────
+// Given a loaded model and every uploaded video, walk the video(s) and keep only the frames where a
+// chosen class actually appears — for mining more examples of an underrepresented class without
+// scrubbing through the footage by hand. Its results are a frame-producing job just like Detect's,
+// so "View in Annotate" / "Export matched frames" below just point the existing Detect-driven
+// Annotate/Export tabs at this job's id instead of building parallel UI for either.
+
+let currentFindclassJobId = null;
+let findclassPollTimer = null;
+const findclassJobPointer = makeJobPointer("findclass_job_id", "/api/findclass");
+
+function setFindclassJobId(id) {
+  currentFindclassJobId = id;
+  findclassJobPointer.set(id);
+}
+
+function formatVideoTimestamp(sec) {
+  const total = Math.max(0, Math.floor(sec));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function confirmFindclassRoboflowCall() {
+  return window.confirm(
+    "This will send sampled frames from the selected video(s) to the Roboflow Cloud API as the run " +
+    "progresses — potentially many, depending on video length and the sampling interval — and may " +
+    "consume significant API credits. Continue?"
+  );
+}
+
+document.getElementById("findclass-start-btn").addEventListener("click", async () => {
+  const backend = document.querySelector('input[name="findclass-backend"]:checked').value;
+  const targetClasses = readFindclassTargetClasses();
+  if (!targetClasses.length) {
+    alert("Pick at least one target class first");
+    return;
+  }
+
+  const endSecValue = document.getElementById("findclass-end-sec").value;
+  const maxMatchesValue = document.getElementById("findclass-max-matches").value;
+  const body = {
+    video_ids: uploadedVideos.map((v) => v.id),
+    target_classes: targetClasses,
+    backend,
+    model_path: document.getElementById("findclass-model-path").value,
+    conf: parseFloat(document.getElementById("findclass-conf").value),
+    iou: parseFloat(document.getElementById("findclass-iou").value),
+    device: document.querySelector('input[name="findclass-device"]:checked').value,
+    match_conf: parseFloat(document.getElementById("findclass-match-conf").value),
+    sample_interval_sec: parseFloat(document.getElementById("findclass-sample-interval").value),
+    start_sec: parseFloat(document.getElementById("findclass-start-sec").value) || 0,
+    end_sec: endSecValue ? parseFloat(endSecValue) : null,
+    dedup_threshold: document.getElementById("findclass-dedup").checked ? 8.0 : null,
+    max_matches: maxMatchesValue ? parseInt(maxMatchesValue, 10) : null,
+  };
+
+  if (backend === "roboflow") {
+    const apiKey = document.getElementById("findclass-rf-api-key").value.trim();
+    if (!apiKey) {
+      alert("Please enter a Roboflow API Key first");
+      return;
+    }
+    if (!confirmFindclassRoboflowCall()) return;
+    body.api_key = apiKey;
+    body.workspace_name = document.getElementById("findclass-rf-workspace").value.trim();
+    body.workflow_id = document.getElementById("findclass-rf-workflow-id").value.trim();
+  }
+
+  const res = await apiFetch("/api/findclass", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    alert(errBody.detail || "Failed to start Find Class");
+    return;
+  }
+
+  const data = await res.json();
+  setFindclassJobId(data.job_id);
+  document.getElementById("findclass-start-btn").disabled = true;
+  document.getElementById("findclass-stop-btn").classList.remove("hidden");
+  document.getElementById("findclass-progress-wrap").classList.remove("hidden");
+  document.getElementById("findclass-log").innerHTML = "";
+  document.getElementById("findclass-results-actions").classList.add("hidden");
+  document.getElementById("findclass-gallery").innerHTML = "";
+  document.getElementById("findclass-results-info").textContent = "Running…";
+  startFindclassPolling();
+});
+
+document.getElementById("findclass-stop-btn").addEventListener("click", async () => {
+  if (!currentFindclassJobId) return;
+  await apiFetch(`/api/findclass/${currentFindclassJobId}/stop`, { method: "POST" });
+});
+
+function startFindclassPolling() {
+  let lastLogLength = 0;
+  findclassPollTimer = setInterval(async () => {
+    const res = await apiFetch(`/api/findclass/${currentFindclassJobId}`);
+    if (!res.ok) return;
+    const job = await res.json();
+
+    document.getElementById("findclass-progress-fill").style.width = job.progress + "%";
+    document.getElementById("findclass-progress-label").textContent =
+      job.status + " — " + job.progress + "% — " + (job.matched_total || 0) + " matched so far";
+
+    const logEl = document.getElementById("findclass-log");
+    for (let i = lastLogLength; i < job.log.length; i++) {
+      const div = document.createElement("div");
+      div.className = "log-line " + classifyLogLine(job.log[i]);
+      div.textContent = job.log[i];
+      logEl.appendChild(div);
+    }
+    lastLogLength = job.log.length;
+    logEl.scrollTop = logEl.scrollHeight;
+
+    if (job.status === "done" || job.status === "stopped") {
+      clearInterval(findclassPollTimer);
+      document.getElementById("findclass-start-btn").disabled = false;
+      document.getElementById("findclass-stop-btn").classList.add("hidden");
+      await finishFindclassRun(job);
+    }
+  }, 1000);
+}
+
+async function finishFindclassRun(job) {
+  const matched = job.matched_total || 0;
+  document.getElementById("findclass-results-info").textContent =
+    `${job.status} — ${matched} matching frame(s) found.`;
+  document.getElementById("findclass-results-actions").classList.toggle("hidden", matched === 0);
+  await loadFindclassGallery(job.id, job.frame_ids);
+}
+
+async function restoreFindclassJob() {
+  const restored = await findclassJobPointer.restore();
+  if (!restored) return;
+  const job = restored.job;
+  setFindclassJobId(restored.id);
+  document.getElementById("findclass-progress-wrap").classList.remove("hidden");
+
+  if (job.status === "running") {
+    document.getElementById("findclass-start-btn").disabled = true;
+    document.getElementById("findclass-stop-btn").classList.remove("hidden");
+    startFindclassPolling();
+    return;
+  }
+  document.getElementById("findclass-progress-fill").style.width = job.progress + "%";
+  document.getElementById("findclass-progress-label").textContent =
+    job.status + " — " + (job.matched_total || 0) + " matched";
+  await finishFindclassRun(job);
+}
+
+// Lazy-loaded, same technique as the Annotate filmstrip (Filmstrip below) — a run with hundreds of
+// matches should not fire hundreds of image requests the moment the tab renders.
+const findclassGalleryObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (!entry.isIntersecting) return;
+    const img = entry.target;
+    if (img.dataset.src && img.src !== img.dataset.src) loadAuthedImage(img, img.dataset.src);
+    findclassGalleryObserver.unobserve(img);
+  });
+}, { rootMargin: "200px" });
+
+async function loadFindclassGallery(jobId, frameIds) {
+  const gallery = document.getElementById("findclass-gallery");
+  gallery.innerHTML = "";
+  if (!jobId || !frameIds || !frameIds.length) return;
+
+  const res = await apiFetch(`/api/findclass/${jobId}/frames?limit=${FRAMES_PAGE_SIZE}&offset=0`);
+  if (!res.ok) return;
+  const data = await res.json();
+  const frames = data.frames || [];
+
+  frames.forEach((frame) => {
+    const li = document.createElement("li");
+    const img = document.createElement("img");
+    img.className = "filmstrip-thumb";
+    img.alt = "";
+    img.dataset.src = Api.thumbnailUrl(frame.id, 160);
+    findclassGalleryObserver.observe(img);
+
+    const label = document.createElement("span");
+    label.className = "filmstrip-label";
+    const t = typeof frame.video_time_sec === "number" ? formatVideoTimestamp(frame.video_time_sec) : "?";
+    const conf = typeof frame.target_match_conf === "number" ? frame.target_match_conf.toFixed(2) : "?";
+    label.textContent = `${t} — conf ${conf}`;
+
+    li.appendChild(img);
+    li.appendChild(label);
+    gallery.appendChild(li);
+  });
+
+  if (data.total > frames.length) {
+    const li = document.createElement("li");
+    li.style.cssText = "font-size:11px; color:var(--muted); padding:6px;";
+    li.textContent = `…and ${data.total - frames.length} more match(es) — open in Annotate or Export to see all of them.`;
+    gallery.appendChild(li);
+  }
+}
+
+document.getElementById("findclass-view-annotate-btn").addEventListener("click", async () => {
+  if (!currentFindclassJobId) return;
+  const res = await apiFetch(`/api/findclass/${currentFindclassJobId}`);
+  if (!res.ok) return;
+  const job = await res.json();
+  setDetectJobId(currentFindclassJobId);
+  claimActiveFrames(job.frame_ids, Date.now());
+  await loadDetectFrames(job.frame_ids);
+  switchTab("annotate");
+});
+
+document.getElementById("findclass-export-btn").addEventListener("click", () => {
+  if (!currentFindclassJobId) return;
+  setDetectJobId(currentFindclassJobId);
+  switchTab("export");
+});
 
 // ────────────────────────────── S-5 / F-7: Annotate canvas engine ──────────────────────────────
 // Modules: Api, UndoManager, AnnotateState, Canvas, DrawBoxTool, SelectTool, Tools, Keyboard,
@@ -3148,6 +3608,9 @@ function updateAnnotateReviewStatus() {
   document.getElementById("annotate-review-status").textContent = frame.reviewed
     ? "✅ Reviewed"
     : "🔴 Needs Review";
+  document.getElementById("annotate-mark-reviewed-btn").textContent = frame.reviewed
+    ? "↩️ Mark as Unreviewed"
+    : "✅ Mark as Reviewed";
 }
 
 function updateToolButtons() {
@@ -3722,13 +4185,7 @@ document.getElementById("annotate-save-btn").addEventListener("click", async () 
   if (ok) alert("Saved");
 });
 
-document.getElementById("annotate-mark-reviewed-btn").addEventListener("click", async () => {
-  const frame = AnnotateState.currentFrame();
-  if (!frame) return;
-  const res = await Api.postReview(frame.id, true);
-  if (!res.ok) return;
-  AnnotateState.markReviewedLocal(true);
-});
+document.getElementById("annotate-mark-reviewed-btn").addEventListener("click", toggleReviewed);
 
 // ────────────────────────────── S-6: Export section ──────────────────────────────
 
@@ -3741,6 +4198,9 @@ function setExportJobId(id) {
 }
 let exportPollTimer = null;
 let exportPoolTotal = 0;
+// Whether the server can actually import albumentations. Assumed true until the first preview
+// response says otherwise, matching the multiplier input's static max="10" in the HTML.
+let augmentAvailable = true;
 
 async function refreshExportPreview() {
   if (!currentDetectJobId) {
@@ -3754,6 +4214,7 @@ async function refreshExportPreview() {
   if (!res.ok) return;
   const stats = await res.json();
   exportPoolTotal = stats.total;
+  augmentAvailable = stats.augment_available;
   document.getElementById("export-frames-info").textContent = `${stats.total} frame(s) available from the last Detect run.`;
   document.getElementById("export-stat-total").textContent = stats.total;
   document.getElementById("export-stat-classes").textContent = stats.class_count;
@@ -3762,7 +4223,7 @@ async function refreshExportPreview() {
   // would hand Start back mid-run every time the tab is switched away and back, and a restored
   // running job would lose its disabled state on the first tab switch after a reload.
   document.getElementById("export-start-btn").disabled = stats.total === 0 || exportPollTimer !== null;
-  updateExportMaxSizeLabel();
+  updateExportTaskUI();
 }
 
 document.getElementById("export-reviewed-only").addEventListener("change", refreshExportPreview);
@@ -3800,9 +4261,24 @@ function updateExportMaxSizeLabel() {
 
 function updateExportTaskUI() {
   const isDetect = document.querySelector('input[name="export-task"]:checked').value === "detect";
+  const augmentEnabled = isDetect && augmentAvailable;
   const card = document.getElementById("export-augment-card");
-  card.style.opacity = isDetect ? "" : "0.5";
-  card.querySelectorAll("input").forEach((el) => { el.disabled = !isDetect; });
+  card.style.opacity = augmentEnabled ? "" : "0.5";
+  card.querySelectorAll("input").forEach((el) => { el.disabled = !augmentEnabled; });
+  // Independent of the card-wide enable/disable above: even when the task is detect, the
+  // multiplier can't go past 1x if the server has no albumentations to run it with. Setting
+  // .max alone doesn't reliably clamp an existing .value in every browser, and a disabled
+  // input's stale .value would still be read (and sent to the server) by the click handler —
+  // so force both back to 1 explicitly rather than relying on the max attribute.
+  const multiplierEl = document.getElementById("export-aug-multiplier");
+  multiplierEl.max = augmentAvailable ? "10" : "1";
+  if (!augmentAvailable) {
+    multiplierEl.value = "1";
+    document.getElementById("export-aug-multiplier-label").textContent = "1";
+  }
+  document.getElementById("export-aug-availability-note").innerHTML = augmentAvailable
+    ? "Multiplier above 1x requires the <code>albumentations</code> package (not installed by default)."
+    : "<code>albumentations</code> is not installed on this server — multiplier is locked to 1x.";
   updateExportMaxSizeLabel();
 }
 
@@ -3842,6 +4318,7 @@ document.getElementById("export-start-btn").addEventListener("click", async () =
     version_name: document.getElementById("export-version-name").value || "v1",
     reviewed_only: document.getElementById("export-reviewed-only").checked,
     task: document.querySelector('input[name="export-task"]:checked').value,
+    yolo_version: document.getElementById("export-yolo-version").value,
     splits: { train: tr, val: va, test: te },
     preprocess: { resize: document.getElementById("export-resize").checked, resize_size: 640 },
     augment: {
@@ -3930,9 +4407,21 @@ document.getElementById("export-download-btn").addEventListener("click", () => {
 
 // ────────────────────────────── Analytics section ──────────────────────────────
 
-function analyticsCell(text) {
+function analyticsCell(text, opts) {
   const td = document.createElement("td");
-  td.textContent = text;
+  if (opts && opts.truncate) {
+    // max-width on a <td> is only a hint under automatic table layout - Chromium will still
+    // expand the column past it when the table has spare width:100% to distribute. Applying
+    // the cap to an inner block-level span instead makes it a hard constraint the table's
+    // layout can't override, so a long path always ellipsizes rather than sometimes not.
+    const span = document.createElement("span");
+    span.className = "cell-truncate";
+    span.textContent = text;
+    span.title = text;
+    td.appendChild(span);
+  } else {
+    td.textContent = text;
+  }
   return td;
 }
 
@@ -3992,7 +4481,7 @@ async function refreshAnalytics() {
       const model = job.backend === "roboflow" ? (job.workflow_id || "—") : (job.model_path || "—");
       tr.appendChild(analyticsCell(when));
       tr.appendChild(analyticsCell(job.backend));
-      tr.appendChild(analyticsCell(model));
+      tr.appendChild(analyticsCell(model, { truncate: true }));
       tr.appendChild(analyticsCell(job.frame_count));
       tr.appendChild(analyticsCell(job.detected_total));
       tr.appendChild(analyticsCell(job.status));
@@ -4004,6 +4493,10 @@ async function refreshAnalytics() {
 // ────────────────────────────── Init ──────────────────────────────
 
 buildStepNav();
+
+document.getElementById("analytics-scroll-top").addEventListener("click", () => {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
 
 (async function boot() {
   refreshVideoList();
@@ -4018,4 +4511,6 @@ buildStepNav();
   restoreExtractJob().catch((e) => console.warn("Extract job restore failed:", e));
   restoreDetectJob().catch((e) => console.warn("Detect job restore failed:", e));
   restoreExportJob().catch((e) => console.warn("Export job restore failed:", e));
+  restoreFindclassJob().catch((e) => console.warn("Find Class job restore failed:", e));
+  restoreLastRealExtractJobPointer().catch((e) => console.warn("Extract pointer restore failed:", e));
 })();
