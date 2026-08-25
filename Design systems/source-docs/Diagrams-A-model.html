@@ -1,0 +1,1413 @@
+<!-- Needed for the local/offline copy only: opened straight from disk there is no server charset
+     header, so without this the browser falls back to windows-1252 and the Thai text renders as
+     mojibake. The Artifact runtime supplies its own <head>, where this line is simply ignored. -->
+<meta charset="utf-8">
+<title>แผนภาพแบบจำลองเย็บแผล</title>
+
+<style>
+:root {
+  --ground:#f5f6fa; --panel:#ffffff; --panel-2:#eef1f7;
+  --ink:#1a1a2e; --ink-soft:#5c6b7a; --ink-faint:#8492a6;
+  --line:#d3dae6; --line-soft:#e4e9f2;
+  --accent:#e94560; --navy:#0f3460; --ok:#2f9e78; --warn:#c97a00;
+  --plate:#fbfcfe; --plate-line:#dde4ef; --plate-ink:#1a1a2e; --plate-soft:#5c6b7a;
+  --c-needle:#FFE032; --c-finger:#FF6B48; --c-holder:#A8E6A0; --c-wound:#F064A0; --c-forcep:#4ECDC4;
+  --font-thai:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif;
+  --font-mono:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#1a1a2e; --panel:#16213e; --panel-2:#1e2a4a;
+    --ink:#eaeaea; --ink-soft:#8899aa; --ink-faint:#6b7c91;
+    --line:#2c3b5e; --line-soft:#223052;
+    --navy:#5b8dd6; --ok:#4ecca3; --warn:#f5a623;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#1a1a2e; --panel:#16213e; --panel-2:#1e2a4a;
+  --ink:#eaeaea; --ink-soft:#8899aa; --ink-faint:#6b7c91;
+  --line:#2c3b5e; --line-soft:#223052;
+  --navy:#5b8dd6; --ok:#4ecca3; --warn:#f5a623;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:var(--font-thai); font-size:16px; line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px; margin:0 auto; padding:0 24px 96px;
+  display:grid; grid-template-columns:236px minmax(0,1fr); gap:48px; align-items:start}
+@media (max-width:980px){ .wrap{grid-template-columns:1fr; gap:0} }
+
+/* ─── masthead ─── */
+.masthead{grid-column:1/-1; padding:56px 0 32px; border-bottom:2px solid var(--ink); margin-bottom:40px}
+.eyebrow{font-family:var(--font-mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 14px; font-weight:600}
+h1{font-size:clamp(28px,4vw,40px); line-height:1.25; margin:0 0 16px; font-weight:700; text-wrap:balance; letter-spacing:-.01em}
+.lede{font-size:17px; color:var(--ink-soft); max-width:62ch; margin:0 0 22px}
+.meta{display:flex; flex-wrap:wrap; gap:8px 10px; font-family:var(--font-mono); font-size:11.5px}
+.meta span{border:1px solid var(--line); border-radius:2px; padding:4px 9px; color:var(--ink-soft); background:var(--panel)}
+
+/* ─── nav ─── */
+nav{position:sticky; top:20px}
+@media (max-width:980px){ nav{position:static; margin-bottom:48px} }
+nav h2{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--ink-faint); margin:0 0 14px; font-weight:600}
+nav ol{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:1px}
+nav .grp{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.09em; color:var(--accent);
+  margin:16px 0 5px; font-weight:600}
+nav .grp:first-child{margin-top:0}
+nav a{display:flex; gap:9px; text-decoration:none; color:var(--ink-soft); font-size:13.5px;
+  padding:4px 8px; border-radius:3px; line-height:1.45}
+nav a:hover{background:var(--panel-2); color:var(--ink)}
+nav a:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+nav a b{font-family:var(--font-mono); font-weight:600; color:var(--ink-faint); flex:none; font-size:12px}
+
+/* ─── sections ─── */
+section{scroll-margin-top:20px; margin-bottom:64px}
+.grp-head{margin:0 0 34px; padding-top:8px}
+.grp-head .k{font-family:var(--font-mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; display:block; margin-bottom:6px}
+.grp-head h2{font-size:23px; margin:0; font-weight:700; letter-spacing:-.005em}
+.grp-head p{color:var(--ink-soft); font-size:14.5px; margin:8px 0 0; max-width:64ch}
+
+h3{font-size:20px; margin:0 0 6px; font-weight:700; text-wrap:balance; letter-spacing:-.005em}
+h3 .num{font-family:var(--font-mono); color:var(--accent); font-size:15px; margin-right:9px; font-weight:600}
+.sub{font-family:var(--font-mono); font-size:11.5px; color:var(--ink-faint); margin:0 0 20px; letter-spacing:.02em}
+p{margin:0 0 14px; max-width:66ch}
+.block{margin:0 0 22px}
+.block > h4{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-faint); margin:0 0 8px; font-weight:600}
+
+code{font-family:var(--font-mono); font-size:.875em; background:var(--panel-2); padding:1px 5px;
+  border-radius:2px; color:var(--ink); white-space:nowrap}
+
+ul.plain{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px; max-width:70ch}
+ul.plain li{padding-left:16px; position:relative; font-size:14.5px; line-height:1.65}
+ul.plain li::before{content:""; position:absolute; left:0; top:.7em; width:6px; height:1.5px; background:var(--ink-faint)}
+ul.plain li b{font-weight:700}
+
+/* ─── figure plate ─── */
+figure{margin:0 0 22px; background:var(--plate); border:1px solid var(--plate-line); border-radius:4px;
+  padding:22px; color:var(--plate-ink); overflow-x:auto}
+figure svg{display:block; max-width:100%; height:auto; margin:0 auto}
+/* Only the hand-drawn SVGs, which set no font of their own. Mermaid must NOT be included:
+   it measures every label with its own font at render time and sizes the boxes to fit, so
+   swapping the family afterwards makes the text wider than the box that was drawn for it —
+   which silently clipped 'running' to 'runnin' and 'stopped' to 'stoppe' in figure 10. A
+   mermaid SVG sits inside <pre class="mermaid">, never as a direct child of <figure>. */
+figure > svg text{font-family:var(--font-thai)}
+figure .mermaid{display:flex; justify-content:center; min-width:min-content}
+
+/* ── บังคับสีของแผนภาพสถานะ (รูปที่ 10) ──
+   รูปนี้ไม่ได้กำหนดสีรายโหนดในตัวแผนภาพ จึงต้องคุมจาก CSS ให้ครบทุกรูปทรง
+   ไม่งั้น Mermaid จะคำนวณสีเองแล้วได้พื้นทึบจนอ่านไม่ออก
+   ใช้เฉพาะรูปนี้ ไม่แตะรูปที่ 6-9 ซึ่งตั้งใจให้บางกล่องเป็นพื้นเข้มตัวอักษรขาว
+   (รูปที่ 11 เลิกใช้ Mermaid แล้ว เปลี่ยนไปวาดเป็น SVG ที่คุมสีได้เองทุกจุด) */
+
+/* 1. ทุกสี่เหลี่ยม = พื้นขาว ขอบเทาอมน้ำเงิน (ค่าเริ่มต้น) */
+figure.fig-lite .mermaid svg rect{
+  fill:#ffffff !important; stroke:#9fb0c9 !important; stroke-width:1px !important;
+}
+
+/* 2. กล่องสถานะ และกล่องโหนด = เทาอ่อน ขอบเข้ม ให้เห็นกรอบชัด */
+figure.fig-lite .mermaid svg .node rect,
+figure.fig-lite .mermaid svg .statediagram-state rect,
+figure.fig-lite .mermaid svg rect.label-container,
+figure.fig-lite .mermaid svg .cluster rect{
+  fill:#eef1f7 !important; stroke:#0f3460 !important; stroke-width:1.4px !important;
+}
+
+/* 3. พื้นหลังป้ายบนเส้น ไม่ต้องมีขอบ */
+figure.fig-lite .mermaid svg .edgeLabel rect,
+figure.fig-lite .mermaid svg .labelBkg,
+figure.fig-lite .mermaid svg rect.labelBox{
+  fill:#fbfcfe !important; stroke:none !important; opacity:1 !important;
+}
+
+/* 4. ตัวอักษรทั้งหมดต้องเข้ม (ครอบคลุมทั้งแบบ text และแบบ HTML ใน foreignObject) */
+figure.fig-lite .mermaid svg text,
+figure.fig-lite .mermaid svg tspan,
+figure.fig-lite .mermaid svg .nodeLabel,
+figure.fig-lite .mermaid svg .edgeLabel,
+figure.fig-lite .mermaid svg .stateLabel,
+figure.fig-lite .mermaid svg foreignObject div,
+figure.fig-lite .mermaid svg foreignObject span,
+figure.fig-lite .mermaid svg foreignObject p{
+  fill:#1a1a2e !important; color:#1a1a2e !important; background:transparent !important;
+}
+
+/* 5. จุดเริ่มต้น/สิ้นสุดของแผนภาพสถานะ ต้องเป็นวงกลมทึบตามมาตรฐาน UML */
+figure.fig-lite .mermaid svg .node circle,
+figure.fig-lite .mermaid svg .statediagram circle{
+  fill:#0f3460 !important; stroke:#0f3460 !important;
+}
+
+/* 6. เส้นเชื่อม */
+figure.fig-lite .mermaid svg .edgePath path,
+figure.fig-lite .mermaid svg path.transition{
+  stroke:#5c6b7a !important; fill:none !important;
+}
+figcaption{margin-top:16px; padding-top:12px; border-top:1px solid var(--plate-line);
+  font-size:12.5px; color:var(--plate-soft); line-height:1.6; font-family:var(--font-thai)}
+figcaption b{color:var(--plate-ink); font-weight:700}
+
+/* ─── legend ─── */
+.legend{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:7px 20px;
+  border-left:2px solid var(--line); padding:2px 0 2px 15px; margin:0 0 22px}
+.legend div{font-size:13.5px; color:var(--ink-soft); line-height:1.6}
+.legend b{color:var(--ink); font-family:var(--font-mono); font-size:12px; font-weight:600}
+
+/* ─── rule box ─── */
+.rule{border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:0 3px 3px 0;
+  background:var(--panel); padding:16px 20px; margin:0 0 8px}
+.rule > h4{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--accent); margin:0 0 10px; font-weight:600}
+.rule ul{margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px}
+.rule li{font-size:14px; line-height:1.65; padding-left:16px; position:relative}
+.rule li::before{content:"·"; position:absolute; left:4px; color:var(--accent); font-weight:700}
+.rule li b{font-weight:700}
+
+/* ─── tables ─── */
+.tw{overflow-x:auto; margin:0 0 22px; border:1px solid var(--line); border-radius:3px}
+table{border-collapse:collapse; width:100%; font-size:13.5px; background:var(--panel)}
+th,td{text-align:left; padding:9px 13px; border-bottom:1px solid var(--line-soft); vertical-align:top}
+th{font-family:var(--font-mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--ink-faint); font-weight:600; background:var(--panel-2); white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td code{white-space:nowrap}
+.nowrap{white-space:nowrap}
+
+/* ─── class swatches ─── */
+.classes{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 22px}
+.classes span{display:inline-flex; align-items:center; gap:7px; font-size:13px; border:1px solid var(--line);
+  background:var(--panel); border-radius:2px; padding:5px 11px 5px 8px}
+.classes i{width:11px; height:11px; border-radius:2px; flex:none; border:1px solid rgba(0,0,0,.22)}
+.classes em{font-style:normal; font-family:var(--font-mono); font-size:11.5px; color:var(--ink-soft)}
+
+hr.div{border:none; border-top:1px solid var(--line); margin:56px 0}
+
+@media (prefers-reduced-motion:reduce){ *{animation:none !important; transition:none !important} }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="eyebrow">เอกสารประกอบรายงาน · ชุด ก — แบบจำลอง</p>
+  <h1>แผนภาพฝั่งแบบจำลอง: ระบบตรวจจับอุปกรณ์การเย็บแผลด้วยปัญญาประดิษฐ์</h1>
+  <p class="lede">
+    ชุดนี้อธิบาย <b>งานหลักของโครงงาน คือการสร้างและประเมินแบบจำลองตรวจจับวัตถุ</b> — ตั้งแต่วิดีโอต้นทาง
+    ไปจนถึงตัวเลขที่รายงาน ทุกรูปวาดจากสิ่งที่ทำจริงและตัวเลขที่วัดได้จริง ไม่ใช่แบบร่างบนกระดาษ
+    ส่วนแผนภาพของเว็บแอปพลิเคชันซึ่งเป็น <i>เครื่องมือสนับสนุน</i> แยกไว้ในชุด ข
+  </p>
+  <div class="meta">
+    <span>8 แผนภาพวาดใหม่</span>
+    <span>+ 4 กลุ่มรูปผลการทดลอง</span>
+    <span>YOLO11n · 9 คลาส · 2,190 ภาพ</span>
+    <span>อ้างอิงผลจริง ส.ค. 2569</span>
+  </div>
+</header>
+
+<nav aria-label="สารบัญแผนภาพชุดแบบจำลอง">
+  <h2>สารบัญ</h2>
+  <ol>
+    <li class="grp">ก · กระบวนการ</li>
+    <li><a href="#a1"><b>ก1</b><span>ภาพรวมกระบวนการพัฒนาโมเดล</span></a></li>
+    <li><a href="#a2"><b>ก2</b><span>การสร้างชุดข้อมูลและข้อบกพร่องของ label</span></a></li>
+    <li class="grp">ข · ข้อมูลและแบบจำลอง</li>
+    <li><a href="#a3"><b>ก3</b><span>อนุกรมวิธานคลาส 5 → 9</span></a></li>
+    <li><a href="#a5"><b>ก4</b><span>สถาปัตยกรรม YOLO11 และฟังก์ชันสูญเสีย</span></a></li>
+    <li class="grp">ค · การทดลอง</li>
+    <li><a href="#a6"><b>ก5</b><span>แบบแผนการทดลอง A/B</span></a></li>
+    <li class="grp">ง · ผังงาน</li>
+    <li><a href="#a7"><b>ก6</b><span>ผังงานทำความสะอาด label</span></a></li>
+    <li><a href="#a8"><b>ก7</b><span>ผังงานการฝึกโมเดล</span></a></li>
+    <li><a href="#a9"><b>ก8</b><span>ผังงานการอนุมาน</span></a></li>
+    <li class="grp">จ · รูปผลการทดลอง</li>
+    <li><a href="#results"><b>—</b><span>รูปที่ generate ไว้แล้ว</span></a></li>
+    <li class="grp">ภาคผนวก</li>
+    <li><a href="#map"><b>—</b><span>ใช้รูปไหนในบทใด</span></a></li>
+  </ol>
+</nav>
+
+<main>
+
+<section id="intro">
+  <p>
+    รายงานผลการดำเนินงาน <b>ระยะที่ 1</b> วางโครงการนี้ไว้เป็นงานวิจัยแบบจำลอง คือ เก็บวิดีโอ 12 คลิป
+    สกัดได้ 120 เฟรม กำกับข้อมูล 5 คลาส แล้วเทรน YOLOv11 ได้ mAP@50 68.1% บนชุดทดสอบ 6 ภาพ
+    และระบุงานระยะถัดไปไว้ว่าให้เพิ่มข้อมูล ใช้ data augmentation และพัฒนาแบบจำลองวิเคราะห์ลำดับเวลา
+  </p>
+  <p>
+    <b>ระยะที่ 2</b> ดำเนินตามนั้นในสองด้าน ด้านข้อมูลขยายเป็น 2,190 ภาพ 22,957 กล่อง และเพิ่มจาก 5 เป็น
+    9 คลาส ด้านวิธีการทำการทดลองเปรียบเทียบแบบมีกลุ่มควบคุมเพื่อตอบว่า data augmentation ช่วยจริงหรือไม่
+    ระหว่างทางยังพบข้อบกพร่องของไฟล์ label ที่ทำให้กล่องเพี้ยนไป 8,047 กล่องโดยไม่มีข้อความแจ้งเตือนใด ๆ
+    ซึ่งกลายเป็นผลงานเชิงระเบียบวิธีอีกชิ้นหนึ่งของรายงานฉบับนี้
+  </p>
+
+  <div class="block">
+    <h4>วัตถุเป้าหมาย 9 ประเภท (จำนวนกล่องรวมทุก split)</h4>
+    <div class="classes">
+      <span><i style="background:var(--c-finger)"></i>นิ้วมือ <em>finger · 9,884</em></span>
+      <span><i style="background:var(--c-holder)"></i>คีมจับเข็ม <em>needle_holder · 2,729</em></span>
+      <span><i style="background:var(--c-wound)"></i>บริเวณแผล <em>wound · 2,463</em></span>
+      <span><i style="background:var(--c-needle)"></i>เข็มเย็บแผล <em>needle · 1,944</em></span>
+      <span><i style="background:#8ab4f8"></i>มือ <em>hand · 1,884</em></span>
+      <span><i style="background:var(--c-forcep)"></i>ปากคีบ <em>forcep · 1,754</em></span>
+      <span><i style="background:#b39ddb"></i>ปลายคีมจับเข็ม <em>Tip_needle_holder · 1,467</em></span>
+      <span><i style="background:#ffab91"></i>ปลายปากคีบ <em>Tip_forcep · 803</em></span>
+      <span><i style="background:#cfd8dc"></i>กรรไกรตัดไหม <em>Stitch Scissors · 29</em></span>
+    </div>
+  </div>
+
+  <div class="rule">
+    <h4>หลักการเลือกแผนภาพสำหรับงานฝั่งแบบจำลอง</h4>
+    <ul>
+      <li><b>โครงงานนี้มีแบบจำลองเป็นงานหลัก เว็บแอปเป็นเครื่องมือ</b> — สัดส่วนของรูปในเล่มต้องสะท้อนสิ่งนั้น
+        ถ้าเล่มมีรูปสถาปัตยกรรมซอฟต์แวร์ 11 รูปแต่ไม่มีรูปกระบวนการสร้างแบบจำลองเลย ผู้อ่านจะเข้าใจว่านี่คือ
+        โครงงานพัฒนาซอฟต์แวร์ ไม่ใช่โครงงานปัญญาประดิษฐ์</li>
+      <li><b>รูปกระบวนการต้องแสดงขั้นตอนที่ทำจริง รวมถึงขั้นที่ผิดพลาดแล้วแก้</b> — ขั้นทำความสะอาด label
+        ในรูปที่ ก1 ไม่ได้อยู่ในแผนตั้งต้น แต่ต้องอยู่ในรูป เพราะถ้าไม่มีขั้นนี้ตัวเลขทั้งหมดจะผิด</li>
+      <li><b>รูปผลการทดลองไม่ต้องวาดมือ</b> — กราฟ loss, confusion matrix, PR curve สร้างจากข้อมูลจริง
+        ด้วย <code>report_training_results.py</code> การวาดกราฟเลียนแบบขึ้นมาเองคือการรายงานเท็จ</li>
+      <li><b>ทุกตัวเลขในรูปต้องชี้กลับไปยังไฟล์ผลลัพธ์ได้</b> — ตัวเลขในเอกสารนี้มาจาก
+        <code>results/</code> และ <code>results_test/</code> ทั้งหมด</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ก</span>
+  <h2>กระบวนการ</h2>
+  <p>โครงงานนี้ทำอะไรบ้างตั้งแต่ต้นจนจบ และชุดข้อมูลที่ใช้เทรนถูกสร้างขึ้นมาอย่างไร</p>
+</div>
+
+<section id="a1">
+  <h3><span class="num">รูปที่ ก1</span>ภาพรวมกระบวนการพัฒนาแบบจำลอง (ML Pipeline)</h3>
+  <p class="sub">แบบแบ่งระยะ (Phase-banded) · วาดด้วย SVG · ครอบคลุมทั้งโครงงานฝั่งแบบจำลอง</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      ข้อมูลเดินทางจากวิดีโอไปเป็นตัวเลขในรายงานได้อย่างไร และ <b>ขั้นตอนใดบ้างที่ถ้าข้ามแล้วผลลัพธ์จะผิด</b>
+      รูปนี้คือรูปเปิดของเล่ม ควรอยู่ในบทที่ 1 เพื่อให้ผู้อ่านเห็นภาพรวมก่อนลงรายละเอียด
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>แถบแนวนอน</b> ระยะของงาน เรียงจากบนลงล่างตามเวลา</div>
+    <div><b>กล่องขอบแดง</b> ขั้นตอนที่ค้นพบระหว่างทาง ไม่ได้อยู่ในแผนตั้งต้น</div>
+    <div><b>ลูกศรทึบ</b> การไหลของข้อมูลไปข้างหน้า</div>
+    <div><b>ลูกศรเส้นประ</b> ป้อนกลับ — โมเดลกลับไปช่วยงานกำกับข้อมูล</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 646" role="img" aria-label="แผนภาพกระบวนการพัฒนาแบบจำลองแบ่งเป็นสี่ระยะจากบนลงล่าง ได้แก่ การเตรียมข้อมูลจากวิดีโอ การเตรียมชุดข้อมูล การฝึกและประเมินสองแขนเปรียบเทียบ และการนำไปใช้งาน พร้อมลูกศรป้อนกลับจากโมเดลกลับไปยังขั้นกำกับข้อมูล">
+      <defs>
+        <marker id="a1h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+        <marker id="a1hr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#e94560"/>
+        </marker>
+      </defs>
+      <style>
+        .a1b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.3}
+        .a1band{fill:#f2f5fa;stroke:#dde4ef;stroke-width:1}
+        .a1t{font-size:13px;fill:#1a1a2e;font-weight:600}
+        .a1s{font-size:10.5px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .a1n{font-size:10.5px;fill:#8492a6}
+        .a1ph{font-size:11px;fill:#0f3460;font-weight:700}
+        .a1ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <!-- ระยะ 1 -->
+      <rect class="a1band" x="8" y="18" width="1004" height="112" rx="4"/>
+      <text class="a1ph" x="22" y="42">ระยะ 1</text>
+      <text class="a1n" x="22" y="58">เตรียมข้อมูล</text>
+      <rect class="a1b" x="112" y="44" width="152" height="60" rx="3"/>
+      <text class="a1t" x="188" y="70" text-anchor="middle">วิดีโอฝึกเย็บแผล</text>
+      <text class="a1s" x="188" y="88" text-anchor="middle">.mp4</text>
+      <line class="a1ln" x1="266" y1="74" x2="288" y2="74" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="292" y="44" width="152" height="60" rx="3"/>
+      <text class="a1t" x="368" y="70" text-anchor="middle">สกัดเฟรม</text>
+      <text class="a1s" x="368" y="88" text-anchor="middle">frame_extractor.py</text>
+      <line class="a1ln" x1="446" y1="74" x2="468" y2="74" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="472" y="44" width="168" height="60" rx="3"/>
+      <text class="a1t" x="556" y="70" text-anchor="middle">กำกับข้อมูล</text>
+      <text class="a1s" x="556" y="88" text-anchor="middle">webapp + Roboflow</text>
+      <line class="a1ln" x1="642" y1="74" x2="664" y2="74" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="668" y="44" width="152" height="60" rx="3"/>
+      <text class="a1t" x="744" y="70" text-anchor="middle">ส่งออกรูปแบบ YOLO</text>
+      <text class="a1s" x="744" y="88" text-anchor="middle">2,190 ภาพ</text>
+
+      <line class="a1ln" x1="188" y1="130" x2="188" y2="156" marker-end="url(#a1h)"/>
+
+      <!-- ระยะ 2 -->
+      <rect class="a1band" x="8" y="158" width="1004" height="112" rx="4"/>
+      <text class="a1ph" x="22" y="182">ระยะ 2</text>
+      <text class="a1n" x="22" y="198">เตรียมชุดข้อมูล</text>
+      <rect x="112" y="184" width="238" height="60" rx="3" fill="#fff5f6" stroke="#e94560" stroke-width="1.6"/>
+      <text class="a1t" x="231" y="210" text-anchor="middle" fill="#a8203a">ทำความสะอาด label</text>
+      <text class="a1s" x="231" y="228" text-anchor="middle" fill="#a8203a">polygons_to_bboxes.py</text>
+      <line class="a1ln" x1="352" y1="214" x2="374" y2="214" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="378" y="184" width="176" height="60" rx="3"/>
+      <text class="a1t" x="466" y="210" text-anchor="middle">แบ่ง train / val / test</text>
+      <text class="a1s" x="466" y="228" text-anchor="middle">1,575 / 400 / 215</text>
+      <text class="a1n" x="580" y="203">ตรวจพบไฟล์ที่ปนกล่องกับ polygon 623 จาก 2,190 ไฟล์</text>
+      <text class="a1n" x="580" y="221">ถ้าไม่แก้ Ultralytics จะอ่านผิด 8,047 กล่อง โดยไม่แจ้งเตือน</text>
+      <text class="a1n" x="580" y="239">ผลหลังแก้: 22,957 แถว ทุกแถวเป็นกล่อง 5 ค่า · 0 corrupt</text>
+
+      <line class="a1ln" x1="188" y1="270" x2="188" y2="296" marker-end="url(#a1h)"/>
+
+      <!-- ระยะ 3 -->
+      <rect class="a1band" x="8" y="298" width="1004" height="158" rx="4"/>
+      <text class="a1ph" x="22" y="322">ระยะ 3</text>
+      <text class="a1n" x="22" y="338">ฝึกและประเมิน</text>
+      <rect class="a1b" x="112" y="316" width="212" height="54" rx="3"/>
+      <text class="a1t" x="218" y="338" text-anchor="middle">แขน A · ปิด augmentation</text>
+      <text class="a1s" x="218" y="356" text-anchor="middle">15 พารามิเตอร์ = 0</text>
+      <rect class="a1b" x="112" y="384" width="212" height="54" rx="3"/>
+      <text class="a1t" x="218" y="406" text-anchor="middle">แขน B · เปิด augmentation</text>
+      <text class="a1s" x="218" y="424" text-anchor="middle">ค่าเริ่มต้น Ultralytics</text>
+      <path class="a1ln" d="M326 343 H352 V377 H370" marker-end="url(#a1h)"/>
+      <path class="a1ln" d="M326 411 H352 V377 H370" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="374" y="350" width="198" height="54" rx="3"/>
+      <text class="a1t" x="473" y="372" text-anchor="middle">ประเมินบน val</text>
+      <text class="a1s" x="473" y="390" text-anchor="middle">ใช้เลือกโมเดล</text>
+      <line class="a1ln" x1="574" y1="377" x2="600" y2="377" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="604" y="350" width="198" height="54" rx="3"/>
+      <text class="a1t" x="703" y="372" text-anchor="middle">วัดผลบน test</text>
+      <text class="a1s" x="703" y="390" text-anchor="middle">ตัวเลขที่รายงาน</text>
+      <text class="a1n" x="820" y="366">ชุด test ไม่เคยถูกใช้</text>
+      <text class="a1n" x="820" y="384">ระหว่างเลือกโมเดล</text>
+
+      <line class="a1ln" x1="188" y1="456" x2="188" y2="482" marker-end="url(#a1h)"/>
+
+      <!-- ระยะ 4 -->
+      <rect class="a1band" x="8" y="484" width="1004" height="112" rx="4"/>
+      <text class="a1ph" x="22" y="508">ระยะ 4</text>
+      <text class="a1n" x="22" y="524">นำไปใช้</text>
+      <rect class="a1b" x="112" y="510" width="152" height="60" rx="3"/>
+      <text class="a1t" x="188" y="536" text-anchor="middle">น้ำหนักโมเดล</text>
+      <text class="a1s" x="188" y="554" text-anchor="middle">best.pt</text>
+      <line class="a1ln" x1="266" y1="540" x2="288" y2="540" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="292" y="510" width="176" height="60" rx="3"/>
+      <text class="a1t" x="380" y="536" text-anchor="middle">เว็บแอป · ตรวจจับ</text>
+      <text class="a1s" x="380" y="554" text-anchor="middle">Detect</text>
+      <line class="a1ln" x1="470" y1="540" x2="492" y2="540" marker-end="url(#a1h)"/>
+      <rect class="a1b" x="496" y="510" width="176" height="60" rx="3"/>
+      <text class="a1t" x="584" y="536" text-anchor="middle">ช่วยกำกับข้อมูล</text>
+      <text class="a1s" x="584" y="554" text-anchor="middle">Label Assist</text>
+
+      <!-- ป้อนกลับ -->
+      <path d="M674 540 H962 V30 H556 V38" fill="none" stroke="#e94560" stroke-width="1.4"
+            stroke-dasharray="5 4" marker-end="url(#a1hr)"/>
+      <text x="950" y="318" font-size="10.5" fill="#e94560" text-anchor="end">ป้อนกลับ · โมเดลช่วยกำกับข้อมูลรอบถัดไป</text>
+
+      <text class="a1n" x="8" y="622">ทุกตัวเลขในรูปนี้มาจาก results/class_distribution.md และบันทึกการรันจริง</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> กระบวนการเป็น <b>วงจร ไม่ใช่เส้นตรง</b> — โมเดลที่เทรนเสร็จถูกส่งกลับไป
+      ช่วยกำกับข้อมูลรอบถัดไป ทำให้ชุดข้อมูลโตเร็วขึ้นในแต่ละรอบ · กล่องขอบแดงในระยะ 2 คือขั้นตอนที่
+      <b>ไม่ได้อยู่ในแผนตั้งต้น</b> แต่จำเป็น เพราะถ้าข้ามไป กล่อง 8,047 กล่องจะถูกอ่านผิดทั้งตอนเทรนและ
+      ตอนวัดผล · ชุด <code>test</code> ถูกกันไว้ไม่ให้ใช้ระหว่างเลือกโมเดล จึงใช้รายงานผลได้อย่างซื่อตรง
+    </figcaption>
+  </figure>
+
+  <div class="block">
+    <h4>คำอธิบายแต่ละระยะ</h4>
+    <ul class="plain">
+      <li><b>ระยะ 1 เตรียมข้อมูล</b> — วิดีโอถูกสกัดเป็นภาพนิ่งด้วยเครื่องมือที่พัฒนาขึ้นเอง จากนั้นกำกับกรอบ
+        วัตถุผ่านหน้า Annotate ของเว็บแอปและแพลตฟอร์ม Roboflow แล้วส่งออกในรูปแบบ YOLO</li>
+      <li><b>ระยะ 2 เตรียมชุดข้อมูล</b> — ไฟล์ที่ส่งออกมามีทั้งแถวกรอบสี่เหลี่ยมและแถว polygon ปนกัน
+        ต้องแปลงให้เหลือแต่กรอบก่อน (รายละเอียดในรูปที่ ก2) แล้วจึงแบ่งชุด</li>
+      <li><b>ระยะ 3 ฝึกและประเมิน</b> — เทรนสองแขนด้วยข้อมูลและค่าตั้งต้นเดียวกันทุกอย่าง ต่างกันเฉพาะ
+        การเปิด-ปิด augmentation (รายละเอียดในรูปที่ ก5) ใช้ <code>val</code> เลือกโมเดล และ
+        <code>test</code> รายงานผล</li>
+      <li><b>ระยะ 4 นำไปใช้</b> — น้ำหนักโมเดลถูกโหลดเข้าเว็บแอปเพื่อตรวจจับ และเพื่อช่วยวางกรอบให้
+        ผู้กำกับข้อมูลในรอบถัดไป</li>
+    </ul>
+  </div>
+
+  <div class="rule">
+    <h4>หลักการเขียนที่ถูกต้อง</h4>
+    <ul>
+      <li><b>แยก val กับ test ให้เห็นในรูป</b> — เป็นจุดที่กรรมการตรวจเสมอ ถ้ารูปแสดงว่าเลือกโมเดลด้วย
+        ชุดเดียวกับที่รายงานผล แปลว่าตัวเลขนั้นสูงเกินจริง</li>
+      <li><b>ขั้นตอนที่ทำนอกระบบต้องแสดง</b> — การเทรนไม่ได้รันในเว็บแอป แต่รันด้วยสคริปต์แยกบนเครื่องที่มี
+        GPU อย่าวาดให้ดูเหมือนเว็บแอปเทรนโมเดลได้เอง</li>
+      <li><b>ลูกศรป้อนกลับต้องต่างจากลูกศรเดินหน้า</b> — ใช้เส้นประและสีต่างกัน ไม่งั้นผู้อ่านจะนับรอบผิด</li>
+    </ul>
+  </div>
+</section>
+
+<section id="a2">
+  <h3><span class="num">รูปที่ ก2</span>การสร้างชุดข้อมูลและข้อบกพร่องของไฟล์ label</h3>
+  <p class="sub">แบบเปรียบเทียบก่อน–หลัง · วาดด้วย SVG · อ้างอิงซอร์สโค้ดของ Ultralytics</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      ทำไมต้องมีขั้นตอนแปลง label เพิ่มขึ้นมาหนึ่งขั้น ทั้งที่ Roboflow ส่งออกมาในรูปแบบ YOLO อยู่แล้ว
+      คำตอบคือ <b>ไฟล์ที่มีทั้งกรอบและ polygon ปนกันจะถูกอ่านผิดทั้งไฟล์</b> และไม่มีข้อความแจ้งเตือนใด ๆ
+      รูปนี้ควรอยู่ในบทที่ 3 หัวข้อการเตรียมข้อมูล
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 452" role="img" aria-label="แผนภาพเปรียบเทียบก่อนและหลังการแปลง polygon เป็นกรอบสี่เหลี่ยม ฝั่งซ้ายแสดงไฟล์ที่ปนกันถูก Ultralytics อ่านผิดทำให้ได้กรอบที่ผิดตำแหน่ง ฝั่งขวาแสดงไฟล์ที่แปลงแล้วซึ่งอ่านถูกต้อง">
+      <defs>
+        <marker id="a2h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .a2t{font-size:12.5px;fill:#1a1a2e;font-weight:600}
+        .a2m{font-size:10.5px;fill:#1a1a2e;font-family:'Cascadia Mono',Consolas,monospace}
+        .a2n{font-size:10.5px;fill:#5c6b7a}
+        .a2b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.3}
+        .a2ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <!-- ฝั่งซ้าย: ก่อนแก้ -->
+      <rect x="8" y="16" width="492" height="384" rx="4" fill="#fff5f6" stroke="#e94560" stroke-width="1.4"/>
+      <text x="24" y="42" font-size="13" font-weight="700" fill="#a8203a">ก่อนแก้ · ไฟล์ปนกัน</text>
+
+      <rect class="a2b" x="24" y="56" width="290" height="86" rx="3"/>
+      <text class="a2n" x="34" y="74">ไฟล์ label หนึ่งไฟล์</text>
+      <text class="a2m" x="34" y="94">8 0.5733 0.4782 0.1748 0.0357</text>
+      <text class="a2n" x="330" y="94">← แถวกรอบ 5 ค่า</text>
+      <text class="a2m" x="34" y="112">3 0.21 0.33 0.28 0.31 0.34 0.40 …</text>
+      <text class="a2n" x="330" y="112">← แถว polygon</text>
+      <text class="a2n" x="34" y="132">ปนกันอยู่ในไฟล์เดียว</text>
+
+      <line class="a2ln" x1="169" y1="146" x2="169" y2="168" marker-end="url(#a2h)"/>
+      <rect class="a2b" x="24" y="170" width="452" height="52" rx="3"/>
+      <text class="a2m" x="34" y="192">ultralytics/data/utils.py</text>
+      <text class="a2m" x="34" y="210">if any(len(x) &gt; 6 for x in lb) → ทั้งไฟล์ถือเป็น segment</text>
+
+      <line class="a2ln" x1="169" y1="226" x2="169" y2="248" marker-end="url(#a2h)"/>
+      <rect x="24" y="250" width="452" height="76" rx="3" fill="#ffffff" stroke="#e94560" stroke-width="1.3"/>
+      <text class="a2n" x="34" y="270">แถวกรอบถูกตีความใหม่เป็น polygon 2 จุด</text>
+      <text class="a2m" x="34" y="290" fill="#5c6b7a">ค่าจริง : 0.5733 0.4782 0.1748 0.0357</text>
+      <text class="a2m" x="34" y="308" fill="#a8203a">อ่านได้ : 0.3741 0.2569 0.3984 0.4425</text>
+
+      <rect x="24" y="336" width="452" height="50" rx="3" fill="#ffffff" stroke="#e94560" stroke-width="1.3"/>
+      <text class="a2t" x="34" y="356" fill="#a8203a">623 จาก 2,190 ไฟล์ปนกัน → 8,047 กล่องเพี้ยน</text>
+      <text class="a2n" x="34" y="374">ผิดทั้งตอนเทรนและตอนวัดผล และไม่มีข้อความแจ้งเตือน</text>
+
+      <!-- ลูกศรกลาง -->
+      <line class="a2ln" x1="504" y1="208" x2="530" y2="208" marker-end="url(#a2h)"/>
+      <text class="a2n" x="517" y="198" text-anchor="middle">แปลง</text>
+
+      <!-- ฝั่งขวา: หลังแก้ -->
+      <rect x="536" y="16" width="476" height="384" rx="4" fill="#f2faf6" stroke="#2f9e78" stroke-width="1.4"/>
+      <text x="552" y="42" font-size="13" font-weight="700" fill="#1d6b51">หลังแก้ · ทุกแถวเป็นกรอบ</text>
+
+      <rect class="a2b" x="552" y="56" width="444" height="86" rx="3"/>
+      <text class="a2m" x="562" y="76">polygons_to_bboxes.py --src … --dst …</text>
+      <text class="a2n" x="562" y="96">แปลง polygon ทุกวงเป็นกรอบที่ล้อมรอบมันพอดี</text>
+      <text class="a2n" x="562" y="114">เขียนลงไดเรกทอรีใหม่ ต้นทางเปิดอ่านอย่างเดียว</text>
+      <text class="a2n" x="562" y="132">จึงรันซ้ำแล้วไม่แปลงซ้ำซ้อน</text>
+
+      <line class="a2ln" x1="774" y1="146" x2="774" y2="168" marker-end="url(#a2h)"/>
+      <rect class="a2b" x="552" y="170" width="444" height="52" rx="3"/>
+      <text class="a2m" x="562" y="192">8 0.5733 0.4782 0.1748 0.0357</text>
+      <text class="a2m" x="562" y="210">3 0.2750 0.3650 0.1300 0.0700</text>
+
+      <line class="a2ln" x1="774" y1="226" x2="774" y2="248" marker-end="url(#a2h)"/>
+      <rect x="552" y="250" width="444" height="76" rx="3" fill="#ffffff" stroke="#2f9e78" stroke-width="1.3"/>
+      <text class="a2n" x="562" y="270">ทุกไฟล์เข้าเส้นทางกรอบธรรมดาของ Ultralytics</text>
+      <text class="a2n" x="562" y="290">ตัวสแกนของ Ultralytics เองรายงาน 0 corrupt</text>
+      <text class="a2n" x="562" y="310">กรอบที่ได้คือกรอบของวัตถุจริง ข้อมูลที่โมเดลใช้ไม่หายไป</text>
+
+      <rect x="552" y="336" width="444" height="50" rx="3" fill="#ffffff" stroke="#2f9e78" stroke-width="1.3"/>
+      <text class="a2t" x="562" y="356" fill="#1d6b51">22,957 แถว · ทุกแถว 5 ค่า · ไม่มีแถวถูกทิ้ง</text>
+      <text class="a2n" x="562" y="374">train 16,421 · val 4,296 · test 2,240</text>
+
+      <text class="a2n" x="8" y="428">ข้อสรุปเชิงปฏิบัติ: ชุดข้อมูลที่ส่งออกจาก Roboflow ทุกครั้งต้องผ่านสคริปต์นี้ก่อนนำไปเทรน</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ข้อบกพร่องนี้ <b>เงียบ</b> — ไม่มี error ไม่มี warning ตัวเลขที่ได้ดูปกติทุกอย่าง
+      แต่ผิด สาเหตุคือ Ultralytics ตัดสินว่า “ไฟล์นี้เป็น segment หรือไม่” <b>ทีละไฟล์ ไม่ใช่ทีละแถว</b>
+      พอไฟล์หนึ่งมีทั้งสองแบบ แถวกรอบธรรมดาจึงถูกอ่านเป็น polygon สองจุด แล้วคำนวณกรอบที่ล้อมสองจุดนั้นแทน
+      · กรอบที่ล้อม polygon คือกรอบของวัตถุนั้นอยู่แล้ว การแปลงจึงไม่ทำให้ตัวตรวจจับเสียข้อมูลใด ๆ
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>เขียนเรื่องนี้ลงรายงานอย่างไรให้เป็นวิชาการ</h4>
+    <ul>
+      <li><b>ระบุหลักฐานเชิงประจักษ์ ไม่ใช่แค่เล่าว่าเจอบั๊ก</b> — ใส่ตัวเลขแถวจริงกับแถวที่ถูกอ่าน
+        จำนวนไฟล์ที่ปนกัน และจำนวนกล่องที่กระทบ พร้อมชี้ตำแหน่งในซอร์สโค้ดของไลบรารี</li>
+      <li><b>อธิบายว่าทำไมการแปลงไม่ทำให้เสียข้อมูล</b> — เพราะงานนี้เป็น object detection ที่ต้องการกรอบ
+        ไม่ใช่ instance segmentation ที่ต้องการรูปร่าง</li>
+      <li><b>บอกผลกระทบต่อผลการทดลอง</b> — ผลก่อนหน้าที่วัดจากชุดข้อมูลที่ยังไม่แก้ ไม่สามารถนำมา
+        เปรียบเทียบกับผลชุดใหม่ได้โดยตรง ต้องระบุข้อจำกัดนี้ไว้</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ข</span>
+  <h2>ข้อมูลและแบบจำลอง</h2>
+  <p>ตรวจจับอะไรบ้าง และตรวจจับด้วยสถาปัตยกรรมแบบใด</p>
+</div>
+
+<section id="a3">
+  <h3><span class="num">รูปที่ ก3</span>อนุกรมวิธานคลาส: จาก 5 คลาสในระยะที่ 1 เป็น 9 คลาสในระยะที่ 2</h3>
+  <p class="sub">แบบจัดกลุ่มพร้อมการจับคู่ · วาดด้วย SVG · อ้างอิง data.yaml จริง</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      เพิ่มคลาสอะไรบ้างจากระยะที่ 1 และ <b>เพิ่มด้วยเหตุผลอะไร</b> — คำถามนี้กรรมการถามแน่นอน เพราะการเพิ่ม
+      คลาสทำให้ค่า mAP รวมเทียบกับระยะที่ 1 ไม่ได้โดยตรง รูปนี้ควรอยู่ในบทที่ 3 คู่กับตารางพจนานุกรมข้อมูล
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 470" role="img" aria-label="แผนภาพจับคู่คลาสระหว่างระยะที่หนึ่งซึ่งมีห้าคลาสกับระยะที่สองซึ่งมีเก้าคลาส จัดกลุ่มเป็นเครื่องมือทั้งชิ้น ปลายเครื่องมือ และร่างกายกับแผล">
+      <defs>
+        <marker id="a3h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#9fb0c9"/>
+        </marker>
+      </defs>
+      <style>
+        .a3t{font-size:12px;fill:#1a1a2e}
+        .a3m{font-size:10.5px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .a3h{font-size:12.5px;fill:#0f3460;font-weight:700}
+        .a3n{font-size:10.5px;fill:#8492a6}
+        .a3b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.2}
+        .a3new{fill:#f2faf6;stroke:#2f9e78;stroke-width:1.4}
+      </style>
+
+      <text class="a3h" x="24" y="34">ระยะที่ 1 · 5 คลาส</text>
+      <text class="a3n" x="24" y="50">120 ภาพ</text>
+      <text class="a3h" x="420" y="34">ระยะที่ 2 · 9 คลาส</text>
+      <text class="a3n" x="420" y="50">2,190 ภาพ · จัดกลุ่มตามลักษณะของวัตถุ</text>
+
+      <!-- ระยะ 1 -->
+      <rect class="a3b" x="24" y="66" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="84">เข็มเย็บแผล</text><text class="a3m" x="36" y="100">needle</text>
+      <rect class="a3b" x="24" y="118" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="136">นิ้วมือ</text><text class="a3m" x="36" y="152">finger</text>
+      <rect class="a3b" x="24" y="170" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="188">คีมจับเข็ม</text><text class="a3m" x="36" y="204">needle_holder</text>
+      <rect class="a3b" x="24" y="222" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="240">บริเวณแผล</text><text class="a3m" x="36" y="256">wound</text>
+      <rect class="a3b" x="24" y="274" width="190" height="42" rx="3"/>
+      <text class="a3t" x="36" y="292">ปากคีบ</text><text class="a3m" x="36" y="308">forcep</text>
+
+      <!-- เส้นจับคู่ -->
+      <path d="M216 87 C300 87 320 300 416 300" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 139 C300 139 320 87 416 87" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 191 C300 191 320 139 416 139" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 243 C300 243 320 191 416 191" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+      <path d="M216 295 C300 295 320 243 416 243" fill="none" stroke="#9fb0c9" stroke-width="1.1" marker-end="url(#a3h)"/>
+
+      <!-- กลุ่ม 1: เครื่องมือทั้งชิ้น -->
+      <rect x="408" y="62" width="380" height="150" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="420" y="78">กลุ่ม ก · เครื่องมือทั้งชิ้น</text>
+      <rect class="a3b" x="416" y="86" width="176" height="38" rx="3"/>
+      <text class="a3m" x="426" y="104">needle_holder</text><text class="a3n" x="426" y="118">2,729 กล่อง</text>
+      <rect class="a3b" x="416" y="130" width="176" height="38" rx="3"/>
+      <text class="a3m" x="426" y="148">forcep</text><text class="a3n" x="426" y="162">1,754 กล่อง</text>
+      <rect class="a3new" x="600" y="86" width="176" height="38" rx="3"/>
+      <text class="a3m" x="610" y="104" fill="#1d6b51">Stitch Scissors</text>
+      <text class="a3n" x="610" y="118" fill="#1d6b51">29 กล่อง · ใหม่</text>
+
+      <!-- กลุ่ม 2: ปลายเครื่องมือ -->
+      <rect x="408" y="222" width="380" height="106" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="420" y="238">กลุ่ม ข · ปลายเครื่องมือ (ส่วนที่สัมผัสเนื้อเยื่อ)</text>
+      <rect class="a3new" x="416" y="246" width="176" height="38" rx="3"/>
+      <text class="a3m" x="426" y="264" fill="#1d6b51">Tip_needle_holder</text>
+      <text class="a3n" x="426" y="278" fill="#1d6b51">1,467 กล่อง · ใหม่</text>
+      <rect class="a3new" x="600" y="246" width="176" height="38" rx="3"/>
+      <text class="a3m" x="610" y="264" fill="#1d6b51">Tip_forcep</text>
+      <text class="a3n" x="610" y="278" fill="#1d6b51">803 กล่อง · ใหม่</text>
+      <text class="a3n" x="420" y="304">แยกปลายออกจากตัวเครื่องมือ เพื่อให้ระบุจุดที่ทำหัตถการได้ ไม่ใช่แค่รู้ว่ามีเครื่องมืออยู่ในภาพ</text>
+
+      <!-- กลุ่ม 3 -->
+      <rect x="408" y="338" width="380" height="106" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="420" y="354">กลุ่ม ค · ร่างกายและแผล</text>
+      <rect class="a3b" x="416" y="362" width="118" height="38" rx="3"/>
+      <text class="a3m" x="426" y="380">finger</text><text class="a3n" x="426" y="394">9,884</text>
+      <rect class="a3new" x="542" y="362" width="118" height="38" rx="3"/>
+      <text class="a3m" x="552" y="380" fill="#1d6b51">hand</text>
+      <text class="a3n" x="552" y="394" fill="#1d6b51">1,884 · ใหม่</text>
+      <rect class="a3b" x="668" y="362" width="108" height="38" rx="3"/>
+      <text class="a3m" x="678" y="380">wound</text><text class="a3n" x="678" y="394">2,463</text>
+      <text class="a3n" x="420" y="420">แยก hand ออกจาก finger เพราะทั้งสองปรากฏพร้อมกันและมีขนาดต่างกันมาก</text>
+
+      <!-- needle -->
+      <rect x="408" y="454" width="0" height="0"/>
+      <rect class="a3b" x="416" y="300" width="176" height="0" rx="3"/>
+
+      <!-- คำเตือน -->
+      <rect x="800" y="62" width="212" height="150" rx="4" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="a3n" x="812" y="82" fill="#8a5500" font-weight="700">ข้อควรระวังเวลารายงาน</text>
+      <text class="a3n" x="812" y="102" fill="#8a5500">Stitch Scissors มีเพียง</text>
+      <text class="a3n" x="812" y="118" fill="#8a5500">16 / 10 / 3 ตัวอย่าง</text>
+      <text class="a3n" x="812" y="134" fill="#8a5500">(train / val / test)</text>
+      <text class="a3n" x="812" y="156" fill="#8a5500">ให้รายงานค่าไว้ได้</text>
+      <text class="a3n" x="812" y="172" fill="#8a5500">แต่ห้ามสรุปอะไรจากมัน</text>
+      <text class="a3n" x="812" y="194" fill="#8a5500">ตัวอย่างน้อยเกินไป</text>
+
+      <rect x="800" y="222" width="212" height="106" rx="4" fill="#fff5f6" stroke="#e94560" stroke-width="1.3"/>
+      <text class="a3n" x="812" y="242" fill="#a8203a" font-weight="700">คลาสที่ยังเป็นปัญหา</text>
+      <text class="a3n" x="812" y="262" fill="#a8203a">needle · 1,944 กล่อง</text>
+      <text class="a3n" x="812" y="280" fill="#a8203a">recall เพียง 0.227</text>
+      <text class="a3n" x="812" y="300" fill="#a8203a">ไม่ใช่เพราะข้อมูลน้อย</text>
+      <text class="a3n" x="812" y="316" fill="#a8203a">แต่เพราะวัตถุเล็กมาก</text>
+
+      <rect x="800" y="338" width="212" height="106" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a3n" x="812" y="358" font-weight="700">ความไม่สมดุลของคลาส</text>
+      <text class="a3n" x="812" y="378">finger = 43.6% ของกล่อง</text>
+      <text class="a3n" x="812" y="394">ทั้งหมดในชุดฝึก</text>
+      <text class="a3n" x="812" y="414">ตั้งใจไม่ลดจำนวนลง</text>
+      <text class="a3n" x="812" y="430">ดูเหตุผลในรูปที่ ก5</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ระยะที่ 2 เพิ่ม 4 คลาส และการเพิ่มนั้น <b>ไม่ใช่การเพิ่มเพื่อให้ดูเยอะ</b> —
+      <code>Tip_forcep</code> และ <code>Tip_needle_holder</code> แยกปลายเครื่องมือออกมาเพื่อให้ระบบระบุ
+      <i>จุดที่กำลังทำหัตถการ</i> ได้ ไม่ใช่แค่รู้ว่ามีเครื่องมืออยู่ในภาพ ซึ่งเป็นข้อมูลที่จำเป็นสำหรับงาน
+      วิเคราะห์ลำดับขั้นตอนในระยะถัดไป · <b>ผลข้างเคียงที่ต้องเขียนไว้ในรายงาน:</b> เมื่อจำนวนคลาสเปลี่ยน
+      ค่า mAP รวมของสองระยะจะเทียบกันตรง ๆ ไม่ได้อีกต่อไป
+    </figcaption>
+  </figure>
+</section>
+
+<section id="a5">
+  <h3><span class="num">รูปที่ ก4</span>สถาปัตยกรรม YOLO11 และฟังก์ชันสูญเสียทั้งสามส่วน</h3>
+  <p class="sub">แบบบล็อกไดอะแกรม · วาดด้วย SVG · ตัวเลขจากบันทึกการรันจริง</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      ภาพเดินทางผ่านอะไรบ้างกว่าจะออกมาเป็นกรอบ และ <b>โมเดลนี้เรียนรู้จากค่าความสูญเสียกี่ตัว อะไรบ้าง</b>
+      รูปนี้ควรอยู่ในบทที่ 2 หัวข้อทฤษฎี Object Detection คู่กับสมการของแต่ละ loss
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 486" role="img" aria-label="บล็อกไดอะแกรมของ YOLO11 แสดงภาพนำเข้าขนาด 640 คูณ 640 ผ่าน backbone neck และ head สามระดับ แล้วผ่าน NMS ออกมาเป็นกรอบ พร้อมกล่องแสดงฟังก์ชันสูญเสียสามตัวคือ CIoU BCE และ DFL">
+      <defs>
+        <marker id="a5h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .a5t{font-size:12.5px;fill:#1a1a2e;font-weight:600}
+        .a5m{font-size:10.5px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .a5n{font-size:10.5px;fill:#8492a6}
+        .a5b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.3}
+        .a5ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <rect class="a5b" x="16" y="120" width="118" height="66" rx="3"/>
+      <text class="a5t" x="75" y="146" text-anchor="middle">ภาพนำเข้า</text>
+      <text class="a5m" x="75" y="164" text-anchor="middle">640×640×3</text>
+      <line class="a5ln" x1="136" y1="153" x2="158" y2="153" marker-end="url(#a5h)"/>
+
+      <rect x="162" y="60" width="196" height="186" rx="4" fill="#eef4fb" stroke="#0f3460" stroke-width="1.4"/>
+      <text class="a5t" x="260" y="84" text-anchor="middle" fill="#0f3460">Backbone</text>
+      <text class="a5n" x="260" y="100" text-anchor="middle">สกัดคุณลักษณะจากหยาบไปละเอียด</text>
+      <rect class="a5b" x="176" y="112" width="168" height="28" rx="3"/><text class="a5m" x="186" y="131">Conv (stride 2) ×5</text>
+      <rect class="a5b" x="176" y="146" width="168" height="28" rx="3"/><text class="a5m" x="186" y="165">C3k2 block ×4</text>
+      <rect class="a5b" x="176" y="180" width="168" height="28" rx="3"/><text class="a5m" x="186" y="199">SPPF</text>
+      <rect class="a5b" x="176" y="214" width="168" height="24" rx="3"/><text class="a5m" x="186" y="231">C2PSA (attention)</text>
+
+      <line class="a5ln" x1="360" y1="153" x2="382" y2="153" marker-end="url(#a5h)"/>
+
+      <rect x="386" y="60" width="186" height="186" rx="4" fill="#eef4fb" stroke="#0f3460" stroke-width="1.4"/>
+      <text class="a5t" x="479" y="84" text-anchor="middle" fill="#0f3460">Neck</text>
+      <text class="a5n" x="479" y="100" text-anchor="middle">รวมคุณลักษณะข้ามระดับ (PAN-FPN)</text>
+      <rect class="a5b" x="400" y="112" width="158" height="28" rx="3"/><text class="a5m" x="410" y="131">Upsample + Concat</text>
+      <rect class="a5b" x="400" y="146" width="158" height="28" rx="3"/><text class="a5m" x="410" y="165">C3k2 (top-down)</text>
+      <rect class="a5b" x="400" y="180" width="158" height="28" rx="3"/><text class="a5m" x="410" y="199">Conv + Concat</text>
+      <rect class="a5b" x="400" y="214" width="158" height="24" rx="3"/><text class="a5m" x="410" y="231">C3k2 (bottom-up)</text>
+
+      <line class="a5ln" x1="574" y1="153" x2="596" y2="153" marker-end="url(#a5h)"/>
+
+      <rect x="600" y="60" width="196" height="186" rx="4" fill="#eef4fb" stroke="#0f3460" stroke-width="1.4"/>
+      <text class="a5t" x="698" y="84" text-anchor="middle" fill="#0f3460">Head · Detect</text>
+      <text class="a5n" x="698" y="100" text-anchor="middle">ทำนายสามความละเอียดพร้อมกัน</text>
+      <rect class="a5b" x="614" y="112" width="168" height="30" rx="3"/>
+      <text class="a5m" x="624" y="132">P3 · 80×80 — วัตถุเล็ก</text>
+      <rect class="a5b" x="614" y="148" width="168" height="30" rx="3"/>
+      <text class="a5m" x="624" y="168">P4 · 40×40 — วัตถุกลาง</text>
+      <rect class="a5b" x="614" y="184" width="168" height="30" rx="3"/>
+      <text class="a5m" x="624" y="204">P5 · 20×20 — วัตถุใหญ่</text>
+      <text class="a5n" x="614" y="234">anchor-free · แยกสาขากรอบกับสาขาคลาส</text>
+
+      <line class="a5ln" x1="798" y1="153" x2="820" y2="153" marker-end="url(#a5h)"/>
+      <rect class="a5b" x="824" y="98" width="180" height="50" rx="3"/>
+      <text class="a5t" x="914" y="120" text-anchor="middle">NMS</text>
+      <text class="a5n" x="914" y="138" text-anchor="middle">ตัดกรอบซ้อนที่ซ้ำกัน</text>
+      <line class="a5ln" x1="914" y1="150" x2="914" y2="172" marker-end="url(#a5h)"/>
+      <rect class="a5b" x="824" y="174" width="180" height="58" rx="3"/>
+      <text class="a5t" x="914" y="196" text-anchor="middle">ผลลัพธ์</text>
+      <text class="a5n" x="914" y="214" text-anchor="middle">กรอบ + คลาส + ความเชื่อมั่น</text>
+
+      <!-- loss -->
+      <rect x="16" y="278" width="988" height="140" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a5t" x="30" y="302">ฟังก์ชันสูญเสียที่ใช้ฝึก — สามส่วน</text>
+      <rect class="a5b" x="30" y="316" width="310" height="86" rx="3"/>
+      <text class="a5t" x="42" y="338">box loss — CIoU</text>
+      <text class="a5n" x="42" y="356">ความคลาดเคลื่อนของตำแหน่งและขนาดกรอบ</text>
+      <text class="a5n" x="42" y="374">คิดทั้งพื้นที่ซ้อน ระยะจุดศูนย์กลาง และอัตราส่วน</text>
+      <text class="a5m" x="42" y="392">ค่า val สุดท้าย 1.2356</text>
+      <rect class="a5b" x="354" y="316" width="310" height="86" rx="3"/>
+      <text class="a5t" x="366" y="338">cls loss — BCE</text>
+      <text class="a5n" x="366" y="356">ความถูกต้องของการจำแนกประเภทวัตถุ</text>
+      <text class="a5n" x="366" y="374">คิดแยกอิสระทีละคลาส</text>
+      <text class="a5m" x="366" y="392">ค่า val สุดท้าย 0.9003</text>
+      <rect class="a5b" x="678" y="316" width="310" height="86" rx="3"/>
+      <text class="a5t" x="690" y="338">dfl loss — Distribution Focal</text>
+      <text class="a5n" x="690" y="356">ทำนายขอบกรอบเป็นการแจกแจงความน่าจะเป็น</text>
+      <text class="a5n" x="690" y="374">แทนการทำนายเป็นค่าเดียว ทำให้ขอบคมขึ้น</text>
+      <text class="a5m" x="690" y="392">ค่า val สุดท้าย 1.1802</text>
+
+      <rect x="16" y="432" width="988" height="42" rx="3" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="a5n" x="30" y="452" fill="#8a5500" font-weight="700">ข้อควรระวัง: YOLO11 ไม่มี objectness loss</text>
+      <text class="a5n" x="30" y="468" fill="#8a5500">objectness เป็นของ YOLOv5 และ v7 ใน YOLOv8 ขึ้นไปถูกแทนด้วย DFL — ถ้ารายงานเขียนว่ามี “Object Loss” ถือว่าผิด</text>
+
+      <text class="a5n" x="16" y="42">YOLO11n · 182 ชั้น · 2,591,595 พารามิเตอร์ · 6.5 GFLOPs — เลือกขนาด n เพราะการ์ดจอมี VRAM 4 GB</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> โมเดลทำนายที่ <b>สามความละเอียดพร้อมกัน</b> ชั้น P3 ที่ละเอียดที่สุด
+      (80×80) คือชั้นที่รับผิดชอบวัตถุเล็กอย่างเข็ม ซึ่งอธิบายว่าทำไมการเพิ่มขนาดภาพนำเข้าจึงเป็นทางแก้
+      ที่ตรงจุดที่สุดสำหรับปัญหา <code>needle</code> · ค่า loss ทั้งสามที่แสดงเป็นค่าจริงจาก
+      <code>results/benchmark_comparison.md</code> ของแขนที่เปิด augmentation
+    </figcaption>
+  </figure>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ค</span>
+  <h2>การทดลอง</h2>
+  <p>คำถามวิจัยของระยะที่ 2 และวิธีออกแบบการทดลองให้ตอบคำถามนั้นได้จริง</p>
+</div>
+
+<section id="a6">
+  <h3><span class="num">รูปที่ ก5</span>แบบแผนการทดลองเปรียบเทียบผลของ Data Augmentation</h3>
+  <p class="sub">แบบมีกลุ่มควบคุม (Controlled experiment) · วาดด้วย SVG · ตัวแปรอ้างอิงจาก args.yaml จริง</p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      รายงานระยะที่ 1 เสนอให้ใช้ data augmentation ในระยะถัดไป คำถามคือ <b>มันช่วยจริงหรือไม่ และช่วยกับ
+      คลาสไหนบ้าง</b> การจะตอบได้ต้องเทรนสองครั้งโดยต่างกันเพียงตัวแปรเดียว รูปนี้แสดงว่าอะไรถูกตรึงไว้บ้าง
+      ควรอยู่ในบทที่ 3 และเป็นรูปที่แสดงว่าเล่มนี้เป็นงานวิจัย ไม่ใช่แค่การทำระบบ
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 468" role="img" aria-label="แผนภาพการทดลองแบบมีกลุ่มควบคุม แสดงชุดข้อมูลเดียวกันแยกไปสองแขนคือปิดและเปิด data augmentation โดยตัวแปรอื่นถูกตรึงเหมือนกันทุกตัว แล้วนำผลมาเปรียบเทียบ">
+      <defs>
+        <marker id="a6h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .a6t{font-size:12.5px;fill:#1a1a2e;font-weight:600}
+        .a6m{font-size:10.5px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .a6n{font-size:10.5px;fill:#8492a6}
+        .a6b{fill:#ffffff;stroke:#9fb0c9;stroke-width:1.3}
+        .a6ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <!-- ตัวแปรควบคุม -->
+      <rect x="16" y="20" width="300" height="220" rx="4" fill="#f7f9fd" stroke="#dde4ef"/>
+      <text class="a6t" x="30" y="44">ตัวแปรควบคุม — ตรึงให้เหมือนกันทั้งสองแขน</text>
+      <text class="a6m" x="30" y="70">ชุดข้อมูล  D:\ml\data\ssid9_bbox</text>
+      <text class="a6m" x="30" y="90">โมเดลตั้งต้น  yolo11n.pt</text>
+      <text class="a6m" x="30" y="110">epochs  50</text>
+      <text class="a6m" x="30" y="130">batch  8</text>
+      <text class="a6m" x="30" y="150">imgsz  640</text>
+      <text class="a6m" x="30" y="170">seed  42</text>
+      <text class="a6m" x="30" y="190">workers  0</text>
+      <text class="a6m" x="30" y="210">ฮาร์ดแวร์  RTX 3050 Laptop 4 GB</text>
+      <text class="a6n" x="30" y="230">ค่าเหล่านี้คำนวณครั้งเดียวแล้วส่งให้ทั้งสองแขน จึงเพี้ยนไม่ได้</text>
+
+      <line class="a6ln" x1="318" y1="96" x2="352" y2="96" marker-end="url(#a6h)"/>
+      <line class="a6ln" x1="318" y1="176" x2="352" y2="176" marker-end="url(#a6h)"/>
+
+      <!-- แขน A -->
+      <rect x="356" y="52" width="300" height="86" rx="4" fill="#ffffff" stroke="#0f3460" stroke-width="1.5"/>
+      <text class="a6t" x="370" y="76">แขน A · กลุ่มควบคุม</text>
+      <text class="a6n" x="370" y="94">ปิด augmentation ทุกตัว ไม่ใช่แค่ปิด mosaic</text>
+      <text class="a6m" x="370" y="114" style="font-size:9.5px">hsv_h hsv_s hsv_v degrees translate scale shear</text>
+      <text class="a6m" x="370" y="130" style="font-size:9.5px">perspective flipud fliplr bgr mosaic mixup … = 0</text>
+
+      <!-- แขน B -->
+      <rect x="356" y="150" width="300" height="86" rx="4" fill="#ffffff" stroke="#e94560" stroke-width="1.5"/>
+      <text class="a6t" x="370" y="174">แขน B · กลุ่มทดลอง</text>
+      <text class="a6n" x="370" y="192">เปิด augmentation ตามค่าเริ่มต้นของ Ultralytics</text>
+      <text class="a6m" x="370" y="212" style="font-size:9.5px">mosaic · HSV jitter · scale · translate · fliplr</text>
+      <text class="a6n" x="370" y="230">ตัวแปรต้นตัวเดียวของการทดลองนี้</text>
+
+      <path class="a6ln" d="M658 95 H690 V140 H716" marker-end="url(#a6h)"/>
+      <path class="a6ln" d="M658 193 H690 V140 H716" marker-end="url(#a6h)"/>
+
+      <rect class="a6b" x="720" y="112" width="284" height="56" rx="3"/>
+      <text class="a6t" x="734" y="134">ประเมินด้วยชุดและวิธีเดียวกัน</text>
+      <text class="a6n" x="734" y="152">val 400 ภาพ · test 215 ภาพ · เกณฑ์เดียวกัน</text>
+
+      <!-- ผล -->
+      <rect x="16" y="262" width="988" height="130" rx="4" fill="#f2faf6" stroke="#2f9e78" stroke-width="1.4"/>
+      <text class="a6t" x="30" y="286" fill="#1d6b51">ผลที่ได้ (ชุด validation)</text>
+      <text class="a6n" x="30" y="308">แขน A ปิด augmentation</text>
+      <text class="a6m" x="30" y="328">mAP@50 0.5746 · recall 0.5417 · จุดสูงสุดที่ epoch 10 แล้วแย่ลงต่อเนื่องอีก 40 epochs</text>
+      <text class="a6n" x="30" y="352">แขน B เปิด augmentation</text>
+      <text class="a6m" x="30" y="372">mAP@50 0.6559 · recall 0.6641 · จุดสูงสุดที่ epoch 50 ซึ่งเป็น epoch สุดท้าย</text>
+      <text class="a6n" x="600" y="308" fill="#1d6b51">สรุป: augmentation ดีขึ้นทุกคลาส ไม่มีคลาสใดแย่ลง</text>
+      <text class="a6n" x="600" y="328" fill="#1d6b51">mAP@50 +14.2% · mAP@50-95 +23.5% · recall +22.6%</text>
+      <text class="a6n" x="600" y="348" fill="#1d6b51">แลกกับ precision ลดลง 1.6% และเวลาเทรนเพิ่ม 6 นาที</text>
+      <text class="a6n" x="600" y="372" fill="#1d6b51">แขน A แสดงอาการ overfit ชัดเจน แขน B ยังไม่ converge</text>
+
+      <rect x="16" y="404" width="988" height="48" rx="3" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="a6n" x="30" y="424" fill="#8a5500" font-weight="700">ไม่มีการปรับสมดุลจำนวนคลาส</text>
+      <text class="a6n" x="30" y="442" fill="#8a5500">finger มี 7,157 จาก 16,421 กล่องในชุดฝึก (43.6%) และตั้งใจปล่อยไว้ — การสุ่มลด finger ต้องลบทั้งภาพ ซึ่งจะพาวัตถุคลาสอื่นในภาพเดียวกันหายไปด้วย</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ความน่าเชื่อถือของข้อสรุปอยู่ที่ <b>จำนวนตัวแปรที่ต่างกันระหว่างสองแขน
+      ต้องเท่ากับหนึ่ง</b> · การปิด augmentation แบบระบุครบทุกพารามิเตอร์ (ไม่ใช่ปิดแค่ mosaic) ทำให้
+      กลุ่มควบคุมยังเป็นกลุ่มควบคุมอยู่แม้ Ultralytics รุ่นใหม่จะเปิดค่าอื่นเป็นค่าเริ่มต้นเพิ่ม และทำให้
+      ไฟล์ <code>args.yaml</code> ของรอบนั้นเป็นหลักฐานของการทดลองในตัวเอง
+    </figcaption>
+  </figure>
+
+  <div class="rule">
+    <h4>เขียนผลการทดลองอย่างไรให้เป็นวิชาการ</h4>
+    <ul>
+      <li><b>เขียนสมมติฐานตั้งต้นไว้ก่อนบอกผล</b> — สมมติฐานของการทดลองนี้คือ mosaic อาจทำร้ายวัตถุเล็ก
+        อย่างเข็ม <b>และผลออกมาว่าสมมติฐานผิด</b> ทุกคลาสดีขึ้น การรายงานสมมติฐานที่ผิดคือสิ่งที่แยก
+        งานวิจัยออกจากการเล่าความสำเร็จ</li>
+      <li><b>รายงานสิ่งที่แลกไป ไม่ใช่เฉพาะสิ่งที่ได้</b> — precision ลดลง 1.6% และเวลาเทรนเพิ่ม 6 นาที
+        ต้องอยู่ในตารางด้วย</li>
+      <li><b>ระบุข้อจำกัดของการทดลอง</b> — ทดลองด้วย seed เดียว ยังไม่ได้ทำซ้ำหลายรอบเพื่อดูความแปรปรวน
+        จึงยังสรุปเชิงสถิติเข้มงวดไม่ได้ ให้เขียนตรง ๆ ว่าเป็นข้อจำกัด</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด ง</span>
+  <h2>ผังงาน</h2>
+  <p>
+    สามรูปก่อนหน้าบอกว่าระบบ <i>ประกอบด้วยอะไร</i> และ <i>ทดลองอย่างไร</i> สามรูปนี้ลงลึกถึง
+    <b>ตรรกะจริงในโค้ด</b> — เงื่อนไขทุกกล่องข้าวหลามตัดในผังงานเหล่านี้มีอยู่จริงในไฟล์ที่ระบุไว้
+    ทั้งสามรูปใช้สัญลักษณ์ตามมาตรฐาน ISO 5807 / ANSI X3.5 ครบทั้งหกชนิด: มุมมน (เริ่ม/จบ),
+    สี่เหลี่ยม (ประมวลผล), ด้านขนาน (รับเข้า/ส่งออก), ข้าวหลามตัด (ตัดสินใจ),
+    สี่เหลี่ยมมีขีดคู่ข้าง (เรียกกระบวนการที่อธิบายไว้ที่อื่น) และวงกลม (จุดเชื่อมต่อ)
+  </p>
+</div>
+
+<section id="a7">
+  <h3><span class="num">รูปที่ ก6</span>ผังงานการทำความสะอาดไฟล์ label</h3>
+  <p class="sub">ผังงานมาตรฐาน (ANSI/ISO) · วาดด้วย SVG · ตรงกับ <code>polygons_to_bboxes.py</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      อัลกอริทึมตัดสินใจอย่างไรกับ label แต่ละแถว และ <b>แถวแบบไหนบ้างที่ถูกทิ้ง</b> —
+      เป็นผังงานของโค้ดที่โครงงานนี้เขียนขึ้นเอง ไม่ใช่ของไลบรารี จึงเป็นผังงานที่ควรได้พื้นที่มากที่สุด
+      ในบทที่ 3 หัวข้อการเตรียมข้อมูล
+    </p>
+  </div>
+
+  <div class="legend">
+    <div><b>สี่เหลี่ยมมุมมน</b> จุดเริ่มต้นและจุดสิ้นสุด (Terminal)</div>
+    <div><b>สี่เหลี่ยมผืนผ้า</b> การประมวลผล (Process)</div>
+    <div><b>สี่เหลี่ยมด้านขนาน</b> การรับเข้าและส่งออกข้อมูล (Input/Output)</div>
+    <div><b>ข้าวหลามตัด</b> การตัดสินใจ มีทางออกสองทางเสมอ (Decision)</div>
+    <div><b>สี่เหลี่ยมมีขีดคู่ข้าง</b> เรียกกระบวนการที่อธิบายไว้ที่อื่น (Predefined Process)</div>
+    <div><b>วงกลม ก</b> จุดเชื่อมต่อ (Connector) — วนกลับไปอ่านแถวถัดไป</div>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 872" role="img" aria-label="ผังงานการทำความสะอาดไฟล์ label อ่านทีละแถว ตรวจว่าเป็นกรอบห้าค่าหรือ polygon ถ้าเป็น polygon จะแปลงเป็นกรอบที่ล้อมรอบและตรวจว่าพื้นที่ไม่เป็นศูนย์ แถวที่ตีความไม่ได้จะถูกทิ้งพร้อมข้อความเตือน">
+      <defs>
+        <marker id="f1h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .f1p{fill:#ffffff;stroke:#0f3460;stroke-width:1.4}
+        .f1d{fill:#eef4fb;stroke:#0f3460;stroke-width:1.4}
+        .f1term{fill:#0f3460;stroke:#0f3460;stroke-width:1.4}
+        .f1drop{fill:#fff5f6;stroke:#e94560;stroke-width:1.4}
+        .f1keep{fill:#f2faf6;stroke:#2f9e78;stroke-width:1.4}
+        .f1t{font-size:12px;fill:#1a1a2e}
+        .f1w{font-size:12px;fill:#ffffff;font-weight:600}
+        .f1m{font-size:10px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .f1y{font-size:10.5px;fill:#2f9e78;font-weight:700}
+        .f1n{font-size:10.5px;fill:#e94560;font-weight:700}
+        .f1ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <rect class="f1term" x="320" y="16" width="170" height="34" rx="17"/>
+      <text class="f1w" x="405" y="38" text-anchor="middle">เริ่ม · เปิดไฟล์ label</text>
+      <line class="f1ln" x1="405" y1="50" x2="405" y2="72" marker-end="url(#f1h)"/>
+
+      <circle cx="196" cy="93" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="196" y="97" text-anchor="middle">ก</text>
+      <line class="f1ln" x1="209" y1="93" x2="283" y2="93" marker-end="url(#f1h)"/>
+
+      <polygon class="f1p" points="299,74 525,74 511,114 285,114"/>
+      <text class="f1t" x="405" y="99" text-anchor="middle">อ่านแถวถัดไป ตัดช่องว่างหัวท้าย</text>
+      <line class="f1ln" x1="405" y1="114" x2="405" y2="132" marker-end="url(#f1h)"/>
+
+      <polygon class="f1d" points="405,132 575,168 405,204 235,168"/>
+      <text class="f1t" x="405" y="172" text-anchor="middle">ยังมีแถวเหลือหรือไม่</text>
+      <text class="f1n" x="588" y="164">ไม่</text>
+      <path class="f1ln" d="M575 168 H706" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="222">ใช่</text>
+      <line class="f1ln" x1="405" y1="204" x2="405" y2="232" marker-end="url(#f1h)"/>
+
+      <polygon class="f1p" points="716,150 992,150 978,186 702,186"/>
+      <text class="f1t" x="847" y="173" text-anchor="middle">เขียนไฟล์ผลลัพธ์ + พิมพ์สรุปสถิติ</text>
+      <line class="f1ln" x1="847" y1="186" x2="847" y2="204" marker-end="url(#f1h)"/>
+      <rect class="f1term" x="772" y="206" width="150" height="32" rx="16"/>
+      <text class="f1w" x="847" y="227" text-anchor="middle">จบ</text>
+
+      <polygon class="f1d" points="405,232 575,268 405,304 235,268"/>
+      <text class="f1t" x="405" y="266" text-anchor="middle">จำนวนค่าในแถว</text>
+      <text class="f1t" x="405" y="282" text-anchor="middle">เท่ากับ 5 หรือไม่</text>
+      <text class="f1y" x="588" y="264">ใช่</text>
+      <path class="f1ln" d="M575 268 H700" marker-end="url(#f1h)"/>
+      <text class="f1n" x="418" y="322">ไม่</text>
+      <line class="f1ln" x1="405" y1="304" x2="405" y2="332" marker-end="url(#f1h)"/>
+
+      <rect class="f1keep" x="702" y="248" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="266" fill="#1d6b51">เป็นกรอบอยู่แล้ว เก็บทั้งบรรทัด</text>
+      <text class="f1m" x="714" y="282" fill="#1d6b51">ไม่แตะตัวเลขเดิมแม้แต่หลักเดียว</text>
+      <line class="f1ln" x1="950" y1="268" x2="975" y2="268"/>
+      <circle cx="988" cy="268" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="272" text-anchor="middle">ก</text>
+
+      <polygon class="f1d" points="405,332 595,372 405,412 215,372"/>
+      <text class="f1t" x="405" y="368" text-anchor="middle">ค่าน้อยกว่า 7 หรือ</text>
+      <text class="f1t" x="405" y="384" text-anchor="middle">จำนวนค่าเป็นเลขคู่</text>
+      <text class="f1n" x="606" y="368">ใช่</text>
+      <path class="f1ln" d="M595 372 H700" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="430">ไม่</text>
+      <line class="f1ln" x1="405" y1="412" x2="405" y2="440" marker-end="url(#f1h)"/>
+
+      <rect class="f1drop" x="702" y="352" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="370" fill="#a8203a">ทิ้งแถว + เตือน malformed</text>
+      <text class="f1m" x="714" y="386" fill="#a8203a">ไม่ใช่ทั้งกรอบและ polygon</text>
+      <line class="f1ln" x1="950" y1="372" x2="975" y2="372"/>
+      <circle cx="988" cy="372" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="376" text-anchor="middle">ก</text>
+
+      <rect class="f1p" x="285" y="440" width="240" height="40" rx="3"/>
+      <text class="f1t" x="405" y="465" text-anchor="middle">แปลงพิกัดทุกค่าเป็นตัวเลข</text>
+      <line class="f1ln" x1="405" y1="480" x2="405" y2="500" marker-end="url(#f1h)"/>
+
+      <polygon class="f1d" points="405,500 575,536 405,572 235,536"/>
+      <text class="f1t" x="405" y="540" text-anchor="middle">แปลงเป็นตัวเลขไม่ได้</text>
+      <text class="f1n" x="588" y="532">ใช่</text>
+      <path class="f1ln" d="M575 536 H700" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="590">ไม่</text>
+      <line class="f1ln" x1="405" y1="572" x2="405" y2="600" marker-end="url(#f1h)"/>
+
+      <rect class="f1drop" x="702" y="516" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="534" fill="#a8203a">ทิ้งแถว + เตือน</text>
+      <text class="f1m" x="714" y="550" fill="#a8203a">พิกัดไม่ใช่ตัวเลข</text>
+      <line class="f1ln" x1="950" y1="536" x2="975" y2="536"/>
+      <circle cx="988" cy="536" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="540" text-anchor="middle">ก</text>
+
+      <rect class="f1p" x="255" y="600" width="300" height="46" rx="3"/>
+      <text class="f1t" x="405" y="620" text-anchor="middle">หากรอบสี่เหลี่ยมที่ล้อม polygon พอดี</text>
+      <text class="f1m" x="405" y="637" text-anchor="middle">แล้ว clamp ทุกค่าเข้าช่วง [0,1]</text>
+      <line class="f1ln" x1="405" y1="646" x2="405" y2="666" marker-end="url(#f1h)"/>
+
+      <polygon class="f1d" points="405,666 575,702 405,738 235,702"/>
+      <text class="f1t" x="405" y="706" text-anchor="middle">กว้าง &gt; 0 และ สูง &gt; 0</text>
+      <text class="f1n" x="588" y="698">ไม่</text>
+      <path class="f1ln" d="M575 702 H700" marker-end="url(#f1h)"/>
+      <text class="f1y" x="418" y="756">ใช่</text>
+      <line class="f1ln" x1="405" y1="738" x2="405" y2="766" marker-end="url(#f1h)"/>
+
+      <rect class="f1drop" x="702" y="682" width="248" height="40" rx="3"/>
+      <text class="f1t" x="714" y="700" fill="#a8203a">ทิ้งแถว · กรอบพื้นที่ศูนย์</text>
+      <text class="f1m" x="714" y="716" fill="#a8203a">ถ้าเก็บไว้ จะกลายเป็นเป้าที่ผิด</text>
+      <line class="f1ln" x1="950" y1="702" x2="975" y2="702"/>
+      <circle cx="988" cy="702" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="988" y="706" text-anchor="middle">ก</text>
+
+      <rect class="f1keep" x="270" y="766" width="270" height="44" rx="3"/>
+      <text class="f1t" x="405" y="786" text-anchor="middle" fill="#1d6b51">เขียนแถวใหม่เป็นกรอบ 5 ค่า</text>
+      <text class="f1m" x="405" y="803" text-anchor="middle" fill="#1d6b51">cls xc yc w h ทศนิยม 6 ตำแหน่ง</text>
+      <line class="f1ln" x1="540" y1="788" x2="562" y2="788"/>
+      <circle cx="575" cy="788" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f1t" x="575" y="792" text-anchor="middle">ก</text>
+
+      <text class="f1m" x="16" y="850">ผลที่รันจริงกับ 03_dataset/ssid.yolov11 : 2,190 ไฟล์ · แปลง polygon 4,783 แถว · ทิ้ง 0 แถว · ได้ทั้งหมด 22,957 แถว</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> ทางออกทุกทางถูกนับและรายงาน ไม่มีแถวใดหายไปเงียบ ๆ —
+      โปรแกรมพิมพ์สรุปว่ามีกี่แถวที่เป็นกรอบอยู่แล้ว กี่แถวที่แปลงมาจาก polygon และกี่แถวที่ถูกทิ้ง
+      พร้อมเหตุผล · เมื่อรันกับชุดข้อมูลจริง <b>จำนวนแถวที่ถูกทิ้งเป็นศูนย์</b> ซึ่งเป็นหลักฐานว่า
+      การแปลงไม่ได้ทำให้ข้อมูลหาย · เงื่อนไข <code>จำนวนค่าเป็นเลขคู่</code> มีไว้ดักแถวที่พิกัดขาดหาย
+      เพราะ polygon ที่ถูกต้องต้องมี class หนึ่งค่าบวกพิกัดเป็นคู่ รวมแล้วต้องเป็นเลขคี่เสมอ
+    </figcaption>
+  </figure>
+</section>
+
+<section id="a8">
+  <h3><span class="num">รูปที่ ก7</span>ผังงานการฝึกแบบจำลอง</h3>
+  <p class="sub">ผังงานพร้อมวงวนซ้อน · วาดด้วย SVG · ตรงกับบันทึกการรันจริงและ <code>train_roboflow_yolo.py</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      การฝึกหนึ่งรอบเกิดอะไรขึ้นบ้าง และ <b>ระบบตัดสินใจอย่างไรว่าจะเก็บน้ำหนักชุดไหนไว้ และจะหยุดเมื่อไร</b>
+      สองเรื่องนี้คือสิ่งที่ทำให้ <code>best.pt</code> ต่างจาก <code>last.pt</code> ซึ่งเป็นจุดที่รายงานมักอธิบายผิด
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 0 1020 796" role="img" aria-label="ผังงานการฝึกแบบจำลอง เริ่มจากตรวจหน่วยความจำ สแกน label โหลดน้ำหนักตั้งต้น แล้ววนทีละ epoch ซึ่งภายในวนทีละ batch เพื่อคำนวณค่าสูญเสียและปรับน้ำหนัก จบแต่ละ epoch จะประเมินบนชุด validation และบันทึก best.pt เมื่อดีขึ้น">
+      <defs>
+        <marker id="f2h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .f2p{fill:#ffffff;stroke:#0f3460;stroke-width:1.4}
+        .f2d{fill:#eef4fb;stroke:#0f3460;stroke-width:1.4}
+        .f2term{fill:#0f3460;stroke:#0f3460;stroke-width:1.4}
+        .f2stop{fill:#fff5f6;stroke:#e94560;stroke-width:1.4}
+        .f2keep{fill:#f2faf6;stroke:#2f9e78;stroke-width:1.4}
+        .f2t{font-size:12px;fill:#1a1a2e}
+        .f2w{font-size:12px;fill:#ffffff;font-weight:600}
+        .f2m{font-size:10px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .f2y{font-size:10.5px;fill:#2f9e78;font-weight:700}
+        .f2n{font-size:10.5px;fill:#e94560;font-weight:700}
+        .f2ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <rect class="f2term" x="300" y="14" width="150" height="32" rx="16"/>
+      <text class="f2w" x="375" y="35" text-anchor="middle">เริ่ม</text>
+      <line class="f2ln" x1="375" y1="46" x2="375" y2="64" marker-end="url(#f2h)"/>
+
+      <polygon class="f2d" points="375,64 545,98 375,132 205,98"/>
+      <text class="f2t" x="375" y="94" text-anchor="middle">หน่วยความจำ commit</text>
+      <text class="f2t" x="375" y="110" text-anchor="middle">ว่างเกิน 6 GB หรือไม่</text>
+      <text class="f2n" x="558" y="92">ไม่</text>
+      <path class="f2ln" d="M545 98 H676" marker-end="url(#f2h)"/>
+      <rect class="f2stop" x="678" y="78" width="300" height="40" rx="20"/>
+      <text class="f2t" x="690" y="96" fill="#a8203a">หยุดทันที พร้อมบอกให้ปิดโปรแกรมอื่น</text>
+      <text class="f2m" x="690" y="112" fill="#a8203a">กันไม่ให้ตายกลางทางด้วย WinError 1455</text>
+      <text class="f2y" x="388" y="150">ใช่</text>
+      <line class="f2ln" x1="375" y1="132" x2="375" y2="152" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="152" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="172" text-anchor="middle">สแกนไฟล์ label แล้วสร้างแคช</text>
+      <text class="f2m" x="375" y="188" text-anchor="middle">รายงานจำนวนไฟล์เสียหาย</text>
+      <line class="f2ln" x1="375" y1="194" x2="375" y2="214" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="214" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="234" text-anchor="middle">โหลดน้ำหนักตั้งต้น yolo11n.pt</text>
+      <text class="f2m" x="375" y="250" text-anchor="middle">ย้ายมาได้ 448 จาก 499 ชั้น</text>
+      <line class="f2ln" x1="375" y1="256" x2="375" y2="276" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="276" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="296" text-anchor="middle">เลือก optimizer อัตโนมัติ</text>
+      <text class="f2m" x="375" y="312" text-anchor="middle">AdamW lr=0.000769</text>
+      <line class="f2ln" x1="375" y1="318" x2="375" y2="338" marker-end="url(#f2h)"/>
+
+      <!-- epoch loop -->
+      <rect x="60" y="338" width="700" height="330" rx="5" fill="none" stroke="#0f3460"
+            stroke-width="1.2" stroke-dasharray="6 4"/>
+      <text class="f2m" x="72" y="356" fill="#0f3460">วงวนระดับ epoch</text>
+
+      <polygon class="f2d" points="375,364 545,398 375,432 205,398"/>
+      <text class="f2t" x="375" y="394" text-anchor="middle">ยังไม่ครบ 150 epoch</text>
+      <text class="f2t" x="375" y="410" text-anchor="middle">และยังไม่ถูกสั่งหยุด</text>
+      <text class="f2y" x="388" y="450">ใช่</text>
+      <line class="f2ln" x1="375" y1="432" x2="375" y2="452" marker-end="url(#f2h)"/>
+
+      <rect x="150" y="452" width="450" height="86" rx="3" fill="#ffffff" stroke="#0f3460" stroke-width="1.4"/>
+      <line x1="164" y1="452" x2="164" y2="538" stroke="#0f3460" stroke-width="1.4"/>
+      <line x1="586" y1="452" x2="586" y2="538" stroke="#0f3460" stroke-width="1.4"/>
+      <text class="f2m" x="178" y="470" fill="#0f3460">วงวนระดับ batch · ทีละ 8 ภาพ</text>
+      <text class="f2t" x="178" y="492">augment → forward → คำนวณ box(CIoU) + cls(BCE) + dfl</text>
+      <text class="f2t" x="178" y="512">→ backward → ปรับน้ำหนัก → จนครบ 197 batch</text>
+      <text class="f2m" x="178" y="530" fill="#5c6b7a">แขนที่ปิด augmentation ข้ามขั้น augment ไปเลย</text>
+      <line class="f2ln" x1="375" y1="538" x2="375" y2="558" marker-end="url(#f2h)"/>
+
+      <rect class="f2p" x="245" y="558" width="260" height="42" rx="3"/>
+      <text class="f2t" x="375" y="578" text-anchor="middle">ประเมินบนชุด validation</text>
+      <text class="f2m" x="375" y="594" text-anchor="middle">400 ภาพ ได้ mAP50 และ mAP50-95</text>
+      <line class="f2ln" x1="375" y1="600" x2="375" y2="618" marker-end="url(#f2h)"/>
+
+      <polygon class="f2d" points="375,618 545,644 375,670 205,644"/>
+      <text class="f2t" x="375" y="648" text-anchor="middle">ดีกว่าค่าที่ดีที่สุดเดิม</text>
+      <text class="f2y" x="558" y="638">ใช่</text>
+      <path class="f2ln" d="M545 644 H676" marker-end="url(#f2h)"/>
+      <polygon class="f2keep" points="692,624 978,624 964,664 678,664"/>
+      <text class="f2t" x="702" y="642" fill="#1d6b51">บันทึกทับ best.pt</text>
+      <text class="f2m" x="702" y="658" fill="#1d6b51">last.pt ถูกบันทึกทุก epoch อยู่แล้ว</text>
+
+      <text class="f2n" x="196" y="638">ไม่</text>
+      <path class="f2ln" d="M205 644 H100 V398 H203" marker-end="url(#f2h)"/>
+      <text class="f2m" x="104" y="520" fill="#5c6b7a">epoch ถัดไป</text>
+      <path class="f2ln" d="M828 664 V690 H100 V646" />
+
+      <text class="f2n" x="558" y="392">ไม่</text>
+      <path class="f2ln" d="M545 398 H996 V60 H700" marker-end="url(#f2h)"/>
+      <rect class="f2term" x="420" y="42" width="278" height="36" rx="18"/>
+      <text class="f2w" x="559" y="65" text-anchor="middle">จบ · ส่งคืน best.pt เป็นผลลัพธ์</text>
+
+      <rect x="60" y="704" width="918" height="56" rx="4" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="f2t" x="74" y="724" fill="#8a5500">เงื่อนไขหยุดก่อนกำหนด (patience): ถ้า mAP ไม่ดีขึ้นติดต่อกันครบจำนวน epoch ที่กำหนด ระบบจะหยุดเอง</text>
+      <text class="f2t" x="74" y="744" fill="#8a5500">รอบ 50 epoch จบโดยชน epoch สุดท้าย แปลว่ายังไม่ converge จึงต้องเทรนรอบใหม่ที่ยาวกว่า — เป็นที่มาของรอบ 150 epoch</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> <code>best.pt</code> กับ <code>last.pt</code> ไม่ใช่ไฟล์เดียวกัน —
+      <code>last.pt</code> คือน้ำหนักของ epoch สุดท้าย ส่วน <code>best.pt</code> คือน้ำหนักของ epoch ที่
+      ให้ mAP บน validation สูงที่สุด ซึ่งอาจอยู่กลางทาง <b>ผลที่รายงานต้องมาจาก <code>best.pt</code></b>
+      · การที่แขนเปิด augmentation จบโดย best epoch ตรงกับ epoch สุดท้ายพอดี คือสัญญาณว่ายังไม่ converge
+      ไม่ใช่สัญญาณว่าเทรนสำเร็จ
+    </figcaption>
+  </figure>
+</section>
+
+<section id="a9">
+  <h3><span class="num">รูปที่ ก8</span>ผังงานการอนุมาน (Inference)</h3>
+  <p class="sub">ผังงานมาตรฐาน · วาดด้วย SVG · ตรงกับ <code>detector.py</code> คลาส <code>YOLOv11Detector</code></p>
+
+  <div class="block">
+    <h4>ตอบคำถามอะไร</h4>
+    <p>
+      หนึ่งเฟรมเดินทางอย่างไรจนกลายเป็นรายการกรอบที่วาดบนภาพ และ <b>ระบบกรองผลลัพธ์ด้วยเกณฑ์อะไร</b>
+      จุดที่ต้องอธิบายให้ถูกคือระบบนี้ใช้ <b>เกณฑ์ความเชื่อมั่นแยกรายคลาส</b> ไม่ใช่ค่าเดียวทั้งระบบ
+    </p>
+  </div>
+
+  <figure>
+    <svg viewBox="0 -46 1020 746" role="img" aria-label="ผังงานการอนุมาน รับเฟรมภาพ คำนวณเกณฑ์ความเชื่อมั่นต่ำสุด เรียกโมเดลทำนาย แล้ววนกรองผลทีละกรอบด้วยเกณฑ์เฉพาะของคลาสนั้น ก่อนแปลงพิกัดกลับเป็นสัดส่วน">
+      <defs>
+        <marker id="f3h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#5c6b7a"/>
+        </marker>
+      </defs>
+      <style>
+        .f3p{fill:#ffffff;stroke:#0f3460;stroke-width:1.4}
+        .f3d{fill:#eef4fb;stroke:#0f3460;stroke-width:1.4}
+        .f3term{fill:#0f3460;stroke:#0f3460;stroke-width:1.4}
+        .f3drop{fill:#fff5f6;stroke:#e94560;stroke-width:1.4}
+        .f3t{font-size:12px;fill:#1a1a2e}
+        .f3w{font-size:12px;fill:#ffffff;font-weight:600}
+        .f3m{font-size:10px;fill:#5c6b7a;font-family:'Cascadia Mono',Consolas,monospace}
+        .f3y{font-size:10.5px;fill:#2f9e78;font-weight:700}
+        .f3n{font-size:10.5px;fill:#e94560;font-weight:700}
+        .f3ln{stroke:#5c6b7a;stroke-width:1.4;fill:none}
+      </style>
+
+      <rect class="f3term" x="325" y="-40" width="120" height="32" rx="16"/>
+      <text class="f3w" x="385" y="-19" text-anchor="middle">เริ่ม</text>
+      <line class="f3ln" x1="385" y1="-8" x2="385" y2="10" marker-end="url(#f3h)"/>
+      <polygon class="f3p" points="284,14 500,14 486,48 270,48"/>
+      <text class="f3t" x="385" y="36" text-anchor="middle">รับเฟรมภาพ · เก็บขนาดเดิม</text>
+      <line class="f3ln" x1="385" y1="48" x2="385" y2="68" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="245" y="68" width="280" height="44" rx="3"/>
+      <text class="f3t" x="385" y="88" text-anchor="middle">หาเกณฑ์ต่ำสุดของทุกคลาส</text>
+      <text class="f3m" x="385" y="105" text-anchor="middle">floor = min(conf รวม, conf รายคลาส)</text>
+      <line class="f3ln" x1="385" y1="112" x2="385" y2="132" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="185" y="132" width="400" height="106" rx="3"/>
+      <line x1="199" y1="132" x2="199" y2="238" stroke="#0f3460" stroke-width="1.4"/>
+      <line x1="571" y1="132" x2="571" y2="238" stroke="#0f3460" stroke-width="1.4"/>
+      <text class="f3t" x="211" y="152">เรียกโมเดลทำนายด้วยเกณฑ์ floor</text>
+      <text class="f3m" x="211" y="170">ภายในไลบรารี:</text>
+      <text class="f3m" x="211" y="186">ปรับภาพเป็น 640×640 แบบ letterbox แล้ว normalize</text>
+      <text class="f3m" x="211" y="202">forward ผ่าน backbone → neck → head</text>
+      <text class="f3m" x="211" y="218">ถอดผลจาก P3 P4 P5 แล้วทำ NMS แยกตามคลาส</text>
+      <text class="f3m" x="211" y="232">(agnostic_nms=False กรอบต่างคลาสจึงไม่กดทับกัน)</text>
+      <line class="f3ln" x1="385" y1="238" x2="385" y2="258" marker-end="url(#f3h)"/>
+
+      <circle cx="150" cy="278" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f3t" x="150" y="282" text-anchor="middle">ก</text>
+      <line class="f3ln" x1="163" y1="278" x2="213" y2="278" marker-end="url(#f3h)"/>
+
+      <polygon class="f3d" points="385,258 555,292 385,326 215,292"/>
+      <text class="f3t" x="385" y="290" text-anchor="middle">ยังมีกรอบที่ยังไม่ตรวจ</text>
+      <text class="f3t" x="385" y="306" text-anchor="middle">เหลืออยู่หรือไม่</text>
+      <text class="f3n" x="568" y="286">ไม่</text>
+      <path class="f3ln" d="M555 292 H696" marker-end="url(#f3h)"/>
+      <polygon class="f3p" points="706,274 992,274 978,310 692,310"/>
+      <text class="f3t" x="842" y="297" text-anchor="middle">คืนรายการผลลัพธ์ทั้งหมด</text>
+      <line class="f3ln" x1="842" y1="310" x2="842" y2="328" marker-end="url(#f3h)"/>
+      <rect class="f3term" x="767" y="330" width="150" height="32" rx="16"/>
+      <text class="f3w" x="842" y="351" text-anchor="middle">จบ</text>
+      <text class="f3y" x="398" y="344">ใช่</text>
+      <line class="f3ln" x1="385" y1="326" x2="385" y2="352" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="245" y="352" width="280" height="42" rx="3"/>
+      <text class="f3t" x="385" y="372" text-anchor="middle">หาชื่อคลาสจากรหัสคลาส</text>
+      <text class="f3m" x="385" y="388" text-anchor="middle">รหัสเกินช่วง ใช้ตัวเลขเป็นชื่อแทน</text>
+      <line class="f3ln" x1="385" y1="394" x2="385" y2="414" marker-end="url(#f3h)"/>
+
+      <polygon class="f3d" points="385,414 575,452 385,490 195,452"/>
+      <text class="f3t" x="385" y="448" text-anchor="middle">ความเชื่อมั่น ≥ เกณฑ์</text>
+      <text class="f3t" x="385" y="464" text-anchor="middle">เฉพาะของคลาสนั้น</text>
+      <text class="f3n" x="588" y="446">ไม่</text>
+      <path class="f3ln" d="M575 452 H690" marker-end="url(#f3h)"/>
+      <rect class="f3drop" x="692" y="432" width="248" height="40" rx="3"/>
+      <text class="f3t" x="704" y="450" fill="#a8203a">ทิ้งกรอบนี้</text>
+      <text class="f3m" x="704" y="466" fill="#a8203a">ผ่าน floor แต่ไม่ผ่านเกณฑ์ของคลาส</text>
+      <line class="f3ln" x1="940" y1="452" x2="965" y2="452"/>
+      <circle cx="978" cy="452" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f3t" x="978" y="456" text-anchor="middle">ก</text>
+
+      <text class="f3y" x="398" y="508">ใช่</text>
+      <line class="f3ln" x1="385" y1="490" x2="385" y2="516" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="215" y="516" width="340" height="46" rx="3"/>
+      <text class="f3t" x="385" y="536" text-anchor="middle">แปลงพิกัดมุมเป็นจุดกึ่งกลางและขนาด</text>
+      <text class="f3m" x="385" y="553" text-anchor="middle">หารด้วยขนาดภาพเดิม ได้สัดส่วน 0–1</text>
+      <line class="f3ln" x1="385" y1="562" x2="385" y2="582" marker-end="url(#f3h)"/>
+
+      <rect class="f3p" x="265" y="582" width="240" height="40" rx="3"/>
+      <text class="f3t" x="385" y="607" text-anchor="middle">เพิ่มลงรายการผลลัพธ์</text>
+      <line class="f3ln" x1="505" y1="602" x2="540" y2="602"/>
+      <circle cx="553" cy="602" r="13" fill="#ffffff" stroke="#5c6b7a" stroke-width="1.3"/>
+      <text class="f3t" x="553" y="606" text-anchor="middle">ก</text>
+
+      <rect x="16" y="644" width="988" height="44" rx="4" fill="#fff8ee" stroke="#c97a00" stroke-width="1.3"/>
+      <text class="f3t" x="30" y="663" fill="#8a5500">ทำไมต้องขอที่ floor แล้วค่อยกรองเอง: ไลบรารีจะตัดกรอบที่ต่ำกว่าเกณฑ์ทิ้งก่อนที่โปรแกรมจะเห็น</text>
+      <text class="f3t" x="30" y="680" fill="#8a5500">ถ้าส่งเกณฑ์รวมไปตรง ๆ คลาสที่ตั้งเกณฑ์ต่ำกว่า เช่น needle จะไม่มีวันได้กรอบคืนมาเลย</text>
+    </svg>
+    <figcaption>
+      <b>ข้อความหลักของรูปนี้:</b> การกรองเกิด <b>สองชั้น</b> — ชั้นแรกอยู่ในไลบรารีที่เกณฑ์ต่ำสุด
+      ชั้นที่สองอยู่ในโค้ดของโครงงานที่เกณฑ์เฉพาะของแต่ละคลาส ออกแบบแบบนี้เพราะคลาสที่ตรวจยากอย่าง
+      <code>needle</code> ต้องใช้เกณฑ์ต่ำกว่าคลาสอื่นจึงจะได้กรอบคืนมา แต่ถ้าลดเกณฑ์รวมของทั้งระบบลง
+      คลาสที่ตรวจง่ายจะให้กรอบผิดเพิ่มขึ้นทันที
+    </figcaption>
+  </figure>
+</section>
+
+<hr class="div">
+
+<div class="grp-head">
+  <span class="k">หมวด จ</span>
+  <h2>รูปผลการทดลองที่สร้างจากข้อมูลจริง</h2>
+  <p>
+    รูปกลุ่มนี้ <b>ไม่ต้องวาดมือ</b> ทั้งหมดถูกสร้างโดย <code>report_training_results.py</code> จากไฟล์ผลการรันจริง
+    และฝังไว้ในโน้ตบุ๊กรายรันแล้ว หน้าที่ของเอกสารนี้คือบอกว่ารูปไหนใช้ทำอะไรและอ่านอย่างไร
+  </p>
+</div>
+
+<section id="results">
+  <div class="tw">
+    <table>
+      <thead>
+        <tr><th>กลุ่ม</th><th>ไฟล์</th><th>อ่านอย่างไร / ใช้ตอบอะไร</th><th>บท</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="nowrap">ก6 · การกระจายคลาส</td>
+          <td><code>results/class_distribution.png</code><br><code>class_distribution.md</code></td>
+          <td>แกนตั้งเป็นสเกล log เพราะจำนวนกล่องต่างกันสามอันดับ ใช้แสดงความไม่สมดุลของ <code>finger</code>
+            และความน้อยเกินไปของ <code>Stitch Scissors</code></td>
+          <td class="nowrap">4.1</td>
+        </tr>
+        <tr>
+          <td class="nowrap">ก7 · กราฟการฝึก</td>
+          <td><code>aug_box_loss.png</code><br><code>aug_cls_loss.png</code><br><code>aug_dfl_loss.png</code><br><code>aug_learning_curve_map.png</code></td>
+          <td>แยกคนละรูปเพราะ <code>cls_loss</code> เริ่มต้นสูงกว่า <code>box_loss</code> หนึ่งอันดับ
+            ถ้ารวมแกนเดียวกันเส้นที่เล็กกว่าจะแบนจนอ่านไม่ออก · กราฟ mAP ใช้ชี้ว่าจุดสูงสุดอยู่ epoch ไหน
+            ซึ่งเป็นหลักฐานว่า converge แล้วหรือยัง</td>
+          <td class="nowrap">4.2</td>
+        </tr>
+        <tr>
+          <td class="nowrap">ก8 · ผลรายคลาส</td>
+          <td><code>aug_per_class_map50.png</code><br><code>aug_pr_curve_per_class.png</code><br><code>aug_f1_confidence_curve.png</code></td>
+          <td>ใช้คู่กับตาราง AP รายคลาส · กราฟ F1 ต่อค่าความเชื่อมั่นคือกราฟที่ใช้เลือกจุดทำงานจริง
+            ไม่ใช่เลือกจากค่า default</td>
+          <td class="nowrap">4.4</td>
+        </tr>
+        <tr>
+          <td class="nowrap">ก9 · วิเคราะห์ความผิดพลาด</td>
+          <td><code>aug_confusion_matrix_normalized.png</code><br><code>aug_error_analysis_grid.png</code></td>
+          <td>อ่านเป็น <b>คอลัมน์</b> คอลัมน์หนึ่งคือ “ของจริงคลาสนี้ทั้งหมด โมเดลเรียกมันว่าอะไรบ้าง”
+            คอลัมน์ <code>needle</code> ตกไปที่แถว <code>background</code> ถึง 0.49 แปลว่าเกือบครึ่งของเข็มจริง
+            โมเดล <b>มองไม่เห็น</b> ไม่ใช่จำสลับคลาส</td>
+          <td class="nowrap">4.5</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rule">
+    <h4>กับดักที่เคยเกิดจริงกับรูปกลุ่มนี้</h4>
+    <ul>
+      <li><b>confusion matrix เคยออกมาว่างเปล่าทั้งตาราง</b> — เพราะเรียก <code>model.val(plots=False)</code>
+        ซึ่ง Ultralytics จะไม่เติมค่าลงเมทริกซ์เลย ได้ตารางศูนย์มาวาด แก้แล้วโดยบังคับ <code>plots=True</code>
+        และเพิ่มการ์ดไม่ให้วาดเมทริกซ์ที่เป็นศูนย์ทั้งตาราง <b>ถ้าเห็นรูปนี้เป็นสีขาวล้วนอีก แปลว่าบั๊กกลับมา
+        ห้ามใส่ลงรายงาน</b></li>
+      <li><b>อย่าใช้รูปจาก val แทน test</b> — ไฟล์ชื่อเหมือนกันแต่คนละโฟลเดอร์
+        (<code>results/</code> กับ <code>results_test/</code>) ต้องระบุในคำบรรยายใต้รูปเสมอว่าเป็นชุดไหน</li>
+    </ul>
+  </div>
+</section>
+
+<hr class="div">
+
+<section id="map">
+  <div class="grp-head">
+    <span class="k">ภาคผนวก</span>
+    <h2>ใช้รูปไหนในบทใด</h2>
+    <p>สรุปรวมทั้งชุด ก (แบบจำลอง) และชุด ข (เว็บแอปพลิเคชัน) เพื่อวางแผนสารบัญภาพของเล่ม</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <thead><tr><th>บท</th><th>รูปฝั่งแบบจำลอง (ชุด ก)</th><th>รูปฝั่งเว็บ (ชุด ข)</th></tr></thead>
+      <tbody>
+        <tr><td class="nowrap">1 บทนำ</td><td><b>ก1</b> ภาพรวมกระบวนการ</td><td>—</td></tr>
+        <tr><td class="nowrap">2 ทฤษฎี</td><td><b>ก4</b> สถาปัตยกรรม YOLO11 + loss</td><td>—</td></tr>
+        <tr><td class="nowrap">3 วิเคราะห์และออกแบบ</td><td><b>ก2</b> ข้อบกพร่อง label · <b>ก3</b> อนุกรมวิธานคลาส · <b>ก5</b> แบบแผนการทดลอง · <b>ก6</b> ผังงานล้าง label · <b>ก7</b> ผังงานการฝึก · <b>ก8</b> ผังงานการอนุมาน</td>
+            <td>ข1 สถาปัตยกรรม · ข3 Context · ข5 Use Case · ข11 โครงสร้างข้อมูล · ข8 ผังงานสกัดเฟรม</td></tr>
+        <tr><td class="nowrap">4 ผลการทดลอง</td><td><b>ก6</b> การกระจายคลาส · <b>ก7</b> กราฟการฝึก · <b>ก8</b> ผลรายคลาส · <b>ก9</b> วิเคราะห์ความผิดพลาด</td>
+            <td>ข9 วงจรกำกับข้อมูล + ภาพหน้าจอจริง</td></tr>
+        <tr><td class="nowrap">5 สรุป</td><td>อ้างถึง ก9 ตอนเขียนข้อจำกัด ไม่ต้องมีรูปใหม่</td><td>—</td></tr>
+        <tr><td class="nowrap">ภาคผนวก</td><td>—</td><td>ข2 Deployment · ข4 DFD ระดับ 1 · ข6–ข7 Sequence · ข10 State</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="rule">
+    <h4>เหตุผลของการจัดสัดส่วนแบบนี้</h4>
+    <ul>
+      <li><b>บทที่ 4 ต้องเป็นของฝั่งแบบจำลองเกือบทั้งหมด</b> — เพราะผลการทดลองคือผลของโครงงาน
+        เว็บแอปควรมีแค่ภาพหน้าจอจริงกับสถิติการใช้งาน ไม่ใช่แผนภาพสถาปัตยกรรม</li>
+      <li><b>ตัดรูปฝั่งเว็บจาก 11 เหลือ 5 ในเนื้อเล่ม</b> — ที่เหลือย้ายไปภาคผนวก รูปเหล่านั้นถูกต้องและมีคุณค่า
+        แต่ถ้าอยู่ในเนื้อเล่มทั้งหมดจะทำให้สัดส่วนของเล่มบิดเบือนไปจากน้ำหนักงานจริง</li>
+      <li><b>ย้ายผังงานสกัดเฟรมมาอยู่ฝั่งข้อมูล</b> — มันคือขั้นตอนแรกของกระบวนการสร้างชุดข้อมูล
+        ไม่ใช่รายละเอียดของเว็บแอป</li>
+      <li><b>สารบัญภาพต้องมีครบทุกรูป</b> — ฉบับปัจจุบันหน้าสารบัญภาพยังว่างเปล่า</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+</div>

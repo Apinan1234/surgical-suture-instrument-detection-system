@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 570" role="img" aria-label="แผนภาพ System Framework แสดงสามบริการที่เว็บแอปพลิเคชันวิ่งอยู่บน ได้แก่ Frontend, Server และ Database โดย Frontend และ Server รันอยู่ในโปรเซส Python เดียวกัน (FastAPI และ Uvicorn) ที่มี 38 เส้นทาง endpoint ส่วน Database ไม่มีอยู่จริง ใช้ไฟล์ state.json แบบไฟล์แบนราบแทน และมี Roboflow Cloud API เป็นบริการภายนอกทางเลือกเสริม"><title>System Framework</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+  <defs>
+    <marker id="a12" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+    </marker>
+    <marker id="a12r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#e94560"/>
+    </marker>
+  </defs>
+
+  <!-- process boundary : Frontend + Server run in the same OS process -->
+  <rect x="40" y="56" width="560" height="440" rx="14" fill="#eef1f7" stroke="#0f3460" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="60" y="82" font-family="Cascadia Mono, Consolas, monospace" font-size="11" letter-spacing="0.5" fill="#5c6b7a">«PROCESS» webapp/server.py — Python 1 โปรเซสเดียว (FastAPI + Uvicorn)</text>
+  <text x="60" y="100" font-size="10" fill="#586778">Frontend ไม่ใช่บริการแยก — เสิร์ฟจากโปรเซสเดียวกับ Server ทั้งหมด</text>
+
+  <!-- box 1 : Frontend -->
+  <rect x="64" y="118" width="246" height="250" rx="8" fill="#ffffff" stroke="#0f3460" stroke-width="1.4"/>
+  <text x="294" y="146" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="14" font-weight="700" fill="#e94560">1</text>
+  <text x="80" y="146" font-size="15" font-weight="700" fill="#1a1a2e">Frontend</text>
+  <text x="80" y="164" font-size="11" font-weight="700" fill="#5c6b7a">ไม่ใช่บริการแยก</text>
+  <rect x="80" y="174" width="40" height="3" fill="#0f3460"/>
+  <g font-family="Cascadia Mono, Consolas, monospace" font-size="11" fill="#1a1a2e">
+    <text x="80" y="198">index.html</text>
+    <text x="80" y="216">style.css</text>
+    <text x="80" y="234">app.js</text>
+  </g>
+  <text x="80" y="258" font-size="10.5" fill="#5c6b7a">ไม่มี framework · ไม่มี build</text>
+  <text x="80" y="276" font-size="10.5" fill="#1a1a2e">เสิร์ฟผ่าน StaticFiles mount</text>
+  <text x="80" y="294" font-size="10.5" fill="#1a1a2e">โดยโปรเซสเดียวกับ Server</text>
+  <text x="80" y="320" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" fill="#586778">server.py:2199</text>
+
+  <!-- box 2 : Server -->
+  <rect x="336" y="118" width="246" height="336" rx="8" fill="#ffffff" stroke="#0f3460" stroke-width="1.6"/>
+  <text x="566" y="146" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="14" font-weight="700" fill="#e94560">2</text>
+  <text x="352" y="146" font-size="15" font-weight="700" fill="#1a1a2e">Server</text>
+  <text x="352" y="164" font-size="11" font-weight="700" fill="#5c6b7a">บริการจริงหนึ่งเดียว</text>
+  <rect x="352" y="174" width="40" height="3" fill="#e94560"/>
+  <text x="352" y="198" font-family="Cascadia Mono, Consolas, monospace" font-size="13" font-weight="700" fill="#1a1a2e">FastAPI + Uvicorn</text>
+  <text x="352" y="216" font-size="10.5" fill="#5c6b7a">1 process · CPU-only</text>
+  <text x="352" y="252" font-family="Cascadia Mono, Consolas, monospace" font-size="30" font-weight="700" fill="#e94560">38</text>
+  <text x="352" y="270" font-size="11" font-weight="700" fill="#5c6b7a">endpoint</text>
+  <text x="352" y="286" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" fill="#586778">@get · @post · @put</text>
+  <text x="352" y="302" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" fill="#586778">@delete · @patch</text>
+  <line x1="352" y1="314" x2="566" y2="314" stroke="#dde4ef" stroke-width="1"/>
+  <text x="352" y="334" font-size="10.5" fill="#1a1a2e">ให้บริการทั้ง API และไฟล์ static</text>
+  <text x="352" y="352" font-size="10.5" fill="#1a1a2e">(mount เดียวกับ Frontend)</text>
+  <text x="352" y="370" font-size="10.5" fill="#1a1a2e">งานหนักรันด้วย threading + polling</text>
+  <text x="352" y="396" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" fill="#586778">server.py — 2,199 บรรทัด</text>
+
+  <text x="323" y="478" text-anchor="middle" font-size="10.5" fill="#5c6b7a">Frontend และ Server อยู่ในโปรเซสเดียวกัน — ไม่มีการเรียกข้ามเครือข่ายระหว่างกัน</text>
+
+  <!-- box 3 : Database -->
+  <text x="660" y="100" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" letter-spacing="0.5" fill="#5c6b7a">การจัดเก็บข้อมูล (ไม่ใช่บริการ)</text>
+  <rect x="660" y="118" width="260" height="210" rx="8" fill="#ffffff" stroke="#0f3460" stroke-width="1.4"/>
+  <text x="904" y="146" text-anchor="end" font-family="Cascadia Mono, Consolas, monospace" font-size="14" font-weight="700" fill="#e94560">3</text>
+  <text x="676" y="146" font-size="15" font-weight="700" fill="#1a1a2e">Database</text>
+  <text x="676" y="164" font-size="11" font-weight="700" fill="#5c6b7a">ไม่มีฐานข้อมูล (No database)</text>
+  <rect x="676" y="174" width="40" height="3" fill="#0f3460"/>
+  <text x="676" y="198" font-family="Cascadia Mono, Consolas, monospace" font-size="12" font-weight="700" fill="#1a1a2e">state.json</text>
+  <text x="676" y="216" font-size="10.5" fill="#5c6b7a">ไฟล์แบนราบ (flat file)</text>
+  <text x="676" y="236" font-size="10.5" fill="#1a1a2e">เขียนแบบ atomic: tmp → rename</text>
+  <text x="676" y="254" font-size="10.5" fill="#1a1a2e">ผู้ใช้คนเดียว เครื่องเดียว</text>
+  <text x="676" y="272" font-size="10.5" fill="#1a1a2e">ย้ายเครื่อง = คัดลอกโฟลเดอร์</text>
+  <text x="676" y="300" font-family="Cascadia Mono, Consolas, monospace" font-size="9.5" fill="#586778">webapp/state.json</text>
+
+  <!-- optional external : Roboflow -->
+  <text x="660" y="350" font-family="Cascadia Mono, Consolas, monospace" font-size="10.5" letter-spacing="0.5" fill="#5c6b7a">ภายนอกระบบ · ทางเลือก</text>
+  <rect x="660" y="366" width="260" height="124" rx="8" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.4" stroke-dasharray="5 3"/>
+  <text x="676" y="390" font-size="13" font-weight="700" fill="#1a1a2e">Roboflow Cloud API</text>
+  <text x="676" y="406" font-size="10" fill="#5c6b7a">ภายนอก · ทางเลือก (ไม่บังคับ)</text>
+  <text x="676" y="426" font-size="10" fill="#586778">ใช้เฉพาะเมื่อ backend = roboflow</text>
+  <text x="676" y="444" font-size="10" fill="#586778">มีปุ่มยืนยันก่อนเรียกทุกครั้ง</text>
+
+  <!-- connections -->
+  <g fill="none" stroke="currentColor" stroke-width="1.4">
+    <path d="M582 200 H660" marker-end="url(#a12)"/>
+  </g>
+  <text x="621" y="192" text-anchor="middle" font-family="Cascadia Mono, Consolas, monospace" font-size="10" fill="#5c6b7a">อ่าน/เขียนไฟล์</text>
+  <path d="M582 410 H660" fill="none" stroke="#e94560" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#a12r)"/>
+  <text x="621" y="402" text-anchor="middle" font-size="10" fill="#e94560">REST API (ทางเลือก)</text>
+
+  <text x="40" y="530" font-size="11" fill="#5c6b7a">หนึ่งโปรเซส Python เดียว (webapp/server.py) ให้บริการทั้ง Frontend และ Server · ไม่มี Database service จริง — ใช้ไฟล์ state.json แทน</text>
+</svg>

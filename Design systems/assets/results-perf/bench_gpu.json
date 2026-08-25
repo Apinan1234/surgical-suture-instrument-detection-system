@@ -1,0 +1,15 @@
+{
+  "model": "ssid9_960px_150ep_20260813_map50-716.pt",
+  "device": "cuda:0",
+  "imgsz": 960,
+  "frames_measured": 40,
+  "warmup_frames": 5,
+  "model_load_s": 7.55,
+  "read_ms_median": 27.6,
+  "infer_ms_median": 44.7,
+  "infer_ms_p95": 57.0,
+  "total_ms_median": 74.6,
+  "frames_per_sec": 13.41,
+  "frames_per_min": 805,
+  "boxes_per_frame_median": 9.0
+}

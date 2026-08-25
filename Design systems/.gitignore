@@ -1,0 +1,8 @@
+# Superseded same-day drafts of the same report PDF — "66120361 real.pdf" (2026-08-17 13:01, the
+# newest of the three and the one whose name says so) is the tracked copy; these two earlier drafts
+# stay on disk but out of git to avoid committing ~115 MB of duplicate PDF content.
+66120361.pdf
+66120361_2.pdf
+
+# Raw test video used during development/verification (78 MB) — not needed in the showcase repo.
+Video ทดสอบ 30 วิ.mp4

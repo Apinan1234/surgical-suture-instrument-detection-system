@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" role="img" aria-label="แผนภาพบริบทแสดงระบบเป็นวงกลมเดียวตรงกลาง มีตัวแทนภายนอกสองตัวคือผู้ใช้งานระบบทางซ้ายและ Roboflow Cloud Service ทางขวา พร้อมกระแสข้อมูลเข้าออก"><title>แผนภาพบริบท</title><style>svg{background:#fbfcfe}text{font-family:"Leelawadee UI","Noto Sans Thai","IBM Plex Sans Thai",Sarabun,Tahoma,sans-serif}.a1s,.a2m,.a3m,.a5m,.a6m,.f1m,.f2m,.f3m{font-family:"Cascadia Mono",Consolas,"SFMono-Regular","Roboto Mono",ui-monospace,monospace}</style><rect x="0" y="0" width="100%" height="100%" fill="#fbfcfe"/>
+      <defs>
+        <marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,1 L9,5 L0,9 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <!-- process 0 -->
+      <circle cx="480" cy="220" r="110" fill="#ffffff" stroke="#0f3460" stroke-width="2"/>
+      <line x1="381" y1="176" x2="579" y2="176" stroke="#0f3460" stroke-width="1.2"/>
+      <text x="480" y="167" text-anchor="middle" font-size="16" font-weight="700" fill="#e94560" font-family="Cascadia Mono, Consolas, monospace">0</text>
+      <text x="480" y="203" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ระบบตรวจจับเครื่องมือผ่าตัด</text>
+      <text x="480" y="222" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">และบริเวณแผล</text>
+      <text x="480" y="241" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a2e">ด้วยปัญญาประดิษฐ์</text>
+      <text x="480" y="266" text-anchor="middle" font-size="10.5" fill="#586778">(เว็บแอปพลิเคชัน + โมดูลแกนกลาง)</text>
+
+      <!-- external entities -->
+      <rect x="40" y="160" width="182" height="112" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="131" y="205" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a1a2e">ผู้ใช้งานระบบ</text>
+      <text x="131" y="228" text-anchor="middle" font-size="11" fill="#5c6b7a">นักวิจัย / ผู้กำกับข้อมูล</text>
+      <text x="131" y="247" text-anchor="middle" font-size="11" fill="#5c6b7a">/ นักศึกษาสัตวแพทย์</text>
+
+      <rect x="738" y="160" width="182" height="112" fill="#e7ebf5" stroke="#0f3460" stroke-width="1.6"/>
+      <text x="829" y="205" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a1a2e">Roboflow</text>
+      <text x="829" y="226" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1a1a2e">Cloud Service</text>
+      <text x="829" y="248" text-anchor="middle" font-size="11" fill="#5c6b7a">บริการตรวจจับภายนอก</text>
+
+      <!-- flows -->
+      <g fill="none" stroke="currentColor" stroke-width="1.4">
+        <path d="M224 200 H368" marker-end="url(#a3)"/>
+        <path d="M372 252 H226" marker-end="url(#a3)"/>
+        <path d="M590 200 H736" marker-end="url(#a3)"/>
+        <path d="M736 252 H590" marker-end="url(#a3)"/>
+      </g>
+      <g font-size="10" fill="#5c6b7a" text-anchor="middle">
+        <text x="296" y="158">ไฟล์วิดีโอการผ่าตัด</text>
+        <text x="296" y="172">พารามิเตอร์การสกัด / ตรวจจับ</text>
+        <text x="296" y="186">ข้อมูลกำกับที่แก้ไข · ไฟล์โมเดล .pt</text>
+
+        <text x="299" y="274">ภาพเฟรมพร้อมกรอบวัตถุ</text>
+        <text x="299" y="288">ความคืบหน้างาน · สถิติชุดข้อมูล</text>
+        <text x="299" y="302">ไฟล์ ZIP ชุดข้อมูลที่ส่งออก</text>
+
+        <text x="663" y="185">ภาพเฟรม + API key</text>
+        <text x="663" y="276">ผลตรวจจับ</text>
+        <text x="663" y="290">(คลาส · พิกัด · ค่าความเชื่อมั่น)</text>
+      </g>
+    </svg>
