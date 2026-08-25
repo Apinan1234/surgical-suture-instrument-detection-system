@@ -28,3 +28,16 @@ results_all_test/*
 !results_all_test/comparison_*
 !results_all_test/class_distribution.*
 !results_all_test/hyperparameter_summary.*
+
+# Re-annotated-dataset experiment output dirs -- hidden for this showcase pass only, not
+# permanently; may get tracked later once that experiment thread is settled.
+results_reannot/
+results_reannot_boxsize/
+results_reannot_diagnostics/
+results_reannot_screening/
+results_reannot_test/
+results_simple_utilities/
+
+# Throwaway scratch scripts (own docstrings say so), not part of the shipped tool.
+quicktest_webui.py
+try_simple_utilities.py

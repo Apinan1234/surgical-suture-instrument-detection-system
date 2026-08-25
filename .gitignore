@@ -19,3 +19,25 @@ ssid.v6i.yolov11.zip
 # แก้3-fixed.docx already give us the before/after pair, so these are pure duplication.
 05_reports/*.backup-*.docx
 05_reports/*.before-tidy.docx
+
+# Same policy, different file: a working-copy backup of design-system-final-presentation.md.
+# The tracked .md is the current version; git history is the real backup mechanism.
+05_reports/design-system-final-presentation.md.bak
+
+# Bulk ML dataset/training workspace and third-party pretrained weights -- large, regenerable or
+# externally sourced, not this project's own code. Hidden for the showcase-repo pass; kept on disk.
+ml/
+weights/
+yolov8s-world.pt
+
+# Course reference material, not original work.
+05_reports/cs231n_2018_ds06.pdf
+
+# Personal working scraps -- an agent prompt log and loose PDF-extraction text fragments.
+PORMPT.txt
+page_57_text.txt
+page_58_text.txt
+page_59_text.txt
+
+# Unrelated Claude-tooling artifact, not project content, wherever it ends up.
+10k-websites-skill.zip
