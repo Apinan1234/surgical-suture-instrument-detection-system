@@ -10,7 +10,10 @@ wounds in video of suturing practice, plus a full web-application toolchain — 
 annotation, model-assisted labeling, dataset export, and rare-class mining — built to produce and
 maintain that system's own training data.
 
-📄 [Poster](05_reports/poster.pdf) · [System diagram](<05_reports/แผนภาพระบบ-โครงการตรวจจับเครื่องมือผ่าตัดด้วย-AI (1).pdf>) · [Technology Stack](05_reports/technology-stack.md) · [Model results](05_reports/model-results-2026-08-13.md)
+📄 **[Project Poster (PDF)](05_reports/poster.pdf)** · [System diagram](<05_reports/แผนภาพระบบ-โครงการตรวจจับเครื่องมือผ่าตัดด้วย-AI (1).pdf>) · [Technology Stack](05_reports/technology-stack.md) · [Model results](05_reports/model-results-2026-08-13.md)
+
+> **Poster**: `05_reports/poster.pdf` — the project's single-page research poster, summarizing the
+> problem, the pipeline, and the same results reported in [Results](#results) below.
 
 ---
 
