@@ -1,0 +1,15 @@
+# Local venv, generated per-job run artifacts (user upload data), and build/cache junk -- none of
+# this is source.
+.venv/
+runs/
+__pycache__/
+*.egg-info/
+
+# No .env exists here yet, but preempt it if one ever gets added (matches 02_web-app/.gitignore's
+# same pattern for its own .env).
+.env
+.env.local
+
+# The Quickstart example video (193 MB) -- large binary test data, not source. See frontend/app.py:
+# the Examples button fails with a clear message when this is missing, rather than crashing.
+examples/*.mp4

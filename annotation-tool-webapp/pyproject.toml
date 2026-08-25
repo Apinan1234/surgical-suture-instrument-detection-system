@@ -1,0 +1,22 @@
+[project]
+name = "rare-class-labeler"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.52",
+    "python-multipart>=0.0.20",
+    "ultralytics>=8.3",
+    "torch>=2.6",
+    "opencv-python>=4.8",
+    "imageio-ffmpeg",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+# frame_miner is vendored in directly (originally a separate project, yolo-frame-miner) so this
+# folder is self-contained and doesn't depend on anything installed from outside the repo.
+include = ["backend*", "frontend*", "frame_miner*"]

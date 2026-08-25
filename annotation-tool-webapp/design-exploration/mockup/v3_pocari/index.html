@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rare Class Labeler — Mockup v3 (Pocari layout)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  /* =======================================================================
+     Design tokens ported directly from the reference site's own palette
+     (src/index.css + the literal Tailwind slate/sky/cyan/amber scale used
+     throughout its components) rather than our own v2 reinterpretation —
+     per the request to use that design system as-is, content dropped in.
+     ======================================================================= */
+  :root {
+    --pocari-blue: #0062b8;
+    --pocari-blue-hover: #0050a0;
+    --pocari-cyan: #00a0e9;
+    --pocari-sky: #eaf4fc;
+    --pocari-navy: #0b2545;
+
+    --slate-50:  #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+    --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b; --slate-900: #0f172a;
+
+    --sky-50: #f0f9ff; --sky-100: #e0f2fe;
+    --cyan-300: #67e8f9; --cyan-400: #22d3ee; --cyan-500: #06b6d4; --cyan-600: #0891b2;
+    --amber-50: #fffbeb; --amber-500: #f59e0b; --amber-600: #d97706; --amber-700: #b45309;
+    --rose-500: #f43f5e; --rose-600: #e11d48;
+    --emerald-500: #10b981; --emerald-600: #059669;
+
+    --bg: #ffffff;
+    --bg-tint: #f8fbfe;
+    --surface: #ffffff;
+    --ink: var(--slate-900);
+    --ink-muted: var(--slate-500);
+    --ink-faint: var(--slate-400);
+    --border: var(--slate-200);
+
+    --radius-lg: 16px; --radius-xl: 22px; --radius-2xl: 24px;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -2px rgba(0,0,0,.1);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+    --shadow-xl: 0 20px 25px -5px rgba(0,0,0,.1), 0 8px 10px -6px rgba(0,0,0,.1);
+    --shadow-2xl: 0 25px 50px -12px rgba(0,0,0,.25);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #071324;
+      --bg-tint: #0a182e;
+      --surface: #0c1e38;
+      --ink: #f1f5f9;
+      --ink-muted: var(--slate-400);
+      --ink-faint: var(--slate-500);
+      --border: var(--slate-800);
+      --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+      --shadow-md: 0 4px 10px -2px rgba(0,0,0,.55);
+      --shadow-lg: 0 12px 24px -6px rgba(0,0,0,.6);
+      --shadow-xl: 0 22px 34px -10px rgba(0,0,0,.65);
+      --shadow-2xl: 0 30px 60px -15px rgba(0,0,0,.75);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans Thai', 'IBM Plex Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  h1, h2, h3, p, button, input { font-family: inherit; }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .font-brand-en { font-family: 'Montserrat', 'IBM Plex Sans', sans-serif; letter-spacing: 0.02em; }
+  .icon { width: 1em; height: 1em; display: inline-block; vertical-align: -0.15em; flex: none; }
+  svg { display: block; }
+  a { color: inherit; }
+  *:focus-visible { outline: 2px solid var(--pocari-cyan); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 16px; }
+  @media (min-width: 640px) { .wrap { padding: 0 24px; } }
+  @media (min-width: 1024px) { .wrap { padding: 0 32px; } }
+
+  /* ---------------------------------------------------------------------
+     Navbar — two-tier structure ported directly from the reference site's
+     Navbar.tsx: a slim utility bar + a bold brand-color main bar with
+     flex-1 nav segments and a featured CTA segment at the end.
+     --------------------------------------------------------------------- */
+  header.site-header { position: sticky; top: 0; z-index: 40; font-family: inherit; }
+
+  .navbar-main {
+    background: var(--pocari-blue);
+    color: #fff;
+    box-shadow: var(--shadow-md);
+    transition: padding .25s, box-shadow .25s, background .25s;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .navbar-main { background: #0a1b33; } }
+  .navbar-main.is-scrolled { padding-top: 2px; padding-bottom: 2px; background: color-mix(in srgb, var(--pocari-blue) 96%, transparent); backdrop-filter: blur(8px); }
+  .navbar-main-row { display: flex; align-items: stretch; min-height: 64px; }
+  .nav-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 20px 10px 0; margin-right: 4px;
+    border-right: 1px solid rgba(255,255,255,0.15);
+    flex: none;
+  }
+  .nav-logo .mark {
+    width: 34px; height: 34px; border-radius: 9px; flex: none;
+    background: linear-gradient(155deg, var(--pocari-cyan), var(--cyan-300));
+    color: var(--pocari-navy);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .nav-logo .mark svg { width: 18px; height: 18px; }
+  .nav-logo .word { display: flex; flex-direction: column; line-height: 1.1; }
+  .nav-logo .word .l1 { font-weight: 800; font-size: 15px; letter-spacing: -0.02em; }
+  .nav-logo .word .l2-row { display: flex; align-items: center; gap: 6px; }
+  .nav-logo .word .l2 { font-weight: 800; font-size: 12.5px; letter-spacing: 0.04em; color: #bfe0f7; }
+  .nav-logo .word .skew { width: 16px; height: 5px; background: var(--cyan-300); border-radius: 2px; transform: skewX(-12deg); }
+
+  .nav-items { display: flex; align-items: stretch; flex: 1; overflow-x: auto; scrollbar-width: none; }
+  .nav-items::-webkit-scrollbar { display: none; }
+  .nav-item {
+    flex: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1px;
+    padding: 8px 16px;
+    border-right: 1px solid rgba(255,255,255,0.15);
+    background: none; border-top: none; border-bottom: none; border-left: none;
+    color: #fff; cursor: pointer; position: relative;
+    transition: background .18s;
+    white-space: nowrap;
+  }
+  .nav-item:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+  .nav-item.is-active { background: rgba(255,255,255,0.16); }
+  .nav-item.is-active::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--cyan-300); }
+  .nav-item:disabled { color: rgba(255,255,255,0.35); cursor: not-allowed; }
+  .nav-item .en { font-weight: 800; font-size: 12.5px; }
+  .nav-item .th { font-size: 10.5px; color: #bfe0f7; font-weight: 400; }
+  .nav-item:disabled .th { color: rgba(191,224,247,0.4); }
+  .nav-item--cta { background: var(--pocari-cyan); border-right: none; flex-direction: row; gap: 8px; }
+  .nav-item--cta:hover:not(:disabled) { background: #0089ca; }
+  .nav-item--cta.is-active { background: #0089ca; }
+  .nav-item--cta.is-active::after { display: none; }
+  .nav-item--cta svg { width: 16px; height: 16px; }
+  .nav-item--cta .cta-text { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+  .nav-item--cta .en { font-size: 11.5px; }
+  .nav-item--cta .th { color: #eafcff; }
+
+  /* ---------------------------------------------------------------------
+     Hero — full-bleed dark section in the shape of HeroBanner.tsx, minus
+     the photo carousel (no product photography exists for this tool) —
+     replaced with gradient + blurred accent blobs. The "floating card"
+     slot that holds the CM-play button in the reference is repurposed as
+     our real, functional upload dropzone.
+     --------------------------------------------------------------------- */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(1200px 600px at 15% -10%, rgba(0,160,233,0.35), transparent 60%),
+                linear-gradient(160deg, var(--pocari-navy), #071b33 55%, #05131f);
+    padding: 56px 0 40px;
+    color: #fff;
+  }
+  .hero .blob { position: absolute; border-radius: 50%; filter: blur(70px); pointer-events: none; }
+  .hero .blob-a { width: 380px; height: 380px; background: rgba(0,160,233,0.25); top: -120px; right: -80px; }
+  .hero .blob-b { width: 320px; height: 320px; background: rgba(0,98,184,0.35); bottom: -140px; left: -60px; }
+  .hero-inner { position: relative; z-index: 1; }
+  .hero-tag {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 13px; border-radius: 999px;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.25);
+    backdrop-filter: blur(6px);
+    font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .hero-tag svg { color: var(--cyan-300); width: 13px; height: 13px; }
+  .hero h1 {
+    font-size: 30px; font-weight: 800; line-height: 1.25; margin: 0 0 14px; max-width: 20ch;
+    text-wrap: balance;
+  }
+  .hero h1 .accent { color: var(--cyan-300); }
+  @media (min-width: 640px) { .hero h1 { font-size: 44px; } }
+  @media (min-width: 1024px) { .hero h1 { font-size: 52px; } }
+  .hero-sub { color: #cfe6f7; font-size: 14.5px; line-height: 1.7; max-width: 56ch; margin: 0 0 32px; font-weight: 300; }
+  @media (min-width: 640px) { .hero-sub { font-size: 16px; } }
+
+  .hero-card {
+    background: color-mix(in srgb, #ffffff 12%, transparent);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: var(--radius-2xl);
+    padding: 22px;
+    max-width: 640px;
+    box-shadow: var(--shadow-2xl);
+  }
+  .hero-card .hc-label { font-size: 11px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cyan-300); margin-bottom: 8px; }
+  .hero-card .hc-title { font-size: 18px; font-weight: 800; margin: 0 0 16px; }
+
+  .dropzone {
+    border: 1.5px dashed rgba(255,255,255,0.35);
+    border-radius: var(--radius-lg);
+    padding: 30px 18px;
+    text-align: center;
+    background: rgba(255,255,255,0.06);
+    cursor: pointer;
+    transition: border-color .18s, background .18s, transform .18s;
+  }
+  .dropzone:hover, .dropzone.drag-over { border-color: var(--cyan-300); background: rgba(0,160,233,0.16); transform: scale(1.008); }
+  .dropzone .icon-wrap {
+    width: 48px; height: 48px; margin: 0 auto 12px; border-radius: 50%;
+    background: linear-gradient(to right, var(--pocari-blue), #0089ca);
+    display: flex; align-items: center; justify-content: center; color: #fff;
+    box-shadow: var(--shadow-md);
+  }
+  .dropzone .icon-wrap svg { width: 22px; height: 22px; }
+  .dropzone .primary { font-weight: 700; font-size: 14px; color: #fff; }
+  .dropzone .secondary { font-size: 12px; color: #bfe0f7; margin-top: 4px; }
+  .dropzone input[type="file"] { display: none; }
+
+  .preview-wrap { position: relative; border-radius: var(--radius-lg); overflow: hidden; background: #000; border: 1px solid rgba(255,255,255,0.2); }
+  .preview-wrap video { display: block; width: 100%; max-height: 300px; background: #000; }
+  .file-chip { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 12.5px; color: #fff; }
+  .file-chip .size { color: #bfe0f7; }
+  .link-btn {
+    margin-left: auto; background: none; border: none; color: var(--cyan-300);
+    font-size: 12.5px; font-weight: 700; cursor: pointer; padding: 4px; font-family: inherit;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+
+  .status-pill {
+    position: absolute; top: 10px; left: 10px;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(10,18,31,0.72); color: #fff;
+    font-size: 11px; font-weight: 600; padding: 6px 11px 6px 9px; border-radius: 999px;
+    backdrop-filter: blur(4px);
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--cyan-400); animation: pulseDot2 1.6s ease-in-out infinite; flex: none; }
+  @keyframes pulseDot2 {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.55); }
+    50% { box-shadow: 0 0 0 5px rgba(34,211,238,0); }
+  }
+
+  /* ---------------------------------------------------------------------
+     Generic section shell — eyebrow pill + big centered heading pattern
+     used throughout the reference (ProductCatalogSection / AboutScene).
+     --------------------------------------------------------------------- */
+  .section { width: 100%; padding: 56px 0; position: relative; }
+  @media (min-width: 640px) { .section { padding: 88px 0; } }
+  .section--tint { background: var(--bg-tint); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .section-head { text-align: center; margin-bottom: 40px; }
+  .eyebrow-pill {
+    display: inline-block; padding: 4px 13px; border-radius: 999px;
+    font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+    background: var(--pocari-blue); color: #fff; margin-bottom: 12px;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .eyebrow-pill { background: var(--cyan-500); color: #052042; } }
+  .section-head h2 { font-size: 24px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.01em; }
+  @media (min-width: 640px) { .section-head h2 { font-size: 32px; } }
+  .section-head p { margin: 0 auto; max-width: 62ch; color: var(--ink-muted); font-size: 13.5px; }
+  @media (min-width: 640px) { .section-head p { font-size: 14.5px; } }
+
+  .section-body.reveal-init { opacity: 0; transform: translateY(14px); }
+  .section-body.reveal-in { animation: revealUp .4s ease-out forwards; }
+  @keyframes revealUp { to { opacity: 1; transform: translateY(0); } }
+
+  /* processing */
+  .progress-card {
+    max-width: 640px; margin: 0 auto;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-2xl);
+    padding: 28px; box-shadow: var(--shadow-sm);
+  }
+  .progress-track { height: 9px; border-radius: 999px; background: var(--slate-200); overflow: hidden; margin-bottom: 12px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .progress-track { background: var(--slate-800); } }
+  .progress-fill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, var(--pocari-blue), var(--pocari-cyan)); transition: width .35s ease; }
+  .progress-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .progress-live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-muted); }
+  .progress-live .live-dot { background: var(--pocari-blue); }
+  .progress-status .pct { font-weight: 700; font-size: 13.5px; color: var(--ink); }
+
+  /* output video */
+  .output-card { max-width: 900px; margin: 0 auto; }
+  .output-note { text-align: center; font-size: 13px; color: var(--ink-muted); margin: 0 0 20px; max-width: 62ch; margin-left: auto; margin-right: auto; }
+
+  /* select-all/none action row -- kept deliberately minimal (a small
+     segmented control), not the reference site's heavier dual-tab-button
+     construction, since this is a binary action rather than a persistent
+     mode switch */
+  .tab-pill-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-bottom: 28px; }
+  .segmented { display: inline-flex; gap: 4px; padding: 3px; background: var(--bg-tint); border: 1px solid var(--border); border-radius: 999px; }
+  .segmented button {
+    border: none; background: none; padding: 7px 16px; border-radius: 999px;
+    font-size: 12.5px; font-weight: 700; color: var(--ink-muted); cursor: pointer; font-family: inherit;
+    transition: background .15s, color .15s;
+  }
+  .segmented button:hover { color: var(--pocari-blue); background: var(--surface); }
+  .count-badge {
+    padding: 8px 16px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border);
+    font-size: 12.5px; font-weight: 700; box-shadow: var(--shadow-sm);
+  }
+
+  /* scene grid — the literal 8-card grid pattern from AboutSceneSection.tsx
+     (grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6), repurposed: the
+     illustration badge slot now shows frame count, and the footer "詳細→"
+     link slot is now the real class-selection checkbox control. */
+  .scene-grid { display: grid; grid-template-columns: 1fr; gap: 24px; }
+  @media (min-width: 640px) { .scene-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1024px) { .scene-grid { grid-template-columns: repeat(4, 1fr); } }
+
+  .scene-card {
+    display: flex; flex-direction: column;
+    background: var(--surface); border-radius: var(--radius-lg); overflow: hidden;
+    border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+    cursor: pointer; transition: box-shadow .3s, transform .3s, border-color .2s;
+  }
+  .scene-card:hover { box-shadow: var(--shadow-xl); transform: translateY(-6px); }
+  .scene-card.checked { border-color: var(--pocari-blue); }
+  .scene-card.is-rare { border-color: var(--amber-500); }
+  .scene-card input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .scene-card:focus-within { outline: 2px solid var(--pocari-blue); outline-offset: 2px; }
+
+  .scene-illustration {
+    position: relative; aspect-ratio: 4 / 3;
+    display: flex; align-items: center; justify-content: center;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .scene-illustration .scene-mono { font-family: 'IBM Plex Mono', monospace; font-size: 30px; font-weight: 800; color: #fff; letter-spacing: 0.02em; }
+  .scene-badge {
+    position: absolute; top: 10px; right: 10px;
+    padding: 3px 9px; border-radius: 999px;
+    background: rgba(255,255,255,0.92); color: var(--pocari-blue);
+    font-size: 10px; font-weight: 800; box-shadow: var(--shadow-sm);
+  }
+  .scene-badge.badge--rare { background: var(--amber-500); color: #fff; display: inline-flex; align-items: center; gap: 4px; }
+  .scene-badge.badge--rare svg { width: 10px; height: 10px; }
+
+  .scene-body { padding: 16px 18px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; }
+  .scene-title { font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 6px; }
+  .scene-title .chev { color: var(--pocari-blue); font-weight: 800; font-size: 17px; }
+  .scene-card.is-rare .scene-title .chev { color: var(--amber-600); }
+  .scene-sub { font-size: 11.5px; color: var(--amber-700); line-height: 1.5; margin-top: -4px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .scene-sub { color: #f3cb9e; } }
+  .scene-footer {
+    margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  }
+  .scene-footer-label { font-size: 11px; color: var(--ink-muted); font-weight: 600; }
+  .scene-check {
+    width: 24px; height: 24px; border-radius: 8px; flex: none;
+    border: 1.5px solid var(--border); background: var(--surface);
+    display: flex; align-items: center; justify-content: center; color: transparent;
+    transition: all .15s;
+  }
+  .scene-check svg { width: 13px; height: 13px; }
+  .scene-card input:checked ~ .scene-body .scene-check { background: var(--pocari-blue); border-color: var(--pocari-blue); color: #fff; }
+  .scene-card.is-rare input:checked ~ .scene-body .scene-check { background: var(--amber-500); border-color: var(--amber-500); }
+
+  /* download — gradient metric panel from HydrationCalculatorModal.tsx */
+  .metric-panel {
+    max-width: 760px; margin: 0 auto;
+    background: linear-gradient(160deg, var(--sky-100), var(--surface) 70%);
+    border: 2px solid color-mix(in srgb, var(--pocari-blue) 25%, transparent);
+    border-radius: var(--radius-2xl);
+    padding: 26px; box-shadow: var(--shadow-lg);
+  }
+  .metric-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+  .metric-head .mh-label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--pocari-blue); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .metric-head .mh-label { color: var(--cyan-400); } }
+  .status-badge { padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .status-badge.is-ready { background: rgba(16,185,129,0.15); color: var(--emerald-600); border: 1px solid rgba(16,185,129,0.3); }
+  .status-badge.is-empty { background: rgba(244,63,94,0.15); color: var(--rose-600); border: 1px solid rgba(244,63,94,0.3); }
+
+  .metric-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  .metric-tile { flex: 1; min-width: 150px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px 16px; text-align: center; box-shadow: var(--shadow-sm); }
+  .metric-tile .label { font-size: 11.5px; color: var(--ink-muted); font-weight: 600; }
+  .metric-tile .value { font-family: 'IBM Plex Mono', monospace; font-size: 26px; font-weight: 700; color: var(--pocari-blue); margin-top: 3px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .metric-tile .value { color: var(--cyan-400); } }
+
+  .zip-list { display: grid; gap: 9px; margin-bottom: 20px; }
+  .zip-item { display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; color: var(--ink-muted); line-height: 1.55; }
+  .zip-item .icon-badge { width: 26px; height: 26px; border-radius: 8px; flex: none; background: var(--surface); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--pocari-blue); }
+  .zip-item .icon-badge svg { width: 14px; height: 14px; }
+  .zip-item code { font-family: 'IBM Plex Mono', monospace; color: var(--ink); font-weight: 600; font-size: 12px; }
+
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 13px 24px; border-radius: var(--radius-lg); border: none;
+    background: linear-gradient(to right, var(--pocari-blue), #0089ca);
+    color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit;
+    box-shadow: var(--shadow-md); transition: all .15s; white-space: nowrap;
+  }
+  .btn-primary svg { width: 16px; height: 16px; }
+  .btn-primary:hover:not(:disabled) { background: linear-gradient(to right, var(--pocari-blue-hover), #0075c9); transform: translateY(-1px); box-shadow: var(--shadow-lg); }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; box-shadow: none; transform: none; }
+  .metric-cta { display: flex; justify-content: flex-end; }
+  .btn-ghost {
+    display: inline-flex; align-items: center; gap: 6px; margin: 20px auto 0; padding: 10px 18px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface);
+    color: var(--ink); font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  .btn-ghost:hover { border-color: var(--pocari-blue); color: var(--pocari-blue); }
+  .btn-ghost-wrap { text-align: center; }
+
+  /* examples / history — styled like the CmPlayerModal playlist rows */
+  .quickstart-row { max-width: 900px; margin: 0 auto 20px; }
+  .quickstart-tile {
+    display: flex; align-items: flex-start; gap: 12px;
+    border: 1.5px dashed var(--border); border-radius: var(--radius-lg);
+    padding: 16px; background: var(--surface); opacity: .68; cursor: not-allowed;
+  }
+  .quickstart-tile .icon-badge { width: 32px; height: 32px; border-radius: 9px; flex: none; background: var(--bg-tint); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; color: var(--ink-faint); }
+  .quickstart-tile .icon-badge svg { width: 16px; height: 16px; }
+  .quickstart-tile .name { font-weight: 700; font-size: 13px; margin-bottom: 3px; }
+  .quickstart-tile .why { font-size: 11.5px; color: var(--ink-muted); line-height: 1.5; }
+
+  .history-list { max-width: 900px; margin: 0 auto; display: grid; gap: 10px; }
+  .history-row {
+    display: flex; align-items: center; gap: 14px; padding: 12px 14px;
+    border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface);
+    cursor: pointer; transition: all .15s; box-shadow: var(--shadow-sm);
+  }
+  .history-row:hover { border-color: var(--pocari-blue); background: var(--sky-50); transform: translateX(3px); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .history-row:hover { background: var(--slate-800); } }
+  .history-row .thumb { width: 52px; height: 40px; border-radius: 8px; background: linear-gradient(160deg, var(--pocari-blue), var(--pocari-navy)); color: #fff; display: flex; align-items: center; justify-content: center; flex: none; }
+  .history-row .thumb svg { width: 16px; height: 16px; }
+  .history-row .meta { flex: 1; min-width: 0; }
+  .history-row .video-name { font-size: 12.5px; font-weight: 700; }
+  .history-row .time-line { font-size: 11px; color: var(--ink-faint); display: flex; align-items: center; gap: 5px; margin-top: 2px; }
+  .history-row .time-line svg { width: 11px; height: 11px; }
+  .history-row .chips { display: flex; gap: 5px; flex-wrap: wrap; flex: none; max-width: 40%; justify-content: flex-end; }
+  .history-row .chip { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--bg-tint); color: var(--ink-muted); border: 1px solid var(--border); }
+  .history-row .reload { display: inline-flex; align-items: center; gap: 3px; color: var(--pocari-blue); font-weight: 700; font-size: 12px; flex: none; }
+  .history-row .reload svg { width: 13px; height: 13px; }
+
+  .note-row { display: flex; align-items: flex-start; gap: 6px; justify-content: center; font-size: 12px; color: var(--ink-faint); margin-top: 18px; line-height: 1.6; max-width: 900px; margin-left: auto; margin-right: auto; }
+
+  /* toast (unchanged pattern) */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(16px);
+    display: inline-flex; align-items: center; gap: 9px;
+    background: var(--slate-900); color: #fff;
+    padding: 13px 20px; border-radius: var(--radius-lg);
+    font-size: 13.5px; max-width: min(520px, calc(100vw - 32px));
+    box-shadow: var(--shadow-2xl); opacity: 0; pointer-events: none;
+    transition: opacity .25s, transform .25s; z-index: 50;
+  }
+  .toast svg { width: 17px; height: 17px; flex: none; color: var(--cyan-400); }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  #sec-upload, #sec-processing, #sec-output, #sec-grid, #sec-download, #sec-history { scroll-margin-top: 74px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    .section-body.reveal-init { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header" id="site-header">
+  <nav class="navbar-main" id="navbar-main">
+    <div class="wrap navbar-main-row">
+      <div class="nav-logo">
+        <div class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="12" r="3.1"/><path d="M12 3v3.2M12 17.8V21M3 12h3.2M17.8 12H21"/></svg>
+        </div>
+        <div class="word">
+          <span class="l1 font-brand-en">RARE CLASS</span>
+          <span class="l2-row">
+            <span class="l2 font-brand-en">LABELER</span>
+            <span class="skew"></span>
+          </span>
+        </div>
+      </div>
+      <div class="nav-items" id="section-nav">
+        <button type="button" class="nav-item is-active" data-target="sec-upload" aria-current="location">
+          <span class="en font-brand-en">UPLOAD</span><span class="th">อัปโหลด</span>
+        </button>
+        <button type="button" class="nav-item" data-target="sec-processing" disabled>
+          <span class="en font-brand-en">PROCESS</span><span class="th">ประมวลผล</span>
+        </button>
+        <button type="button" class="nav-item" data-target="sec-output" disabled>
+          <span class="en font-brand-en">OUTPUT</span><span class="th">วิดีโอผลลัพธ์</span>
+        </button>
+        <button type="button" class="nav-item" data-target="sec-grid" disabled>
+          <span class="en font-brand-en">SELECT</span><span class="th">เลือกคลาส</span>
+        </button>
+        <button type="button" class="nav-item" data-target="sec-history">
+          <span class="en font-brand-en">HISTORY</span><span class="th">ตัวอย่าง &amp; ประวัติ</span>
+        </button>
+        <button type="button" class="nav-item nav-item--cta" data-target="sec-download" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+          <span class="cta-text"><span class="en font-brand-en">DOWNLOAD</span><span class="th">ดาวน์โหลด</span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+</header>
+
+<!-- ============ HERO / UPLOAD (sec-upload) ============ -->
+<section class="hero" id="sec-upload">
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+  <div class="wrap hero-inner">
+    <div class="hero-tag">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/></svg>
+      Mockup v3 · ใช้ Design System ของเว็บอ้างอิง
+    </div>
+    <h1>สามขั้นตอน <span class="accent">ไม่มีอะไรให้ตั้งค่า</span></h1>
+    <p class="hero-sub">
+      อัปโหลดวิดีโออย่างเดียว ระบบโหลดโมเดลตรวจจับอุปกรณ์การเย็บแผล (ssid9) และเริ่มตรวจจับให้อัตโนมัติ
+      ทันที — ไม่มีปุ่มเริ่มประมวลผล ไม่มีค่า confidence/IoU ให้ปรับ ทุกอย่างถูกตั้งไว้ตายตัวในระบบ
+      หลังบ้านเสมอ
+    </p>
+
+    <div class="hero-card">
+      <div class="hc-label">ขั้นตอนเดียวที่ต้องทำ</div>
+      <div class="hc-title">อัปโหลดวิดีโอ</div>
+
+      <div id="dropzone" class="dropzone" role="button" tabindex="0">
+        <div class="icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="primary">ลากวิดีโอมาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์</div>
+        <div class="secondary">รองรับ .mp4 .mov .avi — ไฟล์ยาว/ไฟล์ใหญ่ได้ (จริง — ทดสอบแล้ว)</div>
+        <input type="file" id="file-input" accept="video/*">
+      </div>
+
+      <div id="preview-area" hidden>
+        <div class="preview-wrap">
+          <video id="preview-video" controls muted></video>
+        </div>
+        <div class="file-chip">
+          <span class="name" id="file-name"></span>
+          <span class="size" id="file-size"></span>
+          <button class="link-btn" id="btn-change-file">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>
+            เลือกไฟล์อื่น
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PROCESSING (sec-processing) ============ -->
+<section class="section" id="sec-processing" hidden>
+  <div class="wrap">
+    <div class="section-body">
+      <div class="section-head">
+        <span class="eyebrow-pill">Automatic pipeline</span>
+        <h2>กำลังประมวลผล</h2>
+        <p>อัตโนมัติทั้งหมด ไม่ต้องกดอะไร — ขั้นตอนนี้จำลองไว้ในหน้านี้ (ของจริงจะรันตรวจจับจริงหลัง Phase 6 เสร็จ)</p>
+      </div>
+      <div class="progress-card">
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-status">
+          <span class="progress-live"><span class="live-dot"></span><span id="progress-msg">กำลังเริ่มต้น...</span></span>
+          <span class="pct mono" id="progress-pct">0%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ OUTPUT VIDEO (sec-output) ============ -->
+<section class="section section--tint" id="sec-output" hidden>
+  <div class="wrap">
+    <div class="section-body">
+      <div class="section-head">
+        <span class="eyebrow-pill">Output preview</span>
+        <h2>คลิปที่วาดกรอบแล้ว เล่นดูได้เลย</h2>
+        <p>วาดกรอบทุกคลาสที่ตรวจเจอ ไม่ถูกกรองตามที่เลือกด้านล่าง — ตัวเลือกนั้นมีผลแค่กับไฟล์ดาวน์โหลดเท่านั้น</p>
+      </div>
+      <div class="output-card">
+        <div class="preview-wrap" id="output-preview-wrap">
+          <video id="output-video" controls muted loop></video>
+          <div class="status-pill"><span class="live-dot"></span>ตัวอย่าง (จำลอง) — ยังไม่ใช่กรอบตรวจจับจริง</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ RESULTS GRID (sec-grid) — literal AboutScene "Scene" 8-card grid ============ -->
+<section class="section" id="sec-grid" hidden>
+  <div class="wrap">
+    <div class="section-body">
+      <div class="section-head">
+        <span class="eyebrow-pill">ผลตรวจจับ</span>
+        <h2>เลือกคลาสที่จะเก็บไว้ทำ dataset</h2>
+        <p>
+          จำนวนที่แสดงคือจำนวนเฟรมที่ตรวจเจอจริงในวิดีโอนี้ (ในหน้านี้เป็นตัวเลขจำลอง) — สังเกตว่า
+          <code class="mono" style="background:var(--bg-tint);padding:1px 6px;border-radius:5px;">needle</code>
+          เจอน้อยกว่าคลาสอื่นมาก นี่คือปัญหาที่เครื่องมือนี้ถูกสร้างมาแก้
+        </p>
+      </div>
+
+      <div class="tab-pill-row">
+        <div class="segmented">
+          <button type="button" id="btn-select-all">เลือกทั้งหมด</button>
+          <button type="button" id="btn-select-none">ไม่เลือกเลย</button>
+        </div>
+        <span class="count-badge mono" id="picked-count-label">เลือกไว้ 9 / 9 คลาส</span>
+      </div>
+
+      <div class="scene-grid" id="results-grid"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DOWNLOAD (sec-download) — HydrationCalculatorModal result panel ============ -->
+<section class="section section--tint" id="sec-download" hidden>
+  <div class="wrap">
+    <div class="section-body">
+      <div class="section-head">
+        <span class="eyebrow-pill">ดาวน์โหลด</span>
+        <h2>Export ชุดข้อมูล</h2>
+      </div>
+
+      <div class="metric-panel">
+        <div class="metric-head">
+          <span class="mh-label">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+            สรุปชุดข้อมูล
+          </span>
+          <span class="status-badge is-ready" id="download-status">พร้อมดาวน์โหลด</span>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-tile">
+            <div class="label">คลาสที่เลือก</div>
+            <div class="value mono" id="sum-classes">9</div>
+          </div>
+          <div class="metric-tile">
+            <div class="label">เฟรมรวมโดยประมาณ</div>
+            <div class="value mono" id="sum-frames">0</div>
+          </div>
+        </div>
+
+        <div class="zip-list">
+          <div class="zip-item">
+            <span class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5z"/></svg></span>
+            <span><code>images/</code> + <code>labels/</code> — เฉพาะคลาสที่เลือก ตามรูปแบบ train/valid/test ของ <code>frame_miner.export</code></span>
+          </div>
+          <div class="zip-item">
+            <span class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+            <span><code>preview/</code> — ภาพที่วาดกรอบไว้แล้ว สำหรับตรวจสอบด้วยตา</span>
+          </div>
+          <div class="zip-item">
+            <span class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
+            <span><code>PARTIAL_LABELS.md</code> — บันทึกว่า label ในชุดนี้ครอบคลุมคลาสอะไรบ้าง</span>
+          </div>
+        </div>
+
+        <div class="metric-cta">
+          <button class="btn-primary" id="btn-download">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            ดาวน์โหลดชุดข้อมูล (.zip)
+          </button>
+        </div>
+      </div>
+
+      <div class="btn-ghost-wrap">
+        <button class="btn-ghost" id="btn-reset">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>
+          ลองวิดีโอใหม่
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ EXAMPLES / HISTORY (sec-history, always visible) ============ -->
+<section class="section" id="sec-history">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow-pill">เริ่มต้นด่วน &amp; ประวัติ</span>
+      <h2>Examples &amp; ประวัติการใช้งาน</h2>
+    </div>
+
+    <div class="quickstart-row">
+      <div class="quickstart-tile">
+        <span class="icon-badge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="2"/><polygon points="22 8 16 12 22 16"/></svg></span>
+        <div>
+          <div class="name">WIN_20260525_14_47_12_Pro_muted.mp4</div>
+          <div class="why">ปิดใช้งานใน mockup นี้ — หน้าเว็บที่รันบนเบราว์เซอร์เข้าไม่ถึงไฟล์ในเครื่องจริงได้ ในระบบจริงปุ่มนี้จะโหลดไฟล์นี้แล้วรันให้ทันที</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="history-list">
+      <div class="history-row">
+        <span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="2"/><polygon points="22 8 16 12 22 16"/></svg></span>
+        <div class="meta">
+          <div class="video-name">surgery_clip_02.mp4</div>
+          <div class="time-line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>14:32</div>
+        </div>
+        <span class="chips"><span class="chip">needle</span><span class="chip">forcep</span></span>
+        <span class="reload">โหลดค่ากลับ<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
+      </div>
+      <div class="history-row">
+        <span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="2"/><polygon points="22 8 16 12 22 16"/></svg></span>
+        <div class="meta">
+          <div class="video-name">test_suture.mov</div>
+          <div class="time-line"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>13:58</div>
+        </div>
+        <span class="chips"><span class="chip">ทั้ง 9 คลาส</span></span>
+        <span class="reload">โหลดค่ากลับ<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
+      </div>
+    </div>
+
+    <p class="note-row">
+      <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="0.9" fill="currentColor" stroke="none"/></svg>
+      ตัวอย่างประวัติด้านบนเป็นข้อมูลจำลอง เพื่อโชว์ผังหน้าตาเท่านั้น
+    </p>
+  </div>
+</section>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  // Real ssid9 checkpoint class order -- see mockup/index.html for the
+  // original reference; content/behavior kept identical, only the visual
+  // shell changes in this version.
+  var CLASSES = [
+    { name: 'Stitch Scissors',   mono: 'SS', count: 39,  color: '#3E7CB1' },
+    { name: 'Tip_forcep',        mono: 'TF', count: 60,  color: '#4C8C6B' },
+    { name: 'Tip_needle_holder', mono: 'TN', count: 44,  color: '#6B7AA8' },
+    { name: 'finger',            mono: 'FI', count: 128, color: '#3E9AA0' },
+    { name: 'forcep',            mono: 'FO', count: 94,  color: '#7A6BB0' },
+    { name: 'hand',              mono: 'HA', count: 142, color: '#4C6B8A' },
+    { name: 'needle',            mono: 'NE', count: 6,   color: '#E08A2E', rare: true },
+    { name: 'needle_holder',     mono: 'NH', count: 71,  color: '#5C7A9E' },
+    { name: 'wound',             mono: 'WO', count: 53,  color: '#9E6B87' }
+  ];
+
+  var CHECK_SVG = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3.5 8.5 6.5 11.5 12.5 4.5"/></svg>';
+  var RARE_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l9 16H3z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="16" r="1" fill="currentColor" stroke="none"/></svg>';
+  var TOAST_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="8 12 11 15 16 9"/></svg>';
+
+  var state = { objectUrl: null };
+
+  var navbarMain = document.getElementById('navbar-main');
+  var dropzone = document.getElementById('dropzone');
+  var fileInput = document.getElementById('file-input');
+  var previewArea = document.getElementById('preview-area');
+  var previewVideo = document.getElementById('preview-video');
+  var outputVideo = document.getElementById('output-video');
+  var fileNameEl = document.getElementById('file-name');
+  var fileSizeEl = document.getElementById('file-size');
+
+  window.addEventListener('scroll', function () {
+    navbarMain.classList.toggle('is-scrolled', window.scrollY > 8);
+  }, { passive: true });
+
+  function fmtSize(bytes) {
+    if (bytes > 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    return (bytes / 1024).toFixed(0) + ' KB';
+  }
+
+  function showToast(msg, ms) {
+    var t = document.getElementById('toast');
+    t.innerHTML = TOAST_ICON_SVG + '<span>' + msg + '</span>';
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(function () { t.classList.remove('show'); }, ms || 3200);
+  }
+
+  // ---- section nav: scroll-spy + click-to-scroll (same pattern as
+  // mockup/index.html v2, restyled into the two-tier Pocari navbar) ----
+  var navButtons = Array.prototype.slice.call(document.querySelectorAll('.nav-item'));
+  var NAV_GATE = { 'sec-processing': 'sec-processing', 'sec-output': 'sec-output', 'sec-grid': 'sec-grid', 'sec-download': 'sec-download' };
+  var NAV_TARGETS = navButtons.map(function (b) { return b.dataset.target; });
+  var navVisible = {};
+
+  function updateNavLockState() {
+    navButtons.forEach(function (btn) {
+      var gateId = NAV_GATE[btn.dataset.target];
+      if (!gateId) return;
+      btn.disabled = document.getElementById(gateId).hidden;
+    });
+  }
+
+  function setActiveNav(target) {
+    navButtons.forEach(function (btn) {
+      var isActive = btn.dataset.target === target;
+      btn.classList.toggle('is-active', isActive);
+      if (isActive) btn.setAttribute('aria-current', 'location');
+      else btn.removeAttribute('aria-current');
+    });
+  }
+
+  function recomputeActiveNav() {
+    var visibleIds = NAV_TARGETS.filter(function (id) { return navVisible[id]; });
+    if (visibleIds.length === 0) return;
+    var best = visibleIds.reduce(function (a, b) {
+      var ra = Math.abs(document.getElementById(a).getBoundingClientRect().top);
+      var rb = Math.abs(document.getElementById(b).getBoundingClientRect().top);
+      return ra < rb ? a : b;
+    });
+    setActiveNav(best);
+  }
+
+  var sectionObserver = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) { navVisible[entry.target.id] = entry.isIntersecting; });
+    recomputeActiveNav();
+  }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+  NAV_TARGETS.forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) sectionObserver.observe(el);
+  });
+
+  function goTo(targetId) {
+    var el = document.getElementById(targetId);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  navButtons.forEach(function (btn) {
+    btn.addEventListener('click', function () { if (!btn.disabled) goTo(btn.dataset.target); });
+  });
+  updateNavLockState();
+
+  // ---- upload ----
+  dropzone.addEventListener('click', function () { fileInput.click(); });
+  dropzone.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); }
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    dropzone.addEventListener(ev, function (e) { e.preventDefault(); dropzone.classList.remove('drag-over'); });
+  });
+  dropzone.addEventListener('drop', function (e) {
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener('change', function (e) {
+    if (e.target.files[0]) handleFile(e.target.files[0]);
+  });
+  document.getElementById('btn-change-file').addEventListener('click', function () { resetAll(); });
+
+  function handleFile(file) {
+    if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
+    state.objectUrl = URL.createObjectURL(file);
+
+    previewVideo.src = state.objectUrl;
+    outputVideo.src = state.objectUrl;
+    fileNameEl.textContent = file.name;
+    fileSizeEl.textContent = fmtSize(file.size);
+
+    dropzone.hidden = true;
+    previewArea.hidden = false;
+
+    startProcessing();
+  }
+
+  function revealSection(id) {
+    var el = document.getElementById(id);
+    el.hidden = false;
+    var body = el.querySelector('.section-body') || el;
+    body.classList.add('reveal-init');
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        body.classList.remove('reveal-init');
+        body.classList.add('reveal-in');
+      });
+    });
+    updateNavLockState();
+  }
+
+  var PROC_STAGES = [
+    { pct: 8,  msg: 'กำลังโหลดโมเดล ssid9 อัตโนมัติ...' },
+    { pct: 22, msg: 'อ่านวิดีโอ — สุ่มเฟรมตาม interval...' },
+    { pct: 40, msg: 'กำลังตรวจจับวัตถุ... เฟรม 41/340 (จำลอง)' },
+    { pct: 58, msg: 'กำลังตรวจจับวัตถุ... เฟรม 158/340 (จำลอง)' },
+    { pct: 76, msg: 'กำลังตรวจจับวัตถุ... เฟรม 289/340 (จำลอง)' },
+    { pct: 90, msg: 'กำลังประกอบวิดีโอผลลัพธ์ (H.264)...' },
+    { pct: 100, msg: 'เสร็จสิ้น' }
+  ];
+
+  function startProcessing() {
+    revealSection('sec-processing');
+    goTo('sec-processing');
+    var fill = document.getElementById('progress-fill');
+    var msgEl = document.getElementById('progress-msg');
+    var pctEl = document.getElementById('progress-pct');
+
+    var i = 0;
+    function next() {
+      if (i >= PROC_STAGES.length) { showResults(); return; }
+      var s = PROC_STAGES[i];
+      fill.style.width = s.pct + '%';
+      msgEl.textContent = s.msg;
+      pctEl.textContent = s.pct + '%';
+      i++;
+      setTimeout(next, i === 1 ? 350 : 420);
+    }
+    next();
+  }
+
+  function showResults() {
+    revealSection('sec-output');
+    revealSection('sec-grid');
+    revealSection('sec-download');
+    buildGrid();
+    updateDownloadSummary();
+  }
+
+  function buildGrid() {
+    var grid = document.getElementById('results-grid');
+    grid.innerHTML = '';
+    CLASSES.forEach(function (c, idx) {
+      var card = document.createElement('label');
+      card.className = 'scene-card checked' + (c.rare ? ' is-rare' : '');
+      card.innerHTML =
+        '<input type="checkbox" data-idx="' + idx + '" checked>' +
+        '<div class="scene-illustration" style="background:' + c.color + '">' +
+          '<span class="scene-mono">' + c.mono + '</span>' +
+          (c.rare
+            ? '<span class="scene-badge badge--rare">' + RARE_ICON_SVG + c.count + ' เฟรม</span>'
+            : '<span class="scene-badge">' + c.count + ' เฟรม</span>') +
+        '</div>' +
+        '<div class="scene-body">' +
+          '<div>' +
+            '<div class="scene-title"><span class="chev">&rsaquo;</span><span>' + c.name + '</span></div>' +
+            (c.rare ? '<div class="scene-sub">คลาสหายาก — จำนวนตัวอย่างน้อยที่สุดในวิดีโอนี้</div>' : '') +
+          '</div>' +
+          '<div class="scene-footer">' +
+            '<span class="scene-footer-label">เลือกเก็บไว้ทำ dataset</span>' +
+            '<span class="scene-check">' + CHECK_SVG + '</span>' +
+          '</div>' +
+        '</div>';
+      grid.appendChild(card);
+      var cb = card.querySelector('input');
+      cb.addEventListener('change', function () {
+        card.classList.toggle('checked', cb.checked);
+        updateDownloadSummary();
+      });
+    });
+  }
+
+  function updateDownloadSummary() {
+    var boxes = document.querySelectorAll('#results-grid input[type="checkbox"]');
+    var checked = 0, frames = 0;
+    boxes.forEach(function (b) {
+      if (b.checked) { checked++; frames += CLASSES[+b.dataset.idx].count; }
+    });
+    document.getElementById('picked-count-label').textContent = 'เลือกไว้ ' + checked + ' / ' + CLASSES.length + ' คลาส';
+    document.getElementById('sum-classes').textContent = checked;
+    document.getElementById('sum-frames').textContent = frames;
+    document.getElementById('btn-download').disabled = checked === 0;
+    var statusEl = document.getElementById('download-status');
+    if (statusEl) {
+      var ready = checked > 0;
+      statusEl.textContent = ready ? 'พร้อมดาวน์โหลด' : 'ยังไม่ได้เลือกคลาส';
+      statusEl.classList.toggle('is-ready', ready);
+      statusEl.classList.toggle('is-empty', !ready);
+    }
+  }
+
+  document.getElementById('btn-select-all').addEventListener('click', function () {
+    document.querySelectorAll('#results-grid input[type="checkbox"]').forEach(function (b) {
+      b.checked = true;
+      b.closest('.scene-card').classList.add('checked');
+    });
+    updateDownloadSummary();
+  });
+  document.getElementById('btn-select-none').addEventListener('click', function () {
+    document.querySelectorAll('#results-grid input[type="checkbox"]').forEach(function (b) {
+      b.checked = false;
+      b.closest('.scene-card').classList.remove('checked');
+    });
+    updateDownloadSummary();
+  });
+
+  document.getElementById('btn-download').addEventListener('click', function () {
+    var n = document.getElementById('sum-classes').textContent;
+    showToast('(จำลอง) จะดาวน์โหลด rare_class_export.zip — ' + n + ' คลาส พร้อม PARTIAL_LABELS.md — ใช้งานจริงได้หลัง Phase 6', 4200);
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', resetAll);
+
+  function resetAll() {
+    ['sec-processing', 'sec-output', 'sec-grid', 'sec-download'].forEach(function (id) {
+      document.getElementById(id).hidden = true;
+    });
+    dropzone.hidden = false;
+    previewArea.hidden = true;
+    fileInput.value = '';
+    document.getElementById('progress-fill').style.width = '0%';
+    updateNavLockState();
+    navVisible = {};
+    setActiveNav('sec-upload');
+    goTo('sec-upload');
+  }
+
+  document.querySelectorAll('.history-row').forEach(function (el) {
+    el.addEventListener('click', function () {
+      showToast('(จำลอง) จะโหลดค่าการตั้งค่าจากประวัติรายการนี้กลับมาใช้', 2600);
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
