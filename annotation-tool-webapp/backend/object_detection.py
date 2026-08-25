@@ -17,17 +17,20 @@ IMGSZ = 960  # ssid9_960px_150ep's own training resolution. Omitting imgsz would
 # (0.36 -> 0.24 at 640 vs 960, per results_960/inference_benchmark.md).
 
 # Fixed, deterministic BGR colors, indexed by class_id -- reproducible across runs,
-# unlike yolo_wv/app/utils.py's fresh random.randint() palette per run.
+# unlike yolo_wv/app/utils.py's fresh random.randint() palette per run. Material Design's
+# "A400" accent tier (max-saturation, not the muted "500" tier this used to use) -- picked to
+# stay legible/eye-catching against real suturing-pad video (skin tones, blue/green cloth,
+# stainless-steel instrument glare), not just to look bright in isolation.
 _PALETTE_BGR: list[tuple[int, int, int]] = [
-    (66, 133, 244),   # 0
-    (52, 168, 83),    # 1
-    (234, 67, 53),    # 2
-    (251, 188, 5),    # 3
-    (154, 51, 219),   # 4
-    (0, 172, 193),    # 5
-    (255, 112, 67),   # 6 -- needle
-    (121, 85, 72),    # 7
-    (96, 125, 139),   # 8
+    (255, 121, 41),   # 0 -- electric blue
+    (118, 230, 0),    # 1 -- neon green
+    (68, 23, 255),    # 2 -- vivid red
+    (0, 214, 255),    # 3 -- bright yellow
+    (249, 0, 213),    # 4 -- vivid purple/magenta
+    (255, 229, 0),    # 5 -- bright cyan
+    (0, 109, 255),    # 6 -- hot orange -- needle, the class that matters most to spot
+    (87, 0, 245),     # 7 -- vivid pink
+    (0, 255, 198),    # 8 -- lime
 ]
 
 
