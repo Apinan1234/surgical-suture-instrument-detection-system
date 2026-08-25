@@ -10,7 +10,7 @@ wounds in video of suturing practice, plus a full web-application toolchain — 
 annotation, model-assisted labeling, dataset export, and rare-class mining — built to produce and
 maintain that system's own training data.
 
-📄 **[Project Poster (PDF)](05_reports/poster.pdf)** · [System diagram](<05_reports/แผนภาพระบบ-โครงการตรวจจับเครื่องมือผ่าตัดด้วย-AI (1).pdf>) · [Technology Stack](05_reports/technology-stack.md) · [Model results](05_reports/model-results-2026-08-13.md)
+**[Project Poster (PDF)](05_reports/poster.pdf)** · [System diagram](<05_reports/แผนภาพระบบ-โครงการตรวจจับเครื่องมือผ่าตัดด้วย-AI (1).pdf>) · [Technology Stack](05_reports/technology-stack.md) · [Model results](05_reports/model-results-2026-08-13.md)
 
 > **Poster**: `05_reports/poster.pdf` — the project's single-page research poster, summarizing the
 > problem, the pipeline, and the same results reported in [Results](#results) below.
@@ -206,7 +206,7 @@ numbers.
 
 ## Discussion & Innovation
 
-### ✅ Strengths
+### Strengths
 
 - **Diagnose before you fix.** The needle investigation (see [Results](#results)) is the clearest
   example of this project's actual working method: a measurement script written specifically to
@@ -225,7 +225,7 @@ numbers.
   more "standard" alternative, made the same way across every tool in this project (see
   [Technology Stack](05_reports/technology-stack.md)).
 
-### ⚠️ Limitations
+### Limitations
 
 - `needle` mAP50 (0.36) remains the lowest of all nine classes even after the resolution fix —
   diagnosed and measurably improved, not solved.
@@ -235,7 +235,7 @@ numbers.
 - The flagship app has no public deployment yet — the sibling annotation tool has a documented
   Caddy + systemd VPS runbook, but it hasn't been executed for this app.
 
-### 💡 Core Innovation
+### Core Innovation
 
 - A rare-class mining workflow built to answer a specific, real rejection ("too hard to use, no way
   to pull out the rare frames") rather than an assumed or generic need.
