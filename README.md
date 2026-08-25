@@ -203,44 +203,87 @@ numbers.
 
 ## Discussion & Innovation
 
-**Diagnose before you fix.** The needle investigation above is the clearest example of this
-project's actual working method: a measurement script written specifically to test a hypothesis
-(object size, not detector capacity) before spending GPU-hours on a fix, and reporting the honest
-result — real improvement, not full resolution — rather than overselling it.
+### ✅ Strengths
 
-**Iterate on user feedback, not on assumption.** The flagship rare-class-labeling app went through
-two real frontend builds before landing on its current design: a Gradio version was built first
-(reasonable, since FastAPI/Uvicorn come bundled with Gradio, so it wasn't "a new dependency" at the
-time), reviewed by the actual user, and replaced after direct feedback ("don't like the frontend,
-want it to finish on one page") — not because Gradio was technically wrong, but because it didn't
-fit how the tool was actually meant to be used. That rebuild also caught a real bug the Gradio
-version's own "verified" fix had silently failed to actually apply (a Windows async-event-loop
-policy that Gradio's internal server setup bypassed) — a concrete case of a fix that looked done but
-wasn't, caught by rebuilding rather than assuming.
+- **Diagnose before you fix.** The needle investigation (see [Results](#results)) is the clearest
+  example of this project's actual working method: a measurement script written specifically to
+  test a hypothesis (object size, not detector capacity) before spending GPU-hours on a fix, and
+  reporting the honest result — real improvement, not full resolution — rather than overselling it.
+- **Iterate on real user feedback, not on assumption.** The flagship rare-class-labeling app went
+  through two real frontend builds before landing on its current design: a Gradio version was built
+  first, reviewed by the actual user, and replaced after direct feedback ("don't like the frontend,
+  want it to finish on one page") — not because Gradio was technically wrong, but because it didn't
+  fit how the tool was actually meant to be used. That rebuild also caught a real bug the Gradio
+  version's own "verified" fix had silently failed to actually apply (a Windows async-event-loop
+  policy that Gradio's internal server setup bypassed) — a fix that looked done but wasn't, caught
+  by rebuilding rather than assuming.
+- **Minimal tooling, held to consistently.** No database, no message queue, no containers, no new
+  frontend framework anywhere in this system — every one of those is a deliberate choice against a
+  more "standard" alternative, made the same way across every tool in this project (see
+  [Technology Stack](05_reports/technology-stack.md)).
 
-**Minimal tooling, held to consistently.** No database, no message queue, no containers, no new
-frontend framework anywhere in this system — every one of those is a deliberate choice against a
-more "standard" alternative, made and re-made the same way across every tool in this project (see
-[Technology Stack](05_reports/technology-stack.md)). For a single-researcher tool with no
-multi-user requirement, that consistency is itself the innovation worth naming: solving the actual
-problem in front of the tool, not the problem a bigger stack would imply.
+### ⚠️ Limitations
+
+- `needle` mAP50 (0.36) remains the lowest of all nine classes even after the resolution fix —
+  diagnosed and measurably improved, not solved.
+- `Stitch Scissors` has only 16/10/3 train/val/test instances — too few for its scores to mean much
+  run to run, and it currently inflates the reported class-averaged mAP50 above what the other
+  eight classes alone would show (0.716 vs 0.699).
+- The flagship app has no public deployment yet — the sibling annotation tool has a documented
+  Caddy + systemd VPS runbook, but it hasn't been executed for this app.
+
+### 💡 Core Innovation
+
+- A rare-class mining workflow built to answer a specific, real rejection ("too hard to use, no way
+  to pull out the rare frames") rather than an assumed or generic need.
+- Rare-class flagging is fully data-driven per run (`rare_classes()` in `frontend/app.py`) — never
+  hardcoded to `needle` or any other specific class name — so the same tool generalizes to whatever
+  class turns out to be scarce in a given video, not just the one class this project happened to
+  care about most.
+- The "measure before you fix" discipline applied to a concrete failure (needle detection) rather
+  than treated as an abstract principle — a written diagnostic script, not intuition, is what
+  identified image resolution as the lever to pull.
 
 ## Impact
 
-A model that reliably localizes suture instruments, hands, and wounds turns manual video review —
-the actual bottleneck in building any larger training dataset for this domain — into a
-mostly-automated pass a researcher only has to check, not perform from scratch. The rare-class
-mining tool specifically targets the hardest part of that bottleneck: finding the comparatively
-rare `needle` frames that matter most for fixing class imbalance, without watching full videos by
-eye. The dataset this system has already produced for itself (2,726 frames, 21,127 boxes) is direct
-evidence the tool works as intended, not just in principle — and the honestly-reported limitations
-above (needle still weakest, Stitch Scissors under-sampled) are exactly the roadmap for where the
-next round of data collection should focus.
+- **Researchers/annotators**: manual full-video review — the actual bottleneck in growing this kind
+  of training dataset — becomes a mostly-automated pass to check, not perform from scratch, via
+  model-assisted labeling and one-click rare-class mining.
+- **The dataset itself**: this isn't hypothetical — the tooling has already produced this project's
+  own real working dataset, 2,726 frames and 21,127 bounding boxes.
+- **The next model round**: the rare-class mining tool gives a direct, actionable path to closing
+  the project's own most honestly-reported gap (needle) instead of an open-ended "collect more
+  data" instruction with no way to find the frames that would actually help.
+- **The original rejection this project answers**: the flagship app is a direct, purpose-built
+  response to the supervising professor's stated reason for rejecting the earlier tool — not a
+  broader redesign, specifically the missing rare-class capability and the too-hard-to-use
+  complaint.
 
 ## ABET Student Outcomes
 
-*(pending — this section is meant to mirror a peer capstone's ABET framing verbatim; the source
-text for that section hasn't been supplied yet. Flagged rather than filled in with a guess.)*
+- **SO1 Problem-Solving**: Diagnosed the `needle` class's near-total detection failure by direct
+  measurement (median box size vs. COCO's small-object threshold) before attempting any fix, then
+  validated the fix against held-out test data rather than assuming it worked.
+- **SO2 Design in Constraints**: Rebuilt the flagship web app under a hard, externally-imposed
+  constraint — exactly three user actions, no settings or configuration screen at all — after an
+  earlier version was rejected by the supervising professor for being too hard to use.
+- **SO3 Communication**: The same work is documented across multiple formats for different
+  audiences: a Thai-language thesis report, a 70+ slide defense deck built programmatically from
+  code (not hand-placed), a research poster, and this showcase repository.
+- **SO4 Ethics**: Uses only training-pad practice video, never real patient data. The model's real
+  limitations (needle still the weakest class) are reported with numbers, not glossed over. The web
+  app has no login — a deliberate choice for a single-researcher local tool — but gained rate
+  limiting, request-size caps, and security headers specifically ahead of any public deployment,
+  rather than shipping open-ended.
+- **SO5 Teamwork**: A three-person team (Apinan Ayuyong, Teerutai Kaeyiwa, Fasai Khwanpan) sharing
+  model training, web-application, and report work under one shared git history.
+- **SO6 Experimentation**: Four controlled experiment rounds, changing exactly one variable per
+  round (augmentation on/off, then image resolution), across a 2,190-image / 22,957-box dataset —
+  the same one-variable-at-a-time discipline throughout, so each result is attributable.
+- **SO7 Lifelong Learning**: Adopted new tools as the actual problem demanded them, not by default —
+  moved the flagship app's whole frontend from Gradio to a plain FastAPI + vanilla-JS build after
+  real usage feedback, and worked through small-object-detection literature (COCO's own
+  size-threshold convention) to correctly diagnose the needle class instead of guessing.
 
 ## Conclusion
 
